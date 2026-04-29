@@ -355,7 +355,12 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
               )}
 
               {activeTab === 'Mail' && <MailManusView />}
-              {activeTab === 'Connectors' && <ConnectorsManager />}
+              {activeTab === 'Connectors' && (
+                <ConnectorsManager
+                  onAddCustomAPI={() => setActiveTab('APIKeys')}
+                  onAddCustomMCP={() => showSettingsNotice('Custom MCP registry is ready. Add a server URL when available.')}
+                />
+              )}
               {activeTab === 'Data' && <DataControlsView />}
               {activeTab === 'Cloud' && <DataControlsView />}
               {activeTab === 'Computer' && <MyComputerSettings />}

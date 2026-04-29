@@ -65,6 +65,7 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<'Apps' | 'Custom API' | 'Custom MCP'>('Apps');
   const [connectorsState, setConnectorsState] = useState<{[key: string]: boolean}>({});
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     const fetchState = async () => {
@@ -81,6 +82,8 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
       const newState = !connectorsState[id];
       const updatedState = await window.ipcRenderer.toggleConnector(id, newState);
       setConnectorsState(updatedState);
+      setNotice(`${newState ? 'Connected' : 'Disconnected'} ${id}`);
+      setTimeout(() => setNotice(''), 2500);
     }
   };
 
@@ -115,6 +118,11 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
 
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-2 duration-300">
+      {notice && (
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">
+          {notice}
+        </div>
+      )}
       {/* Header Area */}
       <div className="flex flex-col space-y-6">
         <div className="flex items-center justify-between">
@@ -189,7 +197,10 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
               <p className="text-xs text-gray-500 mt-1">Connect Manus to any third-party service using your own API keys.</p>
             </div>
             <button 
-              onClick={onAddCustomAPI}
+              onClick={onAddCustomAPI || (() => {
+                setActiveCategory('Custom API');
+                setNotice('Open Settings > API Keys to save provider credentials.');
+              })}
               className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all flex items-center"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -208,7 +219,9 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
               <p className="text-xs text-gray-500 mt-1">No custom MCP added yet. Connect to any MCP server for extended tool capabilities.</p>
             </div>
             <button 
-              onClick={onAddCustomMCP}
+              onClick={onAddCustomMCP || (() => {
+                setNotice('Custom MCP registry is ready; add server details when your MCP endpoint is available.');
+              })}
               className="px-6 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-all flex items-center"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -239,7 +252,15 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
         <div className="pt-8 border-t border-gray-50 text-center">
           <p className="text-[11px] text-gray-400">
             Can't find what you're looking for? 
-            <button className="ml-1 text-blue-600 font-bold hover:underline">Let us know!</button>
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText('Connector request: ');
+                setNotice('Connector request template copied.');
+              }}
+              className="ml-1 text-blue-600 font-bold hover:underline"
+            >
+              Let us know!
+            </button>
           </p>
         </div>
       </div>

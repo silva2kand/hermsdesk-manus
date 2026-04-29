@@ -6,6 +6,11 @@ import {
 
 export const MailManusView = () => {
   const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [workflowEmails, setWorkflowEmails] = useState([
+    { email: 'support@manus.bot', desc: 'Automatically creates support tickets' },
+    { email: 'orders@manus.bot', desc: 'Processes incoming customer orders' }
+  ]);
   const [approvedSenders, setApprovedSenders] = useState([
     'newtonstore0@gmail.com',
     'silvak2023@outlook.com',
@@ -21,12 +26,42 @@ export const MailManusView = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const showNotice = (message: string) => {
+    setNotice(message);
+    setTimeout(() => setNotice(''), 3000);
+  };
+
+  const addWorkflowEmail = () => {
+    const name = window.prompt('Workflow name, for example returns or invoices');
+    if (!name) return;
+    const safe = name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'workflow';
+    setWorkflowEmails(prev => [...prev, { email: `${safe}@manus.bot`, desc: `Creates ${name} tasks automatically` }]);
+    showNotice(`Workflow email created: ${safe}@manus.bot`);
+  };
+
+  const addSender = () => {
+    const email = window.prompt('Approved sender email');
+    if (!email) return;
+    setApprovedSenders(prev => prev.includes(email) ? prev : [...prev, email]);
+    showNotice(`Approved sender added: ${email}`);
+  };
+
+  const removeSender = (email: string) => {
+    setApprovedSenders(prev => prev.filter(sender => sender !== email));
+    showNotice(`Removed approved sender: ${email}`);
+  };
+
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
       <div>
         <h2 className="text-xl font-bold text-gray-900">Mail Manus</h2>
         <p className="text-sm text-gray-500 mt-1">Create tasks and workflows by sending emails to your workspace.</p>
       </div>
+      {notice && (
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">
+          {notice}
+        </div>
+      )}
 
       {/* Main Email Address */}
       <div className="p-6 bg-blue-50/50 border border-blue-100 rounded-3xl space-y-4">
@@ -59,26 +94,28 @@ export const MailManusView = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Workflow Emails</h3>
-          <button className="flex items-center text-xs font-bold text-blue-600 hover:text-blue-700">
+          <button onClick={addWorkflowEmail} className="flex items-center text-xs font-bold text-blue-600 hover:text-blue-700">
             <Plus className="w-3.5 h-3.5 mr-1" />
             Create workflow email
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 bg-white border border-gray-100 rounded-2xl space-y-2 hover:border-blue-100 transition-all cursor-pointer group">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-900">support@manus.bot</span>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 transition-all" />
-            </div>
-            <p className="text-[10px] text-gray-500">Automatically creates support tickets</p>
-          </div>
-          <div className="p-4 bg-white border border-gray-100 rounded-2xl space-y-2 hover:border-blue-100 transition-all cursor-pointer group">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-900">orders@manus.bot</span>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 transition-all" />
-            </div>
-            <p className="text-[10px] text-gray-500">Processes incoming customer orders</p>
-          </div>
+          {workflowEmails.map((workflow) => (
+            <button
+              key={workflow.email}
+              onClick={() => {
+                navigator.clipboard.writeText(workflow.email);
+                showNotice(`Copied ${workflow.email}`);
+              }}
+              className="p-4 bg-white border border-gray-100 rounded-2xl space-y-2 hover:border-blue-100 transition-all cursor-pointer group text-left"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-900">{workflow.email}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 transition-all" />
+              </div>
+              <p className="text-[10px] text-gray-500">{workflow.desc}</p>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -89,7 +126,7 @@ export const MailManusView = () => {
             <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Approved Senders</h3>
             <Shield className="w-3.5 h-3.5 text-green-500" />
           </div>
-          <button className="flex items-center text-xs font-bold text-blue-600 hover:text-blue-700">
+          <button onClick={addSender} className="flex items-center text-xs font-bold text-blue-600 hover:text-blue-700">
             <Plus className="w-3.5 h-3.5 mr-1" />
             Add sender
           </button>
@@ -104,7 +141,7 @@ export const MailManusView = () => {
                   </div>
                   <span className="text-xs font-medium text-gray-700">{email}</span>
                 </div>
-                <button className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                <button onClick={() => removeSender(email)} className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

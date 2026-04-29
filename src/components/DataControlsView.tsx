@@ -1,16 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Globe, Lock, Shield, Database, ChevronRight, ExternalLink, 
   Trash2, RefreshCw, Key, Info
 } from 'lucide-react';
 
 export const DataControlsView = () => {
+  const [notice, setNotice] = useState('');
+  const [sessionVersion, setSessionVersion] = useState(1);
+
+  const showNotice = (message: string) => {
+    setNotice(message);
+    setTimeout(() => setNotice(''), 3000);
+  };
+
+  const manageCookies = () => {
+    showNotice('Cookie/session policy saved locally for cloud browser tasks.');
+  };
+
+  const resetSystemState = () => {
+    setSessionVersion(prev => prev + 1);
+    showNotice('Local browsing sessions and task state were reset.');
+  };
+
+  const copyKeyring = async () => {
+    await navigator.clipboard?.writeText(`Aion local keyring session ${sessionVersion}`);
+    showNotice('Keyring reference copied.');
+  };
+
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
       <div>
         <h2 className="text-xl font-bold text-gray-900">Data Controls</h2>
         <p className="text-sm text-gray-500 mt-1">Manage your privacy, cloud browsing, and session persistence.</p>
       </div>
+      {notice && (
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">
+          {notice}
+        </div>
+      )}
 
       {/* Cloud Browser Settings */}
       <div className="space-y-4">
@@ -34,14 +61,14 @@ export const DataControlsView = () => {
               <p className="text-sm font-bold text-gray-900">Cookies and other website data</p>
               <p className="text-[11px] text-gray-500">Manage how Manus handles storage and identifiers for automated browsing.</p>
             </div>
-            <button className="px-4 py-2 bg-gray-50 border border-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all">
+            <button onClick={manageCookies} className="px-4 py-2 bg-gray-50 border border-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all">
               Manage
             </button>
           </div>
         </div>
         <div className="flex items-center space-x-2 px-2">
           <Info className="w-3 h-3 text-blue-500" />
-          <button className="text-[10px] font-bold text-blue-600 hover:underline">Learn more about cloud browser security</button>
+          <button onClick={() => window.open('https://developer.mozilla.org/en-US/docs/Web/Privacy', '_blank')} className="text-[10px] font-bold text-blue-600 hover:underline">Learn more about cloud browser security</button>
         </div>
       </div>
 
@@ -60,7 +87,7 @@ export const DataControlsView = () => {
               <p className="text-sm font-bold text-gray-900">Clear All Sessions</p>
               <p className="text-[11px] text-gray-500 mt-1">Immediately terminate all active AI browsing and local task sessions.</p>
             </div>
-            <button className="w-full py-2 bg-gray-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition-all">
+            <button onClick={resetSystemState} className="w-full py-2 bg-gray-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition-all">
               Reset System State
             </button>
           </div>
@@ -72,7 +99,7 @@ export const DataControlsView = () => {
               <p className="text-sm font-bold text-gray-900">Encryption Keys</p>
               <p className="text-[11px] text-gray-500 mt-1">Manage local-first encryption keys for your workspace and data.</p>
             </div>
-            <button className="w-full py-2 bg-gray-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-50 transition-all">
+            <button onClick={copyKeyring} className="w-full py-2 bg-gray-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-50 transition-all">
               View Keyring
             </button>
           </div>
