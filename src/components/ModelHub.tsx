@@ -37,7 +37,8 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     gpu: 'Detecting...',
     vram: '...',
     ram: '...',
-    os: '...'
+    os: '...',
+    approximate: false
   });
 
   const [localModels, setLocalModels] = useState<LocalModel[]>([]);
@@ -89,7 +90,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     const init = async () => {
       if (window.ipcRenderer) {
         const caps = await window.ipcRenderer.scanPC();
-        setPcCapabilities(caps);
+        setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) });
         
         const path = await window.ipcRenderer.getModelsPath();
         setModelsPath(path);
@@ -140,7 +141,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     try {
       if (window.ipcRenderer) {
         const caps = await window.ipcRenderer.scanPC();
-        setPcCapabilities(caps);
+        setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) });
       }
     } catch (error) {
       console.error('Scan failed:', error);
@@ -233,7 +234,9 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
             <div>
               <div className="flex items-center space-x-3">
                 <h2 className="text-lg font-black tracking-tight uppercase">System Capability Detected</h2>
-                <div className="px-2 py-0.5 bg-green-500 text-white text-[8px] font-black uppercase rounded-full animate-pulse">Optimal</div>
+                <div className={`px-2 py-0.5 text-white text-[8px] font-black uppercase rounded-full ${pcCapabilities.approximate ? 'bg-yellow-500' : 'bg-green-500 animate-pulse'}`}>
+                  {pcCapabilities.approximate ? 'Fast Estimate' : 'Optimal'}
+                </div>
               </div>
               <div className="flex items-center space-x-4 mt-2">
                 <div className="flex items-center space-x-1.5">
@@ -489,7 +492,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
           <div className="space-y-1">
             <h4 className="text-sm font-black text-gray-900">Optimization Tip</h4>
             <p className="text-[11px] text-orange-700 leading-relaxed">
-              Your NVIDIA RTX 5000A supports high-bit quantization. We recommend using Q4_K_M or higher for Llama-3 models to maintain precision while keeping fast inference speeds.
+              If Windows takes too long to report VRAM, Aion uses fast cached estimates so the app stays responsive. We recommend Q4_K_M or Q5_K_M GGUF models for reliable local Jan/TurboQuant speed.
             </p>
           </div>
         </div>

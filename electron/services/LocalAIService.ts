@@ -17,6 +17,21 @@ export class LocalAIService {
   private lmStudioUrl = 'http://localhost:1234/v1';
   private janUrl = 'http://localhost:1337/v1'; // Jan default API port
   private activeJanModel = '';
+  private pcCache = {
+    gpu: 'NVIDIA RTX 5000A',
+    vram: '16GB',
+    ram: '64GB',
+    os: 'Windows 11',
+    scannedAt: 0,
+    approximate: true
+  };
+  private resourceCache = {
+    cpu: 0,
+    ram: 0,
+    gpu: 0,
+    gpuModel: 'NVIDIA RTX 5000A',
+    scannedAt: 0
+  };
 
   async listOllamaModels(): Promise<Model[]> {
     try {
@@ -163,17 +178,47 @@ export class LocalAIService {
     return false;
   }
 
-  async scanPCResources() {
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
     try {
-      const graphics = await si.graphics();
-      const mem = await si.mem();
-      const os = await si.osInfo();
+      return await Promise.race([
+        promise,
+        new Promise<T>(resolve => {
+          timer = setTimeout(() => resolve(fallback), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  private fallbackPcResources() {
+    return {
+      gpu: this.pcCache.gpu,
+      vram: this.pcCache.vram,
+      ram: this.pcCache.ram,
+      os: this.pcCache.os,
+      approximate: this.pcCache.approximate
+    };
+  }
+
+  async scanPCResources() {
+    if (Date.now() - this.pcCache.scannedAt < 60_000) {
+      return this.fallbackPcResources();
+    }
+
+    try {
+      const [graphics, mem, osInfo] = await Promise.all([
+        this.withTimeout(si.graphics(), 1800, { controllers: [] } as any),
+        this.withTimeout(si.mem(), 1200, { total: 0 } as any),
+        this.withTimeout(si.osInfo(), 1200, { distro: 'Windows', release: '11' } as any)
+      ]);
       
       // Filter for discrete GPUs, prefer NVIDIA
-      const controllers = graphics.controllers;
+      const controllers = graphics.controllers || [];
       
       // Look for NVIDIA discrete GPU first
-      const nvidiaGpu = controllers.find(c => 
+      const nvidiaGpu = controllers.find((c: any) =>
         (c.vendor.toLowerCase().includes('nvidia') || c.model.toLowerCase().includes('nvidia')) && 
         !c.model.toLowerCase().includes('uhd') &&
         !c.model.toLowerCase().includes('iris')
@@ -183,7 +228,7 @@ export class LocalAIService {
       let gpu = nvidiaGpu;
       if (!gpu) {
         // Try to find any discrete GPU (not Intel UHD/Iris)
-        gpu = controllers.find(c => 
+        gpu = controllers.find((c: any) =>
           !c.model.toLowerCase().includes('uhd') && 
           !c.model.toLowerCase().includes('iris') &&
           !c.vendor.toLowerCase().includes('intel')
@@ -193,49 +238,67 @@ export class LocalAIService {
       // Final fallback to the first controller
       if (!gpu) gpu = controllers[0];
       
-      return {
+      const next = {
         gpu: gpu?.model || 'NVIDIA RTX 5000A',
         vram: gpu?.vram ? `${(gpu.vram / 1024).toFixed(0)}GB` : '16GB',
-        ram: `${(mem.total / (1024 * 1024 * 1024)).toFixed(0)}GB`,
-        os: `${os.distro} ${os.release}`
+        ram: mem.total ? `${(mem.total / (1024 * 1024 * 1024)).toFixed(0)}GB` : this.pcCache.ram,
+        os: `${osInfo.distro} ${osInfo.release}`,
+        scannedAt: Date.now(),
+        approximate: controllers.length === 0
+      };
+      this.pcCache = next;
+
+      return {
+        gpu: next.gpu,
+        vram: next.vram,
+        ram: next.ram,
+        os: next.os,
+        approximate: next.approximate
       };
     } catch (error) {
-      console.error('Failed to scan PC resources:', error);
-      return {
-        gpu: 'NVIDIA RTX 5000A',
-        vram: '16GB',
-        ram: '64GB',
-        os: 'Windows 11'
-      };
+      console.warn('Fast PC capability scan fell back to cached values.');
+      return this.fallbackPcResources();
     }
   }
 
   async getResourceUsage() {
-    try {
-      const cpuLoad = await si.currentLoad();
-      const mem = await si.mem();
-      const graphics = await si.graphics();
-      
-      // Try to get GPU usage if possible (si.graphics() might not provide live load for all GPUs)
-      // This is often vendor specific or requires more complex calls
-      let gpuLoad = 0;
-      try {
-        // Some systems/drivers might report this via si.graphics().controllers
-        const gpus = graphics.controllers;
-        const mainGpu = gpus.find(c => !c.model.toLowerCase().includes('uhd')) || gpus[0];
-        gpuLoad = (mainGpu as any).utilizationGpu || Math.floor(Math.random() * 20) + 10; // Fallback to semi-random if not available
-      } catch (e) {
-        gpuLoad = Math.floor(Math.random() * 20) + 10;
-      }
-
+    if (Date.now() - this.resourceCache.scannedAt < 2500) {
       return {
+        cpu: this.resourceCache.cpu,
+        ram: this.resourceCache.ram,
+        gpu: this.resourceCache.gpu,
+        gpuModel: this.resourceCache.gpuModel
+      };
+    }
+
+    try {
+      const [cpuLoad, mem] = await Promise.all([
+        this.withTimeout(si.currentLoad(), 900, { currentLoad: this.resourceCache.cpu } as any),
+        this.withTimeout(si.mem(), 900, { active: 0, total: 0 } as any)
+      ]);
+
+      const next = {
         cpu: Math.round(cpuLoad.currentLoad),
-        ram: Math.round((mem.active / mem.total) * 100),
-        gpu: gpuLoad,
-        gpuModel: (await this.scanPCResources()).gpu
+        ram: mem.total ? Math.round((mem.active / mem.total) * 100) : this.resourceCache.ram,
+        gpu: this.resourceCache.gpu || 0,
+        gpuModel: this.pcCache.gpu,
+        scannedAt: Date.now()
+      };
+
+      this.resourceCache = next;
+      return {
+        cpu: next.cpu,
+        ram: next.ram,
+        gpu: next.gpu,
+        gpuModel: next.gpuModel
       };
     } catch (error) {
-      return { cpu: 0, ram: 0, gpu: 0, gpuModel: 'NVIDIA RTX 5000A' };
+      return {
+        cpu: this.resourceCache.cpu,
+        ram: this.resourceCache.ram,
+        gpu: this.resourceCache.gpu,
+        gpuModel: this.pcCache.gpu
+      };
     }
   }
 

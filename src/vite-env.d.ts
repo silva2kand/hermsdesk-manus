@@ -10,7 +10,7 @@ interface Window {
     janStatus: () => Promise<{ apiOnline: boolean, installed: boolean, executablePath: string, activeModel: string, models: any[] }>;
     startJan: () => Promise<{ ok: boolean, error?: string, alreadyOnline?: boolean, status?: any }>;
     loadJanModel: (model: { name: string, path?: string }) => Promise<{ ok: boolean, model?: string, warning?: string, error?: string, status?: any }>;
-    scanPC: () => Promise<{ gpu: string, vram: string, ram: string, os: string }>;
+    scanPC: () => Promise<{ gpu: string, vram: string, ram: string, os: string, approximate?: boolean }>;
     searchHF: (query: string) => Promise<any[]>;
     downloadHF: (modelId: string) => Promise<{ ok: boolean, path?: string, error?: string }>;
     listLibraryModels: () => Promise<any[]>;
