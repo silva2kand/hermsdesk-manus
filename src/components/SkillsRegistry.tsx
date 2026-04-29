@@ -22,7 +22,7 @@ export const SkillsRegistry = () => {
     {
       id: 'music-prompter',
       name: 'music-prompter',
-      desc: 'Music tasks. Covers prompt crafting, frame selection, and levering Manus agents to build automated music workflows.',
+      desc: 'Music tasks. Covers prompt crafting, frame selection, and leveraging ME agents to build automated music workflows.',
       icon: Music,
       color: 'bg-blue-500',
       category: 'Official',
@@ -38,9 +38,9 @@ export const SkillsRegistry = () => {
       updated: 'Apr 23, 2026'
     },
     {
-      id: 'manus-api',
-      name: 'manus-api',
-      desc: 'Manage Manus tasks, projects, and configurations or leverage specialized knowledge for system-level automation.',
+      id: 'me-api',
+      name: 'me-api',
+      desc: 'Manage ME tasks, projects, and configurations or leverage specialized knowledge for system-level automation.',
       icon: Zap,
       color: 'bg-orange-500',
       category: 'Official',

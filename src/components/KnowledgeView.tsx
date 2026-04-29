@@ -113,7 +113,7 @@ export const KnowledgeView = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Knowledge</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage what Manus remembers and how it applies context.</p>
+          <p className="text-sm text-gray-500 mt-1">Manage what ME remembers and how it applies context.</p>
         </div>
         <button className="flex items-center px-6 py-2.5 bg-gray-900 text-white rounded-2xl text-xs font-black hover:bg-gray-800 transition-all shadow-lg shadow-gray-200">
           <Plus className="w-4 h-4 mr-2" />

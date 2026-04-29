@@ -30,15 +30,19 @@ export class DesktopIntegrationService {
     return result.filePaths[0];
   }
 
-  // Simulated UK Solicitor/Accountant helper
   async analyzeUKProfessionalDocs(filePath: string, type: 'legal' | 'tax') {
-    // In a real app, this would read the file and use AI to extract info
+    const stats = fs.statSync(filePath);
     const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split(/\r?\n/).filter(Boolean);
     return {
       type,
       fileName: path.basename(filePath),
-      summary: `Simulated ${type} analysis for UK compliance...`,
-      status: 'Ready for review'
+      filePath,
+      size: stats.size,
+      modifiedAt: stats.mtime.toISOString(),
+      lineCount: lines.length,
+      excerpt: content.slice(0, 4000),
+      status: 'Ready for approved AI review'
     };
   }
 }

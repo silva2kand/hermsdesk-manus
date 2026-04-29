@@ -9,10 +9,11 @@ import { Knowledge } from './components/Knowledge';
 import { Memory } from './components/Memory';
 import { Plugins } from './components/Plugins';
 import { ConsoleWindow } from './components/ConsoleWindow';
+import { AgentsMonitor } from './components/AgentsMonitor';
 import { Share2, MoreHorizontal, ChevronDown, Users, FileText, Edit3, Star, Info, Trash2, MoreVertical, Terminal } from 'lucide-react';
 
 function App() {
-  const [view, setView] = useState<'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins'>('landing');
+  const [view, setView] = useState<'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins' | 'agents'>('landing');
   const [selectedModel, setSelectedModel] = useState<{provider: string, model: string} | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
@@ -163,6 +164,7 @@ function App() {
           {view === 'knowledge' && <Knowledge />}
           {view === 'memory' && <Memory />}
           {view === 'plugins' && <Plugins />}
+          {view === 'agents' && <AgentsMonitor />}
         </main>
       </div>
 

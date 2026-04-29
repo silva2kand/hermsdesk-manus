@@ -7,7 +7,7 @@ import {
 export const MyComputerSettings = () => {
   const [localFolders, setLocalFolders] = useState([
     { path: 'C:\\Users\\Silva\\WorkSpace', name: 'WorkSpace', size: '1.2 GB' },
-    { path: 'C:\\Users\\Silva\\Downloads\\Manus_Exports', name: 'Exports', size: '240 MB' }
+    { path: 'C:\\Users\\Silva\\Downloads\\ME_Exports', name: 'Exports', size: '240 MB' }
   ]);
 
   return (
@@ -15,7 +15,7 @@ export const MyComputerSettings = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">My Computer</h2>
-          <p className="text-sm text-gray-500 mt-1">Connect Manus to your local machine for file access and OS integration.</p>
+          <p className="text-sm text-gray-500 mt-1">Connect ME to your local machine for file access and OS integration.</p>
         </div>
         <div className="flex items-center space-x-2 px-3 py-1.5 bg-green-50 text-green-600 rounded-full text-[10px] font-black uppercase tracking-wider">
           <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />

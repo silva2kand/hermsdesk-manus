@@ -4,7 +4,7 @@ import {
   Trash2, RefreshCw, Key, Info
 } from 'lucide-react';
 
-export const DataControlsView = () => {
+export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' }) => {
   const [notice, setNotice] = useState('');
   const [sessionVersion, setSessionVersion] = useState(1);
 
@@ -30,8 +30,12 @@ export const DataControlsView = () => {
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
       <div>
-        <h2 className="text-xl font-bold text-gray-900">Data Controls</h2>
-        <p className="text-sm text-gray-500 mt-1">Manage your privacy, cloud browsing, and session persistence.</p>
+        <h2 className="text-xl font-bold text-gray-900">{mode === 'cloud' ? 'Cloud Browser' : 'Data Controls'}</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          {mode === 'cloud'
+            ? 'Enable ME to browse, click, navigate, and extract data from the web.'
+            : 'Manage your privacy, cloud browsing, and session persistence.'}
+        </p>
       </div>
       {notice && (
         <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">
@@ -59,7 +63,7 @@ export const DataControlsView = () => {
           <div className="p-6 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
             <div className="space-y-1">
               <p className="text-sm font-bold text-gray-900">Cookies and other website data</p>
-              <p className="text-[11px] text-gray-500">Manage how Manus handles storage and identifiers for automated browsing.</p>
+              <p className="text-[11px] text-gray-500">Manage how ME handles storage and identifiers for automated browsing.</p>
             </div>
             <button onClick={manageCookies} className="px-4 py-2 bg-gray-50 border border-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all">
               Manage

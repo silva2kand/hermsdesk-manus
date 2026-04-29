@@ -1,4 +1,4 @@
-# HermsDesk App (Manus)
+# HermsDesk App (ME)
 
 An advanced, local-first AI agentic desktop application built with Electron, Vite, and React. Optimized for NVIDIA RTX GPUs using the **TurboQuant** processing engine.
 

@@ -20,7 +20,8 @@ import {
   Wrench,
   Database,
   Puzzle,
-  Activity
+  Activity,
+  Rocket
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -149,6 +150,7 @@ export const Sidebar = ({
           <SidebarItem icon={Database} label="Knowledge" active={currentView === 'knowledge'} onClick={() => onViewChange('knowledge')} />
           <SidebarItem icon={Brain} label="Memory" active={currentView === 'memory'} onClick={() => onViewChange('memory')} />
           <SidebarItem icon={Puzzle} label="Plugins" active={currentView === 'plugins'} onClick={() => onViewChange('plugins')} />
+          <SidebarItem icon={Rocket} label="Hermes Agents" active={currentView === 'agents'} onClick={() => onViewChange('agents')} />
         </div>
       </div>
 

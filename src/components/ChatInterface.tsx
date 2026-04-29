@@ -30,7 +30,8 @@ import {
   Volume2,
   Edit3,
   StepForward,
-  RotateCcw
+  RotateCcw,
+  X
 } from 'lucide-react';
 
 const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }) => (
@@ -67,6 +68,21 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
   const [isTyping, setIsTyping] = useState(false);
   const [provider, setProvider] = useState(initialModel?.provider || 'Ollama');
   const [model, setModel] = useState(initialModel?.model || 'llama3:8b');
+  const [showConnectorPanel, setShowConnectorPanel] = useState(false);
+  const [chatConnectors, setChatConnectors] = useState<{[key: string]: boolean}>({
+    'LM Studio': true,
+    Ollama: true,
+    Canva: true,
+    GitHub: true,
+    Gmail: true,
+    Gemini: true,
+    Grok: true,
+    'Hugging Face': true,
+    Playwright: false,
+    Stripe: false,
+    Notion: false,
+    'Custom API': false
+  });
   const [engineStatus, setEngineStatus] = useState<{[key: string]: 'online' | 'offline' | 'checking'}>({
     Ollama: 'checking',
     'LM Studio': 'checking',
@@ -88,6 +104,26 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
     'Gemini': ['gemini-1.5-pro', 'gemini-1.5-flash'],
     'OpenRouter': ['gpt-4o', 'claude-3-5-sonnet', 'deepseek-v2']
   });
+
+  const chatConnectorItems = [
+    { name: 'LM Studio', icon: Monitor, color: 'bg-blue-700', desc: 'Local model server' },
+    { name: 'Ollama', icon: Cpu, color: 'bg-gray-700', desc: 'Offline local LLMs' },
+    { name: 'Canva', icon: Palette, color: 'bg-purple-500', desc: 'Design generation' },
+    { name: 'GitHub', icon: Github, color: 'bg-gray-900', desc: 'Repos, PRs, code search' },
+    { name: 'Gmail', icon: Mail, color: 'bg-red-500', desc: 'Email search and drafts' },
+    { name: 'Gemini', icon: Zap, color: 'bg-blue-500', desc: 'Cloud multimodal model' },
+    { name: 'Grok', icon: Brain, color: 'bg-gray-900', desc: 'Reasoning and analysis' },
+    { name: 'Hugging Face', icon: Smile, color: 'bg-yellow-500', desc: 'Models and datasets' },
+    { name: 'Playwright', icon: Globe, color: 'bg-green-600', desc: 'Browser automation' },
+    { name: 'Stripe', icon: Calculator, color: 'bg-blue-600', desc: 'Payments and invoices' },
+    { name: 'Notion', icon: Layout, color: 'bg-gray-400', desc: 'Pages and workspace docs' },
+    { name: 'Custom API', icon: Wrench, color: 'bg-orange-500', desc: 'Any REST endpoint' }
+  ];
+
+  const toggleChatConnector = (name: string) => {
+    setChatConnectors(prev => ({ ...prev, [name]: !prev[name] }));
+    addNotice(`${name} ${chatConnectors[name] ? 'disabled' : 'enabled'} for this chat`);
+  };
 
   const addNotice = (message: string) => {
     setNotice(message);
@@ -303,7 +339,7 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${msg.role === 'assistant' ? 'bg-gray-900' : 'bg-blue-600'}`}>
                   <span className="text-white text-[10px] font-bold">{msg.role === 'assistant' ? 'M' : 'U'}</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900">{msg.role === 'assistant' ? 'manus' : 'you'}</span>
+                <span className="text-sm font-bold text-gray-900">{msg.role === 'assistant' ? 'ME' : 'you'}</span>
               </div>
               
               <div className="pl-8 space-y-4">
@@ -540,15 +576,59 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
           </div>
           
           {/* Tiny Tiny Connectors Below Chat Bar */}
-          <div className="mt-3 flex items-center justify-center space-x-3 px-4">
-            <span className="text-[8px] font-bold text-gray-300 uppercase tracking-widest mr-2">Connectors</span>
-            <ConnectorIcon icon={Github} label="GitHub" color="bg-gray-900" />
-            <ConnectorIcon icon={Layout} label="Notion" color="bg-gray-400" />
-            <ConnectorIcon icon={Mail} label="Outlook" color="bg-blue-600" />
-            <ConnectorIcon icon={MsgIcon} label="WhatsApp" color="bg-green-500" />
-            <ConnectorIcon icon={Briefcase} label="Legal" color="bg-indigo-700" />
-            <ConnectorIcon icon={Calculator} label="Tax" color="bg-teal-600" />
-            <ConnectorIcon icon={Palette} label="Canva" color="bg-purple-500" />
+          <div className="mt-3 flex items-center justify-center px-4 relative">
+            <button
+              onClick={() => setShowConnectorPanel(prev => !prev)}
+              className="flex items-center space-x-3 px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-2xl transition-all"
+            >
+              <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Connectors</span>
+              <div className="flex items-center space-x-2">
+                {chatConnectorItems.filter(item => chatConnectors[item.name]).slice(0, 8).map(item => (
+                  <ConnectorIcon key={item.name} icon={item.icon} label={item.name} color={item.color} />
+                ))}
+              </div>
+              <span className="text-[9px] font-black text-blue-600 uppercase">
+                {Object.values(chatConnectors).filter(Boolean).length} on
+              </span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showConnectorPanel ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showConnectorPanel && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[520px] max-w-[calc(100vw-2rem)] bg-white border border-gray-100 rounded-3xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Per-chat tool permissions</h3>
+                    <p className="text-[10px] text-gray-500 mt-0.5">ON lets ME use that connector in this conversation.</p>
+                  </div>
+                  <button onClick={() => setShowConnectorPanel(false)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-lg">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                  {chatConnectorItems.map(item => (
+                    <button
+                      key={item.name}
+                      onClick={() => toggleChatConnector(item.name)}
+                      className="flex items-center justify-between p-3 rounded-2xl border border-gray-100 hover:border-blue-100 hover:bg-blue-50/30 transition-all text-left"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-8 h-8 ${item.color} rounded-xl flex items-center justify-center text-white`}>
+                          <item.icon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-gray-900">{item.name}</p>
+                          <p className="text-[9px] text-gray-500">{item.desc}</p>
+                        </div>
+                      </div>
+                      <div className={`w-9 h-5 rounded-full relative transition-all ${chatConnectors[item.name] ? 'bg-blue-600' : 'bg-gray-200'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${chatConnectors[item.name] ? 'left-4' : 'left-0.5'}`} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

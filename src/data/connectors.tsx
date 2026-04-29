@@ -90,7 +90,7 @@ export const connectorsData: Connector[] = [
   {
     id: 'google-drive',
     title: 'Google Drive',
-    desc: 'Access your files, search instantly, and let Manus help you manage documents intelligently',
+    desc: 'Access your files, search instantly, and let ME help you manage documents intelligently',
     icon: Cloud,
     color: 'bg-green-600',
     category: 'Apps'
@@ -98,7 +98,7 @@ export const connectorsData: Connector[] = [
   {
     id: 'outlook-mail',
     title: 'Outlook Mail',
-    desc: 'Write, search, and manage your Outlook emails seamlessly within Manus',
+    desc: 'Write, search, and manage your Outlook emails seamlessly within ME',
     icon: Mail,
     color: 'bg-blue-700',
     category: 'Apps'
@@ -122,7 +122,7 @@ export const connectorsData: Connector[] = [
   {
     id: 'slack',
     title: 'Slack',
-    desc: 'Read and write Slack conversations in Manus',
+    desc: 'Read and write Slack conversations in ME',
     icon: MessageSquare,
     color: 'bg-purple-600',
     category: 'Apps'
@@ -138,7 +138,7 @@ export const connectorsData: Connector[] = [
   {
     id: 'zapier',
     title: 'Zapier',
-    desc: 'Connect Manus and automate workflows across thousands of apps',
+    desc: 'Connect ME and automate workflows across thousands of apps',
     icon: Zap,
     color: 'bg-orange-500',
     category: 'Apps'

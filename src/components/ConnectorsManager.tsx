@@ -194,7 +194,7 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
             </div>
             <div>
               <h3 className="text-sm font-bold text-gray-900">Custom API Keys</h3>
-              <p className="text-xs text-gray-500 mt-1">Connect Manus to any third-party service using your own API keys.</p>
+              <p className="text-xs text-gray-500 mt-1">Connect ME to any third-party service using your own API keys.</p>
             </div>
             <button 
               onClick={onAddCustomAPI || (() => {

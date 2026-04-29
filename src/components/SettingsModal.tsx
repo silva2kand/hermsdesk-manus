@@ -9,7 +9,7 @@ import {
   ChevronDown, Heart, Coffee, Camera, Map, Compass, Key
 } from 'lucide-react';
 import { ConnectorsManager } from './ConnectorsManager';
-import { MailManusView } from './MailManusView';
+import { MailMEView } from './MailMEView';
 import { DataControlsView } from './DataControlsView';
 import { MyComputerSettings } from './MyComputerSettings';
 import { KnowledgeView } from './KnowledgeView';
@@ -76,6 +76,8 @@ const SettingToggle = ({ title, desc, defaultChecked = false }: any) => (
 
 const WorkspacePanel = ({ tab, onAction }: any) => {
   const config: Record<string, any> = {
+    Account: { title: 'Account', icon: CreditCard, desc: 'Manage identity, authentication, workspace membership, and billing.', primary: 'Copy account summary' },
+    Usage: { title: 'Usage', icon: PieChart, desc: 'Review token consumption, API calls, connector activity, and workspace quotas.', primary: 'Export usage report' },
     SharedTasks: { title: 'Shared Tasks', icon: Users, desc: 'Control collaboration, invites, and exported task handoff files.', primary: 'Create share file' },
     SharedFiles: { title: 'Shared Files', icon: FileText, desc: 'Manage local shared folders and files attached to tasks.', primary: 'Choose folder' },
     Websites: { title: 'Websites', icon: Globe, desc: 'Open generated sites, save website projects, and export static builds.', primary: 'Open website folder' },
@@ -183,9 +185,11 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
               <p className="px-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">User</p>
               <div className="space-y-0.5">
                 <SidebarItem icon={User} label="Profile" active={activeTab === 'Profile'} onClick={() => setActiveTab('Profile')} />
+                <SidebarItem icon={CreditCard} label="Account" active={activeTab === 'Account'} onClick={() => setActiveTab('Account')} />
                 <SidebarItem icon={SettingsIcon} label="General Settings" active={activeTab === 'General'} onClick={() => setActiveTab('General')} />
+                <SidebarItem icon={PieChart} label="Usage" active={activeTab === 'Usage'} onClick={() => setActiveTab('Usage')} />
                 <SidebarItem icon={Clock} label="Scheduled tasks" active={activeTab === 'Scheduled'} onClick={() => setActiveTab('Scheduled')} />
-                <SidebarItem icon={Mail} label="Mail Manus" active={activeTab === 'Mail'} onClick={() => setActiveTab('Mail')} badge="Hot" />
+                <SidebarItem icon={Mail} label="Mail ME" active={activeTab === 'Mail'} onClick={() => setActiveTab('Mail')} badge="Hot" />
               </div>
             </div>
 
@@ -249,7 +253,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                 <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">User Profile</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage your identity and how Manus remembers you.</p>
+                    <p className="text-sm text-gray-500 mt-1">Manage your identity and how ME remembers you.</p>
                   </div>
 
                   <div className="space-y-6">
@@ -290,7 +294,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm h-32 resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
                         defaultValue="I design and build advanced local-first AI systems, multi-agent orchestration frameworks, and automated LLM workflows. I prefer open-source, self-hosted, GPU-accelerated solutions and I value reliability, autonomy, and technical precision. I frequently integrate multiple model providers (local and cloud) and expect tools to work together intelligently. I appreciate direct, technical, solution-focused communication with clear steps and practical examples. My priorities are stability, privacy, and efficient routing across multiple AI backends."
                       />
-                      <p className="text-[10px] text-gray-400 italic">Manus uses this information to personalize responses across all tasks.</p>
+                      <p className="text-[10px] text-gray-400 italic">ME uses this information to personalize responses across all tasks.</p>
                     </div>
                   </div>
 
@@ -305,7 +309,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                 <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
                   <div>
                     <h2 className="text-xl font-bold text-gray-900">Personalization</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage who you are and what Manus remembers</p>
+                    <p className="text-sm text-gray-500 mt-1">Manage who you are and what ME remembers</p>
                   </div>
 
                   <div className="space-y-6">
@@ -332,7 +336,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm h-32 resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
                         defaultValue="I design and build advanced local-first AI systems, multi-agent orchestration frameworks, and automated LLM workflows. I prefer open-source, self-hosted, GPU-accelerated solutions and I value reliability, autonomy, and technical precision. I frequently integrate multiple model providers (local and cloud) and expect tools to work together intelligently. I appreciate direct, technical, solution-focused communication with clear steps and practical examples. My priorities are stability, privacy, and efficient routing across multiple AI backends."
                       />
-                      <p className="text-[10px] text-gray-400 italic">Manus uses this information to personalize responses across all tasks.</p>
+                      <p className="text-[10px] text-gray-400 italic">ME uses this information to personalize responses across all tasks.</p>
                     </div>
 
                     <div className="space-y-2">
@@ -354,7 +358,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                 </div>
               )}
 
-              {activeTab === 'Mail' && <MailManusView />}
+              {activeTab === 'Mail' && <MailMEView />}
               {activeTab === 'Connectors' && (
                 <ConnectorsManager
                   onAddCustomAPI={() => setActiveTab('APIKeys')}
@@ -362,7 +366,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                 />
               )}
               {activeTab === 'Data' && <DataControlsView />}
-              {activeTab === 'Cloud' && <DataControlsView />}
+              {activeTab === 'Cloud' && <DataControlsView mode="cloud" />}
               {activeTab === 'Computer' && <MyComputerSettings />}
               {activeTab === 'Knowledge' && <KnowledgeView />}
               {activeTab === 'APIKeys' && <APIKeyManager />}
@@ -456,7 +460,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                 </div>
               )}
 
-              {(['Usage', 'SharedTasks', 'SharedFiles', 'Websites', 'Apps', 'Domains', 'Integrations', 'About', 'Help'].includes(activeTab)) && (
+              {(['Account', 'Usage', 'SharedTasks', 'SharedFiles', 'Websites', 'Apps', 'Domains', 'Integrations', 'About', 'Help'].includes(activeTab)) && (
                 <WorkspacePanel tab={activeTab} onAction={runSettingsAction} />
               )}
             </div>

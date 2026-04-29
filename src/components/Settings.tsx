@@ -58,7 +58,7 @@ export const Settings = () => {
         <SettingTab icon={Zap} label="Task" active={activeTab === 'Task'} onClick={() => setActiveTab('Task')} />
         <SettingTab icon={Globe} label="API & Connections" active={activeTab === 'API & Connections'} onClick={() => setActiveTab('API & Connections')} />
         <SettingTab icon={Share2} label="Integration" active={activeTab === 'Integration'} onClick={() => setActiveTab('Integration')} />
-        <SettingTab icon={Info} label="About Manus" active={activeTab === 'About Manus'} onClick={() => setActiveTab('About Manus')} />
+        <SettingTab icon={Info} label="About ME" active={activeTab === 'About ME'} onClick={() => setActiveTab('About ME')} />
       </div>
 
       {/* Content Area */}
@@ -213,12 +213,12 @@ export const Settings = () => {
               {/* Memory Section */}
               <section className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-900">Manus's memory</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">ME memory</h3>
                   <button className="text-xs text-blue-600 font-medium hover:underline">Manage</button>
                 </div>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  Manus can remember information across conversations to provide more relevant responses. 
-                  You can manage what Manus remembers or turn off memory entirely.
+                  ME can remember information across conversations to provide more relevant responses. 
+                  You can manage what ME remembers or turn off memory entirely.
                 </p>
                 <div className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white">
                   <div className="flex flex-col">
