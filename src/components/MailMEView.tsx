@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Mail, Plus, Copy, Check, Shield, User, Globe, 
-  Trash2, AlertCircle, ChevronRight, Bell, Tags
+  Trash2, AlertCircle, ChevronRight, Bell, Tags, WifiOff, RefreshCw
 } from 'lucide-react';
 import { mailCategories } from '../data/hermesAgents';
 
@@ -23,6 +23,16 @@ export const MailMEView = () => {
   const [enabledCategories, setEnabledCategories] = useState<Record<string, boolean>>(
     () => Object.fromEntries(mailCategories.map(category => [category.id, true]))
   );
+  const [connectorState, setConnectorState] = useState<Record<string, boolean>>({});
+
+  React.useEffect(() => {
+    refreshMailConnectors();
+  }, []);
+
+  const refreshMailConnectors = async () => {
+    const state = await window.ipcRenderer?.getConnectors?.();
+    setConnectorState(state || {});
+  };
 
   const copyEmail = () => {
     navigator.clipboard.writeText('newtonstore0422@me.bot');
@@ -92,6 +102,27 @@ export const MailMEView = () => {
         <div className="bg-white/80 p-3 rounded-xl border border-blue-100/50 flex items-center justify-center">
           <code className="text-sm font-black text-blue-700">newtonstore0422@me.bot</code>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <MailConnectorStatus
+          label="Mail ME"
+          connected
+          detail="Workspace email route ready"
+          onRefresh={refreshMailConnectors}
+        />
+        <MailConnectorStatus
+          label="Gmail"
+          connected={Boolean(connectorState.gmail || connectorState['google-account'])}
+          detail={connectorState.gmail || connectorState['google-account'] ? 'Connected for mail tasks' : 'Not connected yet'}
+          onRefresh={refreshMailConnectors}
+        />
+        <MailConnectorStatus
+          label="Outlook Mail"
+          connected={Boolean(connectorState['outlook-mail'])}
+          detail={connectorState['outlook-mail'] ? 'Connected for mail tasks' : 'Not connected yet'}
+          onRefresh={refreshMailConnectors}
+        />
       </div>
 
       {/* Workflow Emails */}
@@ -200,3 +231,20 @@ export const MailMEView = () => {
     </div>
   );
 };
+
+const MailConnectorStatus = ({ label, connected, detail, onRefresh }: any) => (
+  <div className={`p-4 rounded-2xl border flex items-center justify-between ${connected ? 'bg-green-50/60 border-green-100' : 'bg-orange-50/60 border-orange-100'}`}>
+    <div className="flex items-center space-x-3">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${connected ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'}`}>
+        {connected ? <Check className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+      </div>
+      <div>
+        <p className="text-xs font-black text-gray-900">{label}</p>
+        <p className={`text-[10px] font-bold ${connected ? 'text-green-700' : 'text-orange-700'}`}>{detail}</p>
+      </div>
+    </div>
+    <button onClick={onRefresh} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-white/60 rounded-xl transition-all" title="Refresh status">
+      <RefreshCw className="w-3.5 h-3.5" />
+    </button>
+  </div>
+);

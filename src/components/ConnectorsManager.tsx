@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Search, Plus, Globe, Mail, Github, Layout, 
+import {
+  Search, Plus, Globe, Mail, Github, Layout,
   Puzzle, Database, Monitor, Cpu, Zap, X, ChevronRight,
-  Filter, ExternalLink
+  Filter, ExternalLink, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { connectorsData, Connector } from '../data/connectors';
 
@@ -45,6 +45,9 @@ const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connec
           )}
         </div>
         <p className="text-[11px] text-gray-500 leading-tight mt-1 max-w-[240px]">{connector.desc}</p>
+        <p className={`text-[9px] font-black uppercase mt-1 ${isConnected ? 'text-green-600' : 'text-orange-600'}`}>
+          {isConnected ? 'Connected to ME' : 'Not connected - click to set up'}
+        </p>
       </div>
     </div>
     <div className="flex items-center space-x-2">
@@ -55,7 +58,7 @@ const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connec
           ? 'bg-gray-50 text-gray-400 border border-gray-100' 
           : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm'
       }`}>
-        {isConnected ? 'Connected' : 'Add'}
+        {isConnected ? 'Connected' : 'Connect'}
       </button>
     </div>
   </div>
@@ -66,12 +69,23 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
   const [activeCategory, setActiveCategory] = useState<'Apps' | 'Custom API' | 'Custom MCP'>('Apps');
   const [connectorsState, setConnectorsState] = useState<{[key: string]: boolean}>({});
   const [notice, setNotice] = useState('');
+  const [customMcpServers, setCustomMcpServers] = useState<{ name: string, command: string, status: 'configured' | 'error' }[]>([]);
+  const [mcpName, setMcpName] = useState('');
+  const [mcpCommand, setMcpCommand] = useState('');
 
   useEffect(() => {
     const fetchState = async () => {
       if (window.ipcRenderer) {
         const state = await window.ipcRenderer.getConnectors();
         setConnectorsState(state);
+      }
+      const savedMcp = window.localStorage.getItem('hermsdesk.customMcpServers');
+      if (savedMcp) {
+        try {
+          setCustomMcpServers(JSON.parse(savedMcp));
+        } catch {
+          setCustomMcpServers([]);
+        }
       }
     };
     fetchState();
@@ -85,6 +99,21 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
       setNotice(`${newState ? 'Connected' : 'Disconnected'} ${id}`);
       setTimeout(() => setNotice(''), 2500);
     }
+  };
+
+  const addCustomMcpServer = () => {
+    const name = mcpName.trim();
+    const command = mcpCommand.trim();
+    if (!name || !command) {
+      setNotice('Add a server name and launch command first.');
+      return;
+    }
+    const next = [...customMcpServers, { name, command, status: 'configured' as const }];
+    setCustomMcpServers(next);
+    window.localStorage.setItem('hermsdesk.customMcpServers', JSON.stringify(next));
+    setMcpName('');
+    setMcpCommand('');
+    setNotice(`${name} MCP saved locally. Enable it after you approve the command.`);
   };
 
   const handleGoogleConnect = async () => {
@@ -210,23 +239,71 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
         )}
 
         {activeCategory === 'Custom MCP' && (
-          <div className="p-6 bg-gray-50/50 border border-dashed border-gray-200 rounded-3xl flex flex-col items-center text-center space-y-4">
-            <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-purple-600">
-              <Puzzle className="w-6 h-6" />
+          <div className="space-y-4">
+            <div className="p-6 bg-purple-50/60 border border-purple-100 rounded-3xl space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start space-x-4">
+                  <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-purple-600">
+                    <Puzzle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-gray-900">Model Context Protocol</h3>
+                    <p className="text-xs text-gray-600 mt-1 max-w-xl">
+                      ME can use MCP servers as real tools after you configure and approve them. Built-in templates are listed below; custom commands are saved locally and stay off until enabled.
+                    </p>
+                  </div>
+                </div>
+                <div className="px-3 py-1 bg-white border border-purple-100 rounded-full text-[10px] font-black text-purple-700 uppercase">
+                  {counts['Custom MCP']} templates
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr_auto] gap-3">
+                <input
+                  value={mcpName}
+                  onChange={(e) => setMcpName(e.target.value)}
+                  placeholder="MCP name, e.g. My Business DB"
+                  className="px-4 py-3 bg-white border border-purple-100 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-100"
+                />
+                <input
+                  value={mcpCommand}
+                  onChange={(e) => setMcpCommand(e.target.value)}
+                  placeholder="Launch command, e.g. npx -y @modelcontextprotocol/server-filesystem C:\\Path"
+                  className="px-4 py-3 bg-white border border-purple-100 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-100"
+                />
+                <button
+                  onClick={addCustomMcpServer}
+                  className="px-5 py-3 bg-purple-600 text-white rounded-2xl text-xs font-black hover:bg-purple-700 transition-all flex items-center justify-center"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add
+                </button>
+              </div>
+
+              {customMcpServers.length > 0 && (
+                <div className="space-y-2">
+                  {customMcpServers.map((server, idx) => (
+                    <div key={`${server.name}-${idx}`} className="flex items-center justify-between p-3 bg-white border border-purple-100 rounded-2xl">
+                      <div>
+                        <p className="text-xs font-black text-gray-900">{server.name}</p>
+                        <p className="text-[10px] text-gray-500 font-mono mt-0.5">{server.command}</p>
+                      </div>
+                      <span className="flex items-center px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-[9px] font-black uppercase">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Configured
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-start space-x-2 p-3 bg-white/70 border border-purple-100 rounded-2xl">
+                <AlertCircle className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-purple-700 leading-relaxed">
+                  For security, ME will not auto-run a new MCP command silently. It stores the command, shows exactly what will run, then asks approval before enabling tools.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Model Context Protocol</h3>
-              <p className="text-xs text-gray-500 mt-1">No custom MCP added yet. Connect to any MCP server for extended tool capabilities.</p>
-            </div>
-            <button 
-              onClick={onAddCustomMCP || (() => {
-                setNotice('Custom MCP registry is ready; add server details when your MCP endpoint is available.');
-              })}
-              className="px-6 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-all flex items-center"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add custom MCP
-            </button>
           </div>
         )}
 

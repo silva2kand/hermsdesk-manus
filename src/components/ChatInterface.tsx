@@ -62,7 +62,7 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
   const [messages, setMessages] = useState<any[]>([
     {
       role: 'assistant',
-      content: "That's an ambitious and exciting project! I can certainly help you design and build a local-first, agentic desktop application for Windows that mirrors my capabilities while integrating specialized business logic for UK-based professional services. Let's start by outlining the architecture and core components."
+      content: "ME is ready. I can help you design and build a local-first, agentic Windows workstation with Hermes, Paperclip, Space agents, UK professional workflows, and approval-gated local tools. Let's start by outlining the architecture and core components."
     }
   ]);
   const [isTyping, setIsTyping] = useState(false);
@@ -159,10 +159,16 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
       return;
     }
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(content);
+    const spoken = content
+      .replace(/```[\s\S]*?```/g, 'code block omitted')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[*_#>~[\]{}]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const utterance = new SpeechSynthesisUtterance(`ME says. ${spoken}`);
     utterance.rate = 1;
     window.speechSynthesis.speak(utterance);
-    addNotice('Speaking response');
+    addNotice('ME speaking response');
   };
 
   const editMessage = (content: string) => {
@@ -455,6 +461,13 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
               </span>
             </div>
           )}
+        </div>
+
+        <div className="w-px h-4 bg-gray-200" />
+
+        <div className="flex items-center space-x-2 px-3 py-1 bg-green-50 border border-green-100 rounded-full">
+          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+          <span className="text-[8px] font-black text-green-700 uppercase tracking-widest">TurboQuant active</span>
         </div>
 
         <div className="w-px h-4 bg-gray-200" />

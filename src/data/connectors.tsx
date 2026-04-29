@@ -708,5 +708,71 @@ export const connectorsData: Connector[] = [
     icon: Video,
     color: 'bg-blue-600',
     category: 'Custom API'
+  },
+
+  // Custom MCP
+  {
+    id: 'mcp-filesystem',
+    title: 'Filesystem MCP',
+    desc: 'Expose approved local folders to ME through Model Context Protocol with file read/write permission gates',
+    icon: HardDrive,
+    color: 'bg-gray-700',
+    category: 'Custom MCP'
+  },
+  {
+    id: 'mcp-github',
+    title: 'GitHub MCP',
+    desc: 'Use MCP tools for repositories, issues, pull requests, code search, and release workflows',
+    icon: Github,
+    color: 'bg-gray-900',
+    category: 'Custom MCP'
+  },
+  {
+    id: 'mcp-playwright',
+    title: 'Playwright MCP',
+    desc: 'Let ME inspect websites and apps through browser automation with approval before form submission',
+    icon: Monitor,
+    color: 'bg-green-600',
+    category: 'Custom MCP'
+  },
+  {
+    id: 'mcp-memory',
+    title: 'Memory MCP',
+    desc: 'Store durable project facts, preferences, and task state so work can continue where it left off',
+    icon: Database,
+    color: 'bg-blue-600',
+    category: 'Custom MCP'
+  },
+  {
+    id: 'mcp-context7',
+    title: 'Context7 MCP',
+    desc: 'Fetch current library documentation and examples for coding tasks',
+    icon: Book,
+    color: 'bg-blue-500',
+    category: 'Custom MCP'
+  },
+  {
+    id: 'mcp-fetch',
+    title: 'Fetch MCP',
+    desc: 'Retrieve web pages and structured data for research, extraction, and cross-checking',
+    icon: Search,
+    color: 'bg-cyan-600',
+    category: 'Custom MCP'
+  },
+  {
+    id: 'mcp-sqlite',
+    title: 'SQLite MCP',
+    desc: 'Query approved local databases for invoices, bills, properties, suppliers, and task logs',
+    icon: Table,
+    color: 'bg-indigo-600',
+    category: 'Custom MCP'
+  },
+  {
+    id: 'mcp-windows-shell',
+    title: 'Windows Shell MCP',
+    desc: 'Run approved diagnostic commands for PC repair, app builds, and local automation',
+    icon: Terminal,
+    color: 'bg-slate-800',
+    category: 'Custom MCP'
   }
 ];

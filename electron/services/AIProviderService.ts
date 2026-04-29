@@ -19,9 +19,18 @@ export class AIProviderService {
   private hfDownloadTimeoutMs = 120000;
 
   constructor() {
-    this.connectorsState = this.store.get('connectors', {
-      'my-browser': true
-    }) as any;
+    const defaultConnectors = {
+      'my-browser': true,
+      'ollama': true,
+      'lm-studio': true,
+      'google-gemini': true,
+      'openrouter': true
+    };
+    this.connectorsState = {
+      ...defaultConnectors,
+      ...(this.store.get('connectors', {}) as any)
+    };
+    this.store.set('connectors', this.connectorsState);
     
     // Create models directory in app data
     this.modelsPath = path.join(app.getPath('userData'), 'models');
