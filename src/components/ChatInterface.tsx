@@ -25,7 +25,8 @@ import {
   HardDrive,
   Wrench,
   Brain,
-  RefreshCw
+  RefreshCw,
+  FolderOpen
 } from 'lucide-react';
 
 const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }) => (
@@ -49,9 +50,10 @@ const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string,
   </div>
 );
 
-export const ChatInterface = ({ initialModel }: { initialModel?: { provider: string, model: string } | null }) => {
+export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: { provider: string, model: string } | null, initialPrompt?: string }) => {
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [input, setInput] = useState('');
+  const [notice, setNotice] = useState('');
   const [messages, setMessages] = useState<any[]>([
     {
       role: 'assistant',
@@ -75,12 +77,17 @@ export const ChatInterface = ({ initialModel }: { initialModel?: { provider: str
     }
   }, [initialModel]);
 
-  const providerModels: {[key: string]: string[]} = {
+  const [providerModels, setProviderModels] = useState<{[key: string]: string[]}>({
     'Ollama': ['llama3:8b', 'mistral:7b', 'phi3:mini', 'codellama'],
     'LM Studio': ['local-model', 'qwen-2.5-7b', 'llama-3-8b-instruct'],
     'Jan': ['llama-3-8b-q4', 'mistral-7b-v0.3', 'phi-3-mini-4k'],
     'Gemini': ['gemini-1.5-pro', 'gemini-1.5-flash'],
     'OpenRouter': ['gpt-4o', 'claude-3-5-sonnet', 'deepseek-v2']
+  });
+
+  const addNotice = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 3500);
   };
 
   const checkEngines = async () => {
@@ -92,6 +99,14 @@ export const ChatInterface = ({ initialModel }: { initialModel?: { provider: str
       const ollamaModels = await window.ipcRenderer.listModels();
       const lmStudioStatus = await window.ipcRenderer.checkLMStudio();
       const janStatus = await window.ipcRenderer.checkJan();
+      const libraryModels = await window.ipcRenderer.listLibraryModels();
+
+      setProviderModels(prev => ({
+        ...prev,
+        Ollama: ollamaModels?.length ? ollamaModels.map((m: any) => m.name) : prev.Ollama,
+        'LM Studio': lmStudioStatus?.data?.length ? lmStudioStatus.data.map((m: any) => m.id) : prev['LM Studio'],
+        Jan: libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan
+      }));
 
       setEngineStatus({
         Ollama: ollamaModels && ollamaModels.length > 0 ? 'online' : 'offline',
@@ -115,21 +130,30 @@ export const ChatInterface = ({ initialModel }: { initialModel?: { provider: str
   const handleFileUpload = async () => {
     const files = await window.ipcRenderer.selectFiles();
     console.log('Selected files:', files);
+    if (files?.length) {
+      setMessages(prev => [...prev, { role: 'user', content: `Attached files:\n${files.join('\n')}` }]);
+      addNotice(`${files.length} file${files.length === 1 ? '' : 's'} attached`);
+    }
   };
 
   const handleFolderUpload = async () => {
     const folder = await window.ipcRenderer.selectFolder();
     console.log('Selected folder:', folder);
+    if (folder) {
+      setMessages(prev => [...prev, { role: 'user', content: `Attached folder:\n${folder}` }]);
+      addNotice('Folder attached');
+    }
   };
 
   const handleAppOpen = (app: string) => {
     window.ipcRenderer.openApp(app);
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isTyping) return;
+  const handleSend = async (overrideInput?: string) => {
+    const outgoing = (overrideInput ?? input).trim();
+    if (!outgoing || isTyping) return;
 
-    const userMessage = { role: 'user', content: input };
+    const userMessage = { role: 'user', content: outgoing };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
@@ -184,6 +208,12 @@ export const ChatInterface = ({ initialModel }: { initialModel?: { provider: str
       setIsTyping(false);
     }
   };
+
+  React.useEffect(() => {
+    if (initialPrompt) {
+      handleSend(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -315,6 +345,12 @@ export const ChatInterface = ({ initialModel }: { initialModel?: { provider: str
         </div>
       </div>
 
+      {notice && (
+        <div className="px-6 py-2 bg-blue-50 border-t border-blue-100 text-center text-[11px] font-bold text-blue-700">
+          {notice}
+        </div>
+      )}
+
       {/* Message Input */}
       <div className="p-4 bg-white border-t">
         <div className="max-w-3xl mx-auto">
@@ -358,32 +394,35 @@ export const ChatInterface = ({ initialModel }: { initialModel?: { provider: str
                         <Folder className="w-3.5 h-3.5 mr-2" />
                         Upload Folder
                       </button>
-                      <button className="flex items-center w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 rounded-lg transition-colors border-t mt-1 pt-2">
+                      <button
+                        onClick={() => addNotice('Google Drive connects from Settings > Connectors')}
+                        className="flex items-center w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 rounded-lg transition-colors border-t mt-1 pt-2"
+                      >
                          <HardDrive className="w-3.5 h-3.5 mr-2 text-green-600" />
                          Google Drive
                       </button>
                     </div>
                   )}
                 </div>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Emoji">
+                <button onClick={() => setInput(prev => `${prev}${prev ? ' ' : ''}:)`)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Emoji">
                   <Smile className="w-4 h-4" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="My Computer">
+                <button onClick={() => handleFolderUpload()} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="My Computer">
                   <Monitor className="w-4 h-4" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Skills">
+                <button onClick={() => setInput(prev => prev || 'Use my enabled skills to ')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Skills">
                   <Wrench className="w-4 h-4" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Memory">
+                <button onClick={() => setInput(prev => prev || 'Remember this for future tasks: ')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Memory">
                   <Brain className="w-4 h-4" />
                 </button>
               </div>
               <div className="flex items-center space-x-2">
-                <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Microphone">
+                <button onClick={() => addNotice('Voice input is ready for browser speech permissions in the next build')} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Microphone">
                   <Mic className="w-4 h-4" />
                 </button>
                 <button 
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={!input.trim() || isTyping}
                   className={`p-2 rounded-full transition-all ${
                     input.trim() && !isTyping ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-gray-100 text-gray-300'

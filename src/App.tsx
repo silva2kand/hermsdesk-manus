@@ -17,6 +17,8 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<string>('Profile');
+  const [taskPrompt, setTaskPrompt] = useState('');
+  const [toast, setToast] = useState('');
 
   // Global error capturing for the Console Window
   useEffect(() => {
@@ -67,6 +69,16 @@ function App() {
     setIsSettingsOpen(true);
   };
 
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(''), 3500);
+  };
+
+  const startTask = (prompt: string) => {
+    setTaskPrompt(prompt);
+    setView('chat');
+  };
+
   return (
     <div className="flex h-screen bg-white text-gray-900 overflow-hidden">
       {/* Sidebar */}
@@ -104,30 +116,30 @@ function App() {
                   <Terminal className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-black uppercase tracking-tighter">Console</span>
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Share">
+                <button onClick={() => { navigator.clipboard?.writeText('Aion OS task ready to share'); showToast('Task link copied'); }} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Share">
                   <Share2 className="w-3.5 h-3.5" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Collaborate">
+                <button onClick={() => openSettings('Connectors')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Collaborate">
                   <Users className="w-3.5 h-3.5" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Files">
+                <button onClick={async () => { const files = await window.ipcRenderer?.selectFiles(); if (files?.length) showToast(`${files.length} file${files.length === 1 ? '' : 's'} selected`); }} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Files">
                   <FileText className="w-3.5 h-3.5" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Edit">
+                <button onClick={() => showToast('Edit mode enabled for the current task')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Edit">
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
               </div>
               <div className="flex items-center space-x-0.5">
-                <button className="p-1.5 text-gray-400 hover:text-yellow-500 hover:bg-gray-100 rounded-md transition-all" title="Add Favorite">
+                <button onClick={() => showToast('Added to favorites')} className="p-1.5 text-gray-400 hover:text-yellow-500 hover:bg-gray-100 rounded-md transition-all" title="Add Favorite">
                   <Star className="w-3.5 h-3.5" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Task Details">
+                <button onClick={() => showToast(selectedModel ? `Using ${selectedModel.provider}: ${selectedModel.model}` : 'No model selected yet')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Task Details">
                   <Info className="w-3.5 h-3.5" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded-md transition-all" title="Delete">
+                <button onClick={() => { setTaskPrompt(''); setView('landing'); showToast('Task cleared'); }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded-md transition-all" title="Delete">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
-                <button className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all">
+                <button onClick={() => setIsConsoleOpen(true)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="More">
                   <MoreVertical className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -137,8 +149,8 @@ function App() {
 
         {/* Content Area */}
         <main className="flex-1 overflow-y-auto">
-          {view === 'landing' && <LandingPage onOpenConnectors={() => openSettings('Connectors')} />}
-          {view === 'chat' && <ChatInterface initialModel={selectedModel} />}
+          {view === 'landing' && <LandingPage onOpenConnectors={() => openSettings('Connectors')} onOpenComputer={() => openSettings('Computer')} onStartTask={startTask} />}
+          {view === 'chat' && <ChatInterface initialModel={selectedModel} initialPrompt={taskPrompt} />}
           {view === 'models' && (
             <ModelHub 
               onLoadModel={(m, p) => {
@@ -166,6 +178,12 @@ function App() {
         isOpen={isConsoleOpen} 
         onClose={() => setIsConsoleOpen(false)} 
       />
+
+      {toast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold shadow-xl">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

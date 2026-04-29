@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   // New Providers & HF
   searchHF: (query: string) => ipcRenderer.invoke('ai:search-hf', query),
   downloadHF: (modelId: string) => ipcRenderer.invoke('ai:download-hf', modelId),
+  listLibraryModels: () => ipcRenderer.invoke('ai:list-library-models'),
+  deleteLibraryModel: (modelId: string) => ipcRenderer.invoke('ai:delete-library-model', modelId),
+  revealModelsFolder: () => ipcRenderer.invoke('ai:reveal-models-folder'),
   getModelsPath: () => ipcRenderer.invoke('ai:get-models-path'),
   chatProvider: (data: any) => ipcRenderer.invoke('ai:chat-provider', data),
 

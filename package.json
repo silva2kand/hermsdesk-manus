@@ -11,6 +11,17 @@
     "electron:dev": "vite",
     "shortcut": "powershell.exe -ExecutionPolicy Bypass -File ./scripts/create-shortcut.ps1"
   },
+  "build": {
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/win-unpacked/**",
+      "dist-electron/**/*",
+      "package.json"
+    ]
+  },
   "dependencies": {
     "@types/node-fetch": "^2.6.11",
     "axios": "^1.15.2",

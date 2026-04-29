@@ -1,15 +1,17 @@
 $wshell = New-Object -ComObject WScript.Shell
 $desktop = [System.Environment]::GetFolderPath('Desktop')
-$projectPath = "c:\Users\Silva\WorkSpace\hermsdeskapp"
-$shortcutPath = Join-Path $desktop "HermsDesk.lnk"
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectPath = Split-Path -Parent $scriptRoot
+$launcherPath = Join-Path $projectPath "start-aion.bat"
+$shortcutPath = Join-Path $desktop "Aion OS (Start).lnk"
 $shortcut = $wshell.CreateShortcut($shortcutPath)
 
-# We want to launch the dev server in the project directory
-$shortcut.TargetPath = "powershell.exe"
-$shortcut.Arguments = "-NoExit -Command ""cd '$projectPath'; npm run dev"""
+# Launch the packaged app when it exists, otherwise fall back to dev mode.
+$shortcut.TargetPath = $launcherPath
+$shortcut.Arguments = ""
 $shortcut.WorkingDirectory = $projectPath
-$shortcut.Description = "Launch HermsDesk Workstation"
-$shortcut.IconLocation = "powershell.exe, 0"
+$shortcut.Description = "Launch Aion OS Workstation"
+$shortcut.IconLocation = Join-Path $projectPath "release\win-unpacked\hermsdeskapp.exe"
 $shortcut.Save()
 
 Write-Host "Shortcut created on Desktop: $shortcutPath" -ForegroundColor Green

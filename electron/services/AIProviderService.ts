@@ -2,7 +2,7 @@ import axios from 'axios';
 import Store from 'electron-store';
 import fs from 'node:fs';
 import path from 'node:path';
-import { app } from 'electron';
+import { app, shell } from 'electron';
 
 export interface HFModel {
   id: string;
@@ -12,7 +12,7 @@ export interface HFModel {
 }
 
 export class AIProviderService {
-  private store = new Store();
+  private store = new Store() as any;
   private connectorsState: {[key: string]: boolean} = {};
   private modelsPath: string;
 
@@ -30,6 +30,56 @@ export class AIProviderService {
 
   getModelsPath() {
     return this.modelsPath;
+  }
+
+  async listLibraryModels() {
+    const files = await fs.promises.readdir(this.modelsPath, { withFileTypes: true });
+    return Promise.all(files
+      .filter(file => file.isFile() && /\.(gguf|bin|safetensors)$/i.test(file.name))
+      .map(async file => {
+        const fullPath = path.join(this.modelsPath, file.name);
+        const stats = await fs.promises.stat(fullPath);
+        const metadata = this.store.get(`models.${file.name}`, {}) as any;
+        const name = metadata.name || file.name.replace(/\.(gguf|bin|safetensors)$/i, '');
+
+        return {
+          id: file.name,
+          name,
+          provider: 'Jan',
+          path: fullPath,
+          size: stats.size,
+          status: 'installed',
+          description: metadata.description || 'Downloaded model in the Aion local library',
+          quantization: metadata.quantization || this.detectQuantization(file.name),
+          tags: metadata.tags || ['Library', 'Jan', 'TurboQuant'],
+          vramRequired: metadata.vramRequired || 'Auto'
+        };
+      }));
+  }
+
+  async deleteLibraryModel(modelId: string) {
+    const safeName = path.basename(modelId);
+    const fullPath = path.join(this.modelsPath, safeName);
+    const resolved = path.resolve(fullPath);
+    const root = path.resolve(this.modelsPath);
+
+    if (!resolved.startsWith(root + path.sep)) {
+      throw new Error('Refusing to delete a file outside the model library');
+    }
+
+    await fs.promises.unlink(resolved);
+    this.store.delete(`models.${safeName}`);
+    return true;
+  }
+
+  async revealModelsFolder() {
+    await shell.openPath(this.modelsPath);
+    return true;
+  }
+
+  private detectQuantization(fileName: string) {
+    const match = fileName.match(/(?:^|[-_.])(Q\d(?:_[KMS])?)(?:[-_.]|$)/i);
+    return match ? match[1].toUpperCase() : 'Detected';
   }
 
   // Connectors State Management
@@ -113,7 +163,7 @@ export class AIProviderService {
   // Hugging Face Integration
   async searchHuggingFace(query: string) {
     try {
-      const response = await axios.get(`https://huggingface.co/api/models?search=${query}&sort=downloads&direction=-1&limit=10&full=true`);
+      const response = await axios.get(`https://huggingface.co/api/models?search=${encodeURIComponent(query)}&sort=downloads&direction=-1&limit=10&full=true`);
       return response.data.map((m: any) => {
         // Try to find a GGUF file or just use the first sibling's size as an estimate
         const ggufFile = m.siblings?.find((s: any) => s.rfilename.endsWith('.gguf'));
@@ -134,40 +184,74 @@ export class AIProviderService {
 
   async downloadHFModel(modelId: string, onProgress?: (p: number) => void) {
     try {
-      // For real downloading from HF, we'd need to resolve the GGUF URL
-      // For now, we'll simulate the download to a real file path to show "where it goes"
-      const fileName = `${modelId.replace(/\//g, '_')}.gguf`;
-      const filePath = path.join(this.modelsPath, fileName);
-      
-      console.log(`Starting real download for ${modelId} to ${filePath}`);
-      
-      // In a real production app, we would use:
-      // const url = `https://huggingface.co/${modelId}/resolve/main/${ggufFileName}`;
-      // const response = await axios({ url, method: 'GET', responseType: 'stream' });
-      
-      // For this demo/task, we will simulate the file creation and progress
-      // but actually write a placeholder file so the user sees it in their folder
-      let progress = 0;
-      const totalSize = 100; // simulated
-      
-      return new Promise((resolve, reject) => {
-        const interval = setInterval(() => {
-          progress += Math.random() * 10;
-          if (progress >= 100) {
-            progress = 100;
-            clearInterval(interval);
-            
-            // Create the actual file on disk so it's not "dummy"
-            fs.writeFileSync(filePath, `Placeholder for ${modelId} - TurboQuant Optimized Model File`);
-            console.log(`Download complete: ${filePath}`);
-            resolve(filePath);
-          }
-          if (onProgress) onProgress(Math.floor(progress));
-        }, 500);
+      const safeModelId = modelId.split('/').map(part => encodeURIComponent(part)).join('/');
+      const modelInfo = await axios.get(`https://huggingface.co/api/models/${safeModelId}?full=true`, {
+        timeout: 15000
       });
+      const siblings = modelInfo.data?.siblings || [];
+      const gguf = siblings
+        .filter((s: any) => typeof s.rfilename === 'string' && s.rfilename.toLowerCase().endsWith('.gguf'))
+        .sort((a: any, b: any) => this.scoreGgufName(b.rfilename) - this.scoreGgufName(a.rfilename))[0];
+
+      if (!gguf?.rfilename) {
+        throw new Error(`No GGUF file was found for ${modelId}. Try a GGUF model repository.`);
+      }
+
+      const fileName = `${modelId.replace(/\//g, '_')}__${path.basename(gguf.rfilename)}`;
+      const filePath = path.join(this.modelsPath, fileName);
+
+      const safeFilePath = gguf.rfilename.split('/').map((part: string) => encodeURIComponent(part)).join('/');
+      const url = `https://huggingface.co/${safeModelId}/resolve/main/${safeFilePath}`;
+      const response = await axios.get(url, {
+        responseType: 'stream',
+        timeout: 30000,
+        maxRedirects: 5
+      });
+
+      const total = Number(response.headers['content-length'] || gguf.size || 0);
+      let downloaded = 0;
+
+      await new Promise<void>((resolve, reject) => {
+        const writer = fs.createWriteStream(filePath);
+
+        response.data.on('data', (chunk: Buffer) => {
+          downloaded += chunk.length;
+          if (total > 0 && onProgress) {
+            onProgress(Math.min(99, Math.floor((downloaded / total) * 100)));
+          }
+        });
+
+        response.data.on('error', reject);
+        writer.on('error', reject);
+        writer.on('finish', resolve);
+        response.data.pipe(writer);
+      });
+
+      this.store.set(`models.${fileName}`, {
+        name: modelId,
+        source: 'Hugging Face',
+        file: gguf.rfilename,
+        description: `Downloaded from Hugging Face: ${gguf.rfilename}`,
+        quantization: this.detectQuantization(gguf.rfilename),
+        tags: ['Library', 'Jan', 'TurboQuant', 'GGUF'],
+        downloadedAt: new Date().toISOString()
+      });
+
+      if (onProgress) onProgress(100);
+      return filePath;
     } catch (e) {
       console.error('Download error:', e);
       throw e;
     }
+  }
+
+  private scoreGgufName(fileName: string) {
+    const name = fileName.toLowerCase();
+    if (name.includes('q4_k_m')) return 60;
+    if (name.includes('q5_k_m')) return 55;
+    if (name.includes('q4')) return 50;
+    if (name.includes('q6')) return 40;
+    if (name.includes('q8')) return 30;
+    return 10;
   }
 }

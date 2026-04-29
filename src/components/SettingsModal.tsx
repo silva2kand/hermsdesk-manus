@@ -6,7 +6,7 @@ import {
   Smile, Cpu, Zap, Cloud, HardDrive, Layout, Clock, Shield,
   Bell, CreditCard, Activity, Terminal, Users, FileText, ShoppingBag,
   Moon, Sun, Laptop, Sparkles, Box, HardDrive as Disk, Download,
-  ChevronDown, Heart, Coffee, Camera, Map, Compass
+  ChevronDown, Heart, Coffee, Camera, Map, Compass, Key
 } from 'lucide-react';
 import { ConnectorsManager } from './ConnectorsManager';
 import { MailManusView } from './MailManusView';

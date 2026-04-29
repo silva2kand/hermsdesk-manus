@@ -50,9 +50,32 @@ const AppIcon = ({ icon: Icon, label, color }: any) => (
   </div>
 );
 
-export const LandingPage = ({ onOpenConnectors }: any) => {
+export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: any) => {
   const [showMore, setShowMore] = useState(false);
   const [showUploads, setShowUploads] = useState(false);
+  const [prompt, setPrompt] = useState('');
+
+  const startTask = (text = prompt) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    onStartTask?.(trimmed);
+  };
+
+  const attachFiles = async () => {
+    const files = await window.ipcRenderer?.selectFiles();
+    if (files?.length) {
+      setPrompt(prev => `${prev}${prev ? '\n' : ''}Attached files:\n${files.join('\n')}`);
+    }
+    setShowUploads(false);
+  };
+
+  const attachFolder = async () => {
+    const folder = await window.ipcRenderer?.selectFolder();
+    if (folder) {
+      setPrompt(prev => `${prev}${prev ? '\n' : ''}Attached folder:\n${folder}`);
+    }
+    setShowUploads(false);
+  };
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 bg-[#fafafa]">
@@ -67,6 +90,14 @@ export const LandingPage = ({ onOpenConnectors }: any) => {
               <textarea 
                 placeholder="Assign a task or ask anything"
                 className="w-full text-lg bg-transparent border-none focus:ring-0 resize-none min-h-[100px]"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    startTask();
+                  }
+                }}
               />
             </div>
             
@@ -81,11 +112,11 @@ export const LandingPage = ({ onOpenConnectors }: any) => {
                   </button>
                   {showUploads && (
                     <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 z-50 animate-in fade-in slide-in-from-bottom-2">
-                       <button className="flex items-center w-full px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
+                       <button onClick={attachFiles} className="flex items-center w-full px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
                          <File className="w-4 h-4 mr-3 text-blue-500" />
                          Upload Files
                        </button>
-                       <button className="flex items-center w-full px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
+                       <button onClick={attachFolder} className="flex items-center w-full px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
                          <Folder className="w-4 h-4 mr-3 text-orange-400" />
                          Upload Folder
                        </button>
@@ -100,19 +131,23 @@ export const LandingPage = ({ onOpenConnectors }: any) => {
                    <span className="text-[10px] font-black text-gray-400 ml-1.5">+11</span>
                 </div>
 
-                <button className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all">
+                <button onClick={onOpenComputer} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all" title="My Computer">
                   <Monitor className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="flex items-center space-x-2">
-                <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Meeting Assistant">
+                <button onClick={() => setPrompt('Summarize my next meeting and create action items: ')} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Meeting Assistant">
                   <MessageCircle className="w-5 h-5" />
                 </button>
-                <button className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all" title="Voice Input">
+                <button onClick={() => setPrompt('Transcribe this voice note: ')} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all" title="Voice Input">
                   <Mic className="w-5 h-5" />
                 </button>
-                <button className="p-2.5 bg-gray-100 text-gray-300 rounded-full cursor-not-allowed">
+                <button
+                  onClick={() => startTask()}
+                  disabled={!prompt.trim()}
+                  className={`p-2.5 rounded-full transition-all ${prompt.trim() ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
+                >
                   <ArrowUp className="w-5 h-5" />
                 </button>
               </div>
@@ -144,10 +179,10 @@ export const LandingPage = ({ onOpenConnectors }: any) => {
 
           {/* Tool Shortcuts */}
           <div className="flex items-center justify-center space-x-3 pt-4 relative">
-            <ToolButton label="Create slides" icon={Layout} />
-            <ToolButton label="Build website" icon={Globe} />
-            <ToolButton label="Develop desktop apps" icon={Monitor} />
-            <ToolButton label="Design" icon={Palette} />
+            <ToolButton label="Create slides" icon={Layout} onClick={() => startTask('Create a slide deck outline with titles, speaker notes, and image ideas.')} />
+            <ToolButton label="Build website" icon={Globe} onClick={() => startTask('Build a polished website with responsive sections and real content.')} />
+            <ToolButton label="Develop desktop apps" icon={Monitor} onClick={() => startTask('Plan and build a Windows desktop app feature with Electron.')} />
+            <ToolButton label="Design" icon={Palette} onClick={() => startTask('Design a clean interface and explain the layout choices.')} />
             
             <div className="relative">
               <button 

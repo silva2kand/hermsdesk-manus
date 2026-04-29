@@ -62,6 +62,9 @@ function createWindow() {
     })
   })
   ipcMain.handle('ai:get-models-path', () => providerService.getModelsPath())
+  ipcMain.handle('ai:list-library-models', () => providerService.listLibraryModels())
+  ipcMain.handle('ai:delete-library-model', (_, modelId) => providerService.deleteLibraryModel(modelId))
+  ipcMain.handle('ai:reveal-models-folder', () => providerService.revealModelsFolder())
   ipcMain.handle('ai:chat-provider', (_, { provider, model, apiKey, messages }) => {
     if (provider === 'openrouter') return providerService.chatOpenRouter(apiKey, model, messages)
     if (provider === 'gemini') return providerService.chatGemini(apiKey, messages)

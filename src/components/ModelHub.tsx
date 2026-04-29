@@ -9,6 +9,7 @@ interface LocalModel {
   id: string;
   name: string;
   size: string;
+  provider: string;
   status: 'installed' | 'available' | 'downloading';
   description: string;
   quantization: string;
@@ -32,6 +33,41 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
 
   const [localModels, setLocalModels] = useState<LocalModel[]>([]);
 
+  const refreshInstalledModels = async () => {
+    if (!window.ipcRenderer) return;
+
+    const [ollamaModels, libraryModels] = await Promise.all([
+      window.ipcRenderer.listModels(),
+      window.ipcRenderer.listLibraryModels()
+    ]);
+
+    const ollama = Array.isArray(ollamaModels) ? ollamaModels.map((m: any) => ({
+      id: `ollama:${m.digest || m.name}`,
+      name: m.name,
+      provider: 'Ollama',
+      size: `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB`,
+      status: 'installed' as const,
+      description: 'Local model detected via Ollama',
+      quantization: 'Detected',
+      tags: ['Local', 'Ollama'],
+      vramRequired: 'Calculated'
+    })) : [];
+
+    const library = Array.isArray(libraryModels) ? libraryModels.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      provider: m.provider || 'Jan',
+      size: `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB`,
+      status: 'installed' as const,
+      description: m.description,
+      quantization: m.quantization,
+      tags: m.tags,
+      vramRequired: m.vramRequired
+    })) : [];
+
+    setLocalModels([...library, ...ollama]);
+  };
+
   // Fetch real PC capabilities and Jan status on mount
   useEffect(() => {
     const init = async () => {
@@ -47,20 +83,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
           setActiveDownloads(prev => ({ ...prev, [data.modelId]: data.progress }));
         });
 
-        // Fetch real Ollama models
-        const models = await window.ipcRenderer.listModels();
-        if (models && Array.isArray(models)) {
-          setLocalModels(models.map((m: any) => ({
-            id: m.digest || m.name,
-            name: m.name,
-            size: `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB`,
-            status: 'installed',
-            description: 'Local model detected via Ollama',
-            quantization: 'Detected',
-            tags: ['Local'],
-            vramRequired: 'Calculated'
-          })));
-        }
+        await refreshInstalledModels();
       }
     };
     init();
@@ -68,9 +91,9 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
 
   const recommendedModels = useMemo(() => {
     return [
-      { id: 'llama-3-70b', name: 'Llama 3 70B (GGUF)', size: '39.8 GB', vram: '14.2 GB', reason: 'Fits in VRAM' },
-      { id: 'mixtral-8x7b', name: 'Mixtral 8x7B (GGUF)', size: '26.4 GB', vram: '12.8 GB', reason: 'Optimal Speed' },
-      { id: 'phi-3-mini', name: 'Phi-3 Mini (4B)', size: '2.3 GB', vram: '2.8 GB', reason: 'Lightning Fast' }
+      { id: 'bartowski/Meta-Llama-3-8B-Instruct-GGUF', name: 'Llama 3 8B Instruct GGUF', size: '4-8 GB', vram: '6 GB', reason: 'Balanced' },
+      { id: 'bartowski/Mistral-7B-Instruct-v0.3-GGUF', name: 'Mistral 7B Instruct GGUF', size: '4-7 GB', vram: '6 GB', reason: 'Fast' },
+      { id: 'bartowski/Phi-3-mini-4k-instruct-GGUF', name: 'Phi-3 Mini GGUF', size: '2-4 GB', vram: '4 GB', reason: 'Lightning Fast' }
     ];
   }, []);
 
@@ -117,6 +140,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
       try {
         const filePath = await window.ipcRenderer.downloadHF(modelId);
         console.log('Download complete, file at:', filePath);
+        await refreshInstalledModels();
         
         // Remove from active downloads after a short delay
         setTimeout(() => {
@@ -128,6 +152,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         }, 3000);
       } catch (e) {
         console.error('Download failed:', e);
+        alert(e instanceof Error ? e.message : 'Download failed. Try a GGUF model repository.');
         setActiveDownloads(prev => {
           const next = { ...prev };
           delete next[modelId];
@@ -137,18 +162,18 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     }
   };
 
-  const handleLoadModel = async (modelName: string) => {
-    console.log('Loading model:', modelName);
+  const handleLoadModel = async (model: LocalModel) => {
+    console.log('Loading model:', model.name);
     if (onLoadModel) {
-      // Determine provider based on model tags or name
-      const provider = modelName.includes('llama3') || modelName.includes('mistral') ? 'Ollama' : 'Jan';
-      onLoadModel(modelName, provider);
+      onLoadModel(model.name, model.provider);
     }
   };
 
   const handleDeleteModel = async (modelId: string) => {
     console.log('Deleting model:', modelId);
-    // Implementation for deletion
+    if (!window.ipcRenderer || modelId.startsWith('ollama:')) return;
+    await window.ipcRenderer.deleteLibraryModel(modelId);
+    await refreshInstalledModels();
   };
 
   return (
@@ -336,7 +361,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Installed Models</h2>
-            <button className="text-[10px] font-bold text-blue-600 hover:underline">Manage Storage</button>
+            <button onClick={() => window.ipcRenderer?.revealModelsFolder()} className="text-[10px] font-bold text-blue-600 hover:underline">Open Library Folder</button>
           </div>
           <div className="bg-white border border-gray-100 rounded-[32px] overflow-hidden shadow-sm divide-y divide-gray-50">
             {localModels.map((model) => (
@@ -366,7 +391,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                 
                 <div className="flex items-center space-x-2">
                   <button 
-                    onClick={() => handleLoadModel(model.name)}
+                    onClick={() => handleLoadModel(model)}
                     className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-2xl text-[11px] font-black hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all"
                   >
                     <Play className="w-3.5 h-3.5 mr-2" />
@@ -374,7 +399,9 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                   </button>
                   <button 
                     onClick={() => handleDeleteModel(model.id)}
+                    disabled={model.id.startsWith('ollama:')}
                     className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                    title={model.id.startsWith('ollama:') ? 'Remove Ollama models from Ollama' : 'Delete from Aion library'}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
