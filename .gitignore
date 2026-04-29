@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-electron
+*.log
+*.local
+.vscode
+.DS_Store
+package-lock.json
+build
+release
+*.exe
+*.zip
+*.dmg
+*.AppImage
+*.blockmap
+builder-debug.yml
+builder-effective-config.yaml
