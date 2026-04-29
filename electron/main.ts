@@ -81,6 +81,9 @@ function createWindow() {
 
   // Jan & Local Engine Handlers
   ipcMain.handle('ai:check-jan', () => aiService.checkJanEngine())
+  ipcMain.handle('ai:jan-status', () => aiService.getJanEngineStatus())
+  ipcMain.handle('ai:start-jan', () => aiService.startJanEngine())
+  ipcMain.handle('ai:load-jan-model', (_, model) => aiService.loadJanModel(model))
   ipcMain.handle('ai:scan-pc', () => aiService.scanPCResources())
   ipcMain.handle('ai:get-resource-usage', () => aiService.getResourceUsage())
   

@@ -8,6 +8,7 @@ import {
 interface LocalModel {
   id: string;
   name: string;
+  path?: string;
   size: string;
   provider: string;
   status: 'installed' | 'available' | 'downloading';
@@ -24,6 +25,14 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const [hfResults, setHfResults] = useState<any[]>([]);
   const [activeDownloads, setActiveDownloads] = useState<{[key: string]: number}>({});
   const [modelsPath, setModelsPath] = useState('');
+  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, activeModel: string, models: any[] }>({
+    apiOnline: false,
+    installed: false,
+    executablePath: '',
+    activeModel: '',
+    models: []
+  });
+  const [engineMessage, setEngineMessage] = useState('');
   const [pcCapabilities, setPcCapabilities] = useState({
     gpu: 'Detecting...',
     vram: '...',
@@ -56,6 +65,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     const library = Array.isArray(libraryModels) ? libraryModels.map((m: any) => ({
       id: m.id,
       name: m.name,
+      path: m.path,
       provider: m.provider || 'Jan',
       size: `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB`,
       status: 'installed' as const,
@@ -68,6 +78,12 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     setLocalModels([...library, ...ollama]);
   };
 
+  const refreshJanStatus = async () => {
+    if (!window.ipcRenderer) return;
+    const status = await window.ipcRenderer.janStatus();
+    setJanStatus(status);
+  };
+
   // Fetch real PC capabilities and Jan status on mount
   useEffect(() => {
     const init = async () => {
@@ -77,6 +93,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         
         const path = await window.ipcRenderer.getModelsPath();
         setModelsPath(path);
+        await refreshJanStatus();
         
         // Listen for real-time progress
         window.ipcRenderer.on('ai:download-progress', (_: any, data: { modelId: string, progress: number }) => {
@@ -144,6 +161,8 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         }
         console.log('Download complete, file at:', result.path);
         await refreshInstalledModels();
+        await refreshJanStatus();
+        setEngineMessage('Downloaded into the Aion Jan/TurboQuant library. Press Load to use it in chat.');
         
         // Remove from active downloads after a short delay
         setTimeout(() => {
@@ -167,9 +186,31 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
 
   const handleLoadModel = async (model: LocalModel) => {
     console.log('Loading model:', model.name);
+    setEngineMessage(`Loading ${model.name} through Jan/TurboQuant...`);
+    if (window.ipcRenderer && model.provider === 'Jan') {
+      const result = await window.ipcRenderer.loadJanModel({ name: model.name, path: model.path });
+      await refreshJanStatus();
+      if (!result.ok) {
+        setEngineMessage(result.error || 'Jan/TurboQuant could not start. Install or start Jan and try again.');
+        return;
+      }
+      if (result.warning) {
+        setEngineMessage(result.warning);
+      } else {
+        setEngineMessage(`${result.model || model.name} is selected for Jan/TurboQuant chat.`);
+      }
+    }
     if (onLoadModel) {
       onLoadModel(model.name, model.provider);
     }
+  };
+
+  const handleStartJan = async () => {
+    if (!window.ipcRenderer) return;
+    setEngineMessage('Starting Jan/TurboQuant engine...');
+    const result = await window.ipcRenderer.startJan();
+    await refreshJanStatus();
+    setEngineMessage(result.ok ? 'Jan/TurboQuant engine is ready.' : (result.error || 'Jan could not be started.'));
   };
 
   const handleDeleteModel = async (modelId: string) => {
@@ -218,6 +259,34 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
             {isScanning ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2 text-yellow-400" />}
             {isScanning ? 'Detecting...' : 'Rescan PC'}
           </button>
+        </div>
+
+        <div className="p-5 bg-white border border-gray-100 rounded-3xl flex items-center justify-between shadow-sm">
+          <div className="flex items-center space-x-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${janStatus.apiOnline ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+              <Zap className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-black text-gray-900">Built-in Jan + TurboQuant Engine</h3>
+                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${janStatus.apiOnline ? 'bg-green-50 text-green-600' : janStatus.installed ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-600'}`}>
+                  {janStatus.apiOnline ? 'Ready' : janStatus.installed ? 'Installed' : 'Needs Jan'}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Search GGUF models, download to the Aion library, then Load to route chat through Jan/TurboQuant.
+              </p>
+              {engineMessage && <p className="text-[10px] text-blue-600 font-bold mt-2 max-w-2xl">{engineMessage}</p>}
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button onClick={refreshJanStatus} className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Refresh Jan status">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+            <button onClick={handleStartJan} className="px-5 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black hover:bg-gray-800 transition-all">
+              {janStatus.apiOnline ? 'Restart Check' : 'Start Jan'}
+            </button>
+          </div>
         </div>
 
         {/* Search & TurboQuant Hub */}

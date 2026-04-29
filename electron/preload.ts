@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   chat: (data: { model: string, messages: any[], provider?: string }) => ipcRenderer.invoke('ai:chat', data),
   checkLMStudio: () => ipcRenderer.invoke('ai:check-lmstudio'),
   checkJan: () => ipcRenderer.invoke('ai:check-jan'),
+  janStatus: () => ipcRenderer.invoke('ai:jan-status'),
+  startJan: () => ipcRenderer.invoke('ai:start-jan'),
+  loadJanModel: (model: { name: string, path?: string }) => ipcRenderer.invoke('ai:load-jan-model', model),
   scanPC: () => ipcRenderer.invoke('ai:scan-pc'),
   getResourceUsage: () => ipcRenderer.invoke('ai:get-resource-usage'),
   

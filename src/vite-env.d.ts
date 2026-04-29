@@ -7,6 +7,9 @@ interface Window {
     chat: (data: { model: string, messages: any[], provider?: string }) => Promise<any>;
     checkLMStudio: () => Promise<any>;
     checkJan: () => Promise<any>;
+    janStatus: () => Promise<{ apiOnline: boolean, installed: boolean, executablePath: string, activeModel: string, models: any[] }>;
+    startJan: () => Promise<{ ok: boolean, error?: string, alreadyOnline?: boolean, status?: any }>;
+    loadJanModel: (model: { name: string, path?: string }) => Promise<{ ok: boolean, model?: string, warning?: string, error?: string, status?: any }>;
     scanPC: () => Promise<{ gpu: string, vram: string, ram: string, os: string }>;
     searchHF: (query: string) => Promise<any[]>;
     downloadHF: (modelId: string) => Promise<{ ok: boolean, path?: string, error?: string }>;

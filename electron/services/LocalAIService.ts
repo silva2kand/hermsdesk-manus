@@ -1,5 +1,9 @@
 import axios from 'axios';
 import si from 'systeminformation';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 export interface Model {
   name: string;
@@ -12,6 +16,7 @@ export class LocalAIService {
   private ollamaUrl = 'http://localhost:11434/api';
   private lmStudioUrl = 'http://localhost:1234/v1';
   private janUrl = 'http://localhost:1337/v1'; // Jan default API port
+  private activeJanModel = '';
 
   async listOllamaModels(): Promise<Model[]> {
     try {
@@ -29,6 +34,133 @@ export class LocalAIService {
     } catch (error) {
       return null;
     }
+  }
+
+  async getJanEngineStatus() {
+    const api = await this.checkJanEngine();
+    const executablePath = this.findJanExecutable();
+    const models = Array.isArray(api?.data) ? api.data : Array.isArray(api) ? api : [];
+
+    return {
+      apiOnline: Boolean(api),
+      installed: Boolean(executablePath),
+      executablePath,
+      activeModel: this.activeJanModel,
+      models
+    };
+  }
+
+  async startJanEngine() {
+    const alreadyOnline = await this.checkJanEngine();
+    if (alreadyOnline) {
+      return { ok: true, alreadyOnline: true, status: await this.getJanEngineStatus() };
+    }
+
+    const executablePath = this.findJanExecutable();
+    if (!executablePath) {
+      return {
+        ok: false,
+        error: 'Jan is not installed. Install Jan, then come back to Model Hub and press Start Jan.'
+      };
+    }
+
+    const child = spawn(executablePath, [], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    child.unref();
+
+    const online = await this.waitForJanApi(20000);
+    return {
+      ok: online,
+      error: online ? undefined : 'Jan opened, but the local API did not become ready yet. Enable Jan local API/server and try Load again.',
+      status: await this.getJanEngineStatus()
+    };
+  }
+
+  async loadJanModel(model: { name: string, path?: string }) {
+    const start = await this.startJanEngine();
+    if (!start.ok && !start.status?.apiOnline) {
+      return start;
+    }
+
+    const candidates = [
+      model.name,
+      model.path,
+      model.path ? path.basename(model.path) : ''
+    ].filter(Boolean) as string[];
+
+    for (const candidate of candidates) {
+      const loaded = await this.tryJanLoadCandidate(candidate, model.path);
+      if (loaded) {
+        this.activeJanModel = candidate;
+        return { ok: true, model: candidate, status: await this.getJanEngineStatus() };
+      }
+    }
+
+    this.activeJanModel = model.name;
+    return {
+      ok: true,
+      model: model.name,
+      warning: 'Jan API is online, but it did not expose a supported load endpoint. The app selected the model for chat; if Jan replies model-not-found, import the GGUF once in Jan.',
+      status: await this.getJanEngineStatus()
+    };
+  }
+
+  private findJanExecutable() {
+    const home = os.homedir();
+    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+
+    const candidates = [
+      path.join(localAppData, 'Programs', 'Jan', 'Jan.exe'),
+      path.join(localAppData, 'Programs', 'jan', 'Jan.exe'),
+      path.join(localAppData, 'Jan', 'Jan.exe'),
+      path.join(programFiles, 'Jan', 'Jan.exe'),
+      path.join(programFilesX86, 'Jan', 'Jan.exe')
+    ];
+
+    return candidates.find(candidate => fs.existsSync(candidate)) || '';
+  }
+
+  private async waitForJanApi(timeoutMs: number) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (await this.checkJanEngine()) return true;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    return false;
+  }
+
+  private async tryJanLoadCandidate(model: string, filePath?: string) {
+    const payloads = [
+      { model },
+      { id: model },
+      { model, path: filePath },
+      { id: model, path: filePath }
+    ];
+    const endpoints = [
+      `${this.janUrl}/models/load`,
+      `${this.janUrl}/model/load`,
+      `${this.janUrl}/models/${encodeURIComponent(model)}/load`
+    ];
+
+    for (const endpoint of endpoints) {
+      for (const payload of payloads) {
+        try {
+          await axios.post(endpoint, payload, { timeout: 10000 });
+          return true;
+        } catch (error: any) {
+          if (error?.response?.status && ![404, 405].includes(error.response.status)) {
+            console.warn(`Jan load attempt failed at ${endpoint}: ${error.message}`);
+          }
+        }
+      }
+    }
+
+    return false;
   }
 
   async scanPCResources() {
@@ -172,7 +304,7 @@ export class LocalAIService {
   async chatWithJan(model: string, messages: any[]) {
     try {
       const response = await axios.post(`${this.janUrl}/chat/completions`, {
-        model: model || 'llama-3-8b-q4',
+        model: this.activeJanModel || model || 'llama-3-8b-q4',
         messages,
         stream: false
       }, { timeout: 45000 }); // Increased timeout
@@ -180,12 +312,15 @@ export class LocalAIService {
     } catch (error: any) {
       console.error('Jan chat error:', error.message);
       if (error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED') {
-        return { content: 'Error: Jan engine is not running. Please start Jan and ensure the API server is active.' };
+        return { content: 'Jan/TurboQuant engine is not running. Open Model Hub and press Start Jan, then load a downloaded model.' };
       }
       if (error.code === 'ECONNABORTED') {
         return { content: 'Error: Jan connection timed out. Please check if the model is loaded correctly in Jan.' };
       }
-      return { content: `Jan error: ${error.message}` };
+      if (error.response?.status === 404) {
+        return { content: `Jan could not find "${model}". Load it from Model Hub first, or import the downloaded GGUF from the Aion model library into Jan once.` };
+      }
+      return { content: `Jan/TurboQuant error: ${error.message}` };
     }
   }
 
