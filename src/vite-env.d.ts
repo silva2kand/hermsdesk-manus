@@ -9,7 +9,7 @@ interface Window {
     checkJan: () => Promise<any>;
     scanPC: () => Promise<{ gpu: string, vram: string, ram: string, os: string }>;
     searchHF: (query: string) => Promise<any[]>;
-    downloadHF: (modelId: string) => Promise<string>;
+    downloadHF: (modelId: string) => Promise<{ ok: boolean, path?: string, error?: string }>;
     listLibraryModels: () => Promise<any[]>;
     deleteLibraryModel: (modelId: string) => Promise<boolean>;
     revealModelsFolder: () => Promise<boolean>;

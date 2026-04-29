@@ -138,8 +138,11 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
       setActiveDownloads(prev => ({ ...prev, [modelId]: 0 }));
       
       try {
-        const filePath = await window.ipcRenderer.downloadHF(modelId);
-        console.log('Download complete, file at:', filePath);
+        const result = await window.ipcRenderer.downloadHF(modelId);
+        if (!result.ok) {
+          throw new Error(result.error || 'Download failed. Try a GGUF model repository.');
+        }
+        console.log('Download complete, file at:', result.path);
         await refreshInstalledModels();
         
         // Remove from active downloads after a short delay
@@ -152,7 +155,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         }, 3000);
       } catch (e) {
         console.error('Download failed:', e);
-        alert(e instanceof Error ? e.message : 'Download failed. Try a GGUF model repository.');
+        alert(e instanceof Error ? e.message : 'Download failed. Search for the model first, then try again.');
         setActiveDownloads(prev => {
           const next = { ...prev };
           delete next[modelId];

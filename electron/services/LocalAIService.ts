@@ -129,10 +129,19 @@ export class LocalAIService {
       }, { timeout: 30000 }); // 30s timeout
       return response.data;
     } catch (error: any) {
-      console.error('Ollama chat error:', error.message);
       if (error.response?.status === 404) {
-        return { message: { content: `Error: Model "${model}" not found in Ollama. Please run "ollama pull ${model}" in your terminal or download it from the Model Hub.` } };
+        const installed = await this.listOllamaModels();
+        const installedList = installed.map(m => m.name).join(', ');
+        console.warn(`Ollama model not found: ${model}`);
+        return {
+          message: {
+            content: installedList
+              ? `Model "${model}" is not installed in Ollama. Choose one of the installed models: ${installedList}.`
+              : `Model "${model}" is not installed in Ollama. Open Model Hub and download a model, or run "ollama pull ${model}".`
+          }
+        };
       }
+      console.error('Ollama chat error:', error.message);
       if (error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED') {
         return { message: { content: 'Error: Ollama is not running. Please start Ollama and try again.' } };
       }

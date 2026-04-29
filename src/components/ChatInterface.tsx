@@ -108,6 +108,18 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
         Jan: libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan
       }));
 
+      const ollamaNames = ollamaModels?.map((m: any) => m.name) || [];
+      const janNames = libraryModels?.map((m: any) => m.name) || [];
+
+      if (provider === 'Ollama' && ollamaNames.length > 0 && !ollamaNames.includes(model)) {
+        setModel(ollamaNames[0]);
+        addNotice(`Switched to installed Ollama model: ${ollamaNames[0]}`);
+      } else if (provider === 'Ollama' && ollamaNames.length === 0 && janNames.length > 0) {
+        setProvider('Jan');
+        setModel(janNames[0]);
+        addNotice(`Ollama has no installed models. Switched to Jan: ${janNames[0]}`);
+      }
+
       setEngineStatus({
         Ollama: ollamaModels && ollamaModels.length > 0 ? 'online' : 'offline',
         'LM Studio': lmStudioStatus ? 'online' : 'offline',

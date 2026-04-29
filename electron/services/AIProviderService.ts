@@ -15,6 +15,8 @@ export class AIProviderService {
   private store = new Store() as any;
   private connectorsState: {[key: string]: boolean} = {};
   private modelsPath: string;
+  private hfMetadataTimeoutMs = 60000;
+  private hfDownloadTimeoutMs = 120000;
 
   constructor() {
     this.connectorsState = this.store.get('connectors', {
@@ -163,11 +165,21 @@ export class AIProviderService {
   // Hugging Face Integration
   async searchHuggingFace(query: string) {
     try {
-      const response = await axios.get(`https://huggingface.co/api/models?search=${encodeURIComponent(query)}&sort=downloads&direction=-1&limit=10&full=true`);
+      const response = await axios.get(`https://huggingface.co/api/models?search=${encodeURIComponent(query)}&sort=downloads&direction=-1&limit=10&full=true`, {
+        timeout: this.hfMetadataTimeoutMs
+      });
       return response.data.map((m: any) => {
         // Try to find a GGUF file or just use the first sibling's size as an estimate
-        const ggufFile = m.siblings?.find((s: any) => s.rfilename.endsWith('.gguf'));
+        const ggufFiles = (m.siblings || []).filter((s: any) => s.rfilename?.toLowerCase().endsWith('.gguf'));
+        const ggufFile = ggufFiles.sort((a: any, b: any) => this.scoreGgufName(b.rfilename) - this.scoreGgufName(a.rfilename))[0];
         const size = ggufFile?.size || m.siblings?.[0]?.size || 0;
+
+        if (m.modelId && ggufFiles.length > 0) {
+          this.store.set(`hf-cache.${m.modelId}`, {
+            siblings: ggufFiles,
+            cachedAt: new Date().toISOString()
+          });
+        }
         
         return {
           id: m.modelId,
@@ -185,10 +197,8 @@ export class AIProviderService {
   async downloadHFModel(modelId: string, onProgress?: (p: number) => void) {
     try {
       const safeModelId = modelId.split('/').map(part => encodeURIComponent(part)).join('/');
-      const modelInfo = await axios.get(`https://huggingface.co/api/models/${safeModelId}?full=true`, {
-        timeout: 15000
-      });
-      const siblings = modelInfo.data?.siblings || [];
+      const modelInfo = await this.getHFModelInfo(safeModelId, modelId);
+      const siblings = modelInfo?.siblings || [];
       const gguf = siblings
         .filter((s: any) => typeof s.rfilename === 'string' && s.rfilename.toLowerCase().endsWith('.gguf'))
         .sort((a: any, b: any) => this.scoreGgufName(b.rfilename) - this.scoreGgufName(a.rfilename))[0];
@@ -204,7 +214,7 @@ export class AIProviderService {
       const url = `https://huggingface.co/${safeModelId}/resolve/main/${safeFilePath}`;
       const response = await axios.get(url, {
         responseType: 'stream',
-        timeout: 30000,
+        timeout: this.hfDownloadTimeoutMs,
         maxRedirects: 5
       });
 
@@ -240,9 +250,47 @@ export class AIProviderService {
       if (onProgress) onProgress(100);
       return filePath;
     } catch (e) {
-      console.error('Download error:', e);
-      throw e;
+      throw this.toUserFacingDownloadError(e, modelId);
     }
+  }
+
+  private async getHFModelInfo(safeModelId: string, modelId: string) {
+    try {
+      const response = await axios.get(`https://huggingface.co/api/models/${safeModelId}?full=true`, {
+        timeout: this.hfMetadataTimeoutMs
+      });
+
+      if (response.data?.siblings?.length) {
+        this.store.set(`hf-cache.${modelId}`, {
+          siblings: response.data.siblings,
+          cachedAt: new Date().toISOString()
+        });
+      }
+
+      return response.data;
+    } catch (error) {
+      const cached = this.store.get(`hf-cache.${modelId}`) as any;
+      if (cached?.siblings?.length) {
+        return { siblings: cached.siblings };
+      }
+      throw error;
+    }
+  }
+
+  private toUserFacingDownloadError(error: any, modelId: string) {
+    if (error?.code === 'ECONNABORTED') {
+      return new Error(`Hugging Face was too slow to respond for ${modelId}. Search for the model first, then try Download again, or try a smaller GGUF model.`);
+    }
+
+    if (error?.response?.status === 404) {
+      return new Error(`Hugging Face could not find ${modelId}. Try another GGUF model.`);
+    }
+
+    if (error instanceof Error) {
+      return error;
+    }
+
+    return new Error(`Download failed for ${modelId}.`);
   }
 
   private scoreGgufName(fileName: string) {

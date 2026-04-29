@@ -57,9 +57,16 @@ function createWindow() {
   // New Providers
   ipcMain.handle('ai:search-hf', (_, query) => providerService.searchHuggingFace(query))
   ipcMain.handle('ai:download-hf', async (event, modelId) => {
-    return providerService.downloadHFModel(modelId, (progress) => {
-      event.sender.send('ai:download-progress', { modelId, progress })
-    })
+    try {
+      const path = await providerService.downloadHFModel(modelId, (progress) => {
+        event.sender.send('ai:download-progress', { modelId, progress })
+      })
+      return { ok: true, path }
+    } catch (error: any) {
+      const message = error?.message || 'Download failed. Please try again.';
+      console.warn(`Hugging Face download failed for ${modelId}: ${message}`)
+      return { ok: false, error: message }
+    }
   })
   ipcMain.handle('ai:get-models-path', () => providerService.getModelsPath())
   ipcMain.handle('ai:list-library-models', () => providerService.listLibraryModels())
