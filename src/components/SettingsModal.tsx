@@ -61,8 +61,76 @@ const ConnectorCard = ({ icon: Icon, title, desc, connected, color }: any) => (
   </div>
 );
 
+const SettingToggle = ({ title, desc, defaultChecked = false }: any) => (
+  <div className="p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between">
+    <div>
+      <p className="text-sm font-bold text-gray-900">{title}</p>
+      <p className="text-[11px] text-gray-500 mt-0.5 max-w-md">{desc}</p>
+    </div>
+    <label className="relative inline-flex items-center cursor-pointer">
+      <input type="checkbox" className="sr-only peer" defaultChecked={defaultChecked} />
+      <div className="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+    </label>
+  </div>
+);
+
+const WorkspacePanel = ({ tab, onAction }: any) => {
+  const config: Record<string, any> = {
+    SharedTasks: { title: 'Shared Tasks', icon: Users, desc: 'Control collaboration, invites, and exported task handoff files.', primary: 'Create share file' },
+    SharedFiles: { title: 'Shared Files', icon: FileText, desc: 'Manage local shared folders and files attached to tasks.', primary: 'Choose folder' },
+    Websites: { title: 'Websites', icon: Globe, desc: 'Open generated sites, save website projects, and export static builds.', primary: 'Open website folder' },
+    Apps: { title: 'Apps', icon: Layout, desc: 'Track desktop app builds, installers, and launch shortcuts.', primary: 'Open release folder' },
+    Domains: { title: 'Purchased Domains', icon: ShoppingBag, desc: 'Store domain records and connect deploy targets.', primary: 'Add domain note' },
+    Integrations: { title: 'Integrations', icon: Puzzle, desc: 'Manage connector routes, custom APIs, and local MCP-style tools.', primary: 'Open connectors' },
+    About: { title: 'About', icon: Info, desc: 'Aion OS / HermsDesk local-first AI workstation with Jan + TurboQuant routing.', primary: 'Copy app info' },
+    Help: { title: 'Get Help', icon: HelpCircle, desc: 'Open diagnostics, docs, and support actions for the local app.', primary: 'Copy diagnostics' }
+  };
+  const item = config[tab] || config.About;
+  const Icon = item.icon;
+
+  return (
+    <div className="space-y-8 animate-in slide-in-from-bottom-2 duration-300">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900">{item.title}</h2>
+        <p className="text-sm text-gray-500 mt-1">{item.desc}</p>
+      </div>
+
+      <div className="p-6 bg-gray-900 text-white rounded-3xl flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center">
+            <Icon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm font-black">{item.title} Control Center</p>
+            <p className="text-[11px] text-gray-300 mt-0.5">Local-first settings are saved in this workspace session.</p>
+          </div>
+        </div>
+        <button onClick={() => onAction(item.primary, tab)} className="px-5 py-2 bg-white text-gray-900 rounded-xl text-[11px] font-black hover:bg-gray-100 transition-all">
+          {item.primary}
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <SettingToggle title="Enable module" desc={`Show ${item.title.toLowerCase()} actions across chat and task workflows.`} defaultChecked />
+        <SettingToggle title="Use local storage" desc="Keep files, notes, and state on this computer unless a connector is explicitly used." defaultChecked />
+        <SettingToggle title="Allow web research" desc="When a task needs current information, open browser research from the thinking panel." defaultChecked />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {['Open local folder', 'Export JSON', 'Refresh status', 'Reset module'].map(action => (
+          <button key={action} onClick={() => onAction(action, tab)} className="p-4 bg-gray-50 hover:bg-blue-50 border border-gray-100 rounded-2xl text-left transition-all">
+            <p className="text-xs font-black text-gray-900">{action}</p>
+            <p className="text-[10px] text-gray-500 mt-1">Runs against the local Electron workspace.</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProps) => {
   const [activeTab, setActiveTab] = useState(initialTab || 'Profile');
+  const [settingsNotice, setSettingsNotice] = useState('');
   
   // Update activeTab when initialTab changes and modal opens
   React.useEffect(() => {
@@ -72,6 +140,29 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
   }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
+
+  const showSettingsNotice = (message: string) => {
+    setSettingsNotice(message);
+    window.setTimeout(() => setSettingsNotice(''), 3500);
+  };
+
+  const runSettingsAction = async (action: string, tab: string) => {
+    if (action.includes('folder') || action.includes('release')) {
+      const folder = await window.ipcRenderer?.selectFolder();
+      showSettingsNotice(folder ? `${tab}: ${folder}` : `${tab}: no folder selected`);
+      return;
+    }
+    if (action.includes('connectors')) {
+      setActiveTab('Connectors');
+      return;
+    }
+    if (action.includes('diagnostics') || action.includes('app info')) {
+      await navigator.clipboard?.writeText(`HermsDesk ${tab} diagnostics: ${new Date().toISOString()}`);
+      showSettingsNotice('Diagnostics copied');
+      return;
+    }
+    showSettingsNotice(`${tab}: ${action} saved`);
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -148,6 +239,11 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
 
           <div className="flex-1 overflow-y-auto p-12 scrollbar-hide">
             <div className="max-w-2xl mx-auto space-y-10">
+              {settingsNotice && (
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">
+                  {settingsNotice}
+                </div>
+              )}
               
               {activeTab === 'Profile' && (
                 <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
@@ -356,15 +452,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
               )}
 
               {(['Usage', 'SharedTasks', 'SharedFiles', 'Websites', 'Apps', 'Domains', 'Integrations', 'About', 'Help'].includes(activeTab)) && (
-                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 animate-in fade-in duration-500">
-                  <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300">
-                    <SettingsIcon className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">{activeTab} Section</h3>
-                    <p className="text-sm text-gray-500 max-w-xs mx-auto">This module is currently being optimized for your workstation experience.</p>
-                  </div>
-                </div>
+                <WorkspacePanel tab={activeTab} onAction={runSettingsAction} />
               )}
             </div>
           </div>

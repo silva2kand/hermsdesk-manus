@@ -26,7 +26,11 @@ import {
   Wrench,
   Brain,
   RefreshCw,
-  FolderOpen
+  Copy,
+  Volume2,
+  Edit3,
+  StepForward,
+  RotateCcw
 } from 'lucide-react';
 
 const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }) => (
@@ -88,6 +92,67 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
   const addNotice = (message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(''), 3500);
+  };
+
+  const getLastUserPrompt = (beforeIndex = messages.length) => {
+    for (let i = Math.min(beforeIndex - 1, messages.length - 1); i >= 0; i -= 1) {
+      if (messages[i].role === 'user') return messages[i].content;
+    }
+    return input || 'Aion OS local AI workflow';
+  };
+
+  const getFollowUps = (content: string) => {
+    const base = content.toLowerCase();
+    if (base.includes('error') || base.includes('not running')) {
+      return ['Check engine status', 'Open Model Hub', 'Start Jan engine', 'Use installed model', 'Explain this error'];
+    }
+    if (base.includes('model') || base.includes('jan') || base.includes('ollama')) {
+      return ['Load best local model', 'Compare model options', 'Tune for RTX VRAM', 'Search GGUF models', 'Continue setup'];
+    }
+    return ['Continue', 'Make it shorter', 'Give exact steps', 'Research web', 'Create action plan'];
+  };
+
+  const copyMessage = async (content: string) => {
+    await navigator.clipboard?.writeText(content);
+    addNotice('Copied response');
+  };
+
+  const speakMessage = (content: string) => {
+    if (!window.speechSynthesis) {
+      addNotice('Speech is not available in this environment');
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.rate = 1;
+    window.speechSynthesis.speak(utterance);
+    addNotice('Speaking response');
+  };
+
+  const editMessage = (content: string) => {
+    setInput(content);
+    addNotice('Response copied into the chat bar for editing');
+  };
+
+  const continueMessage = (idx: number) => {
+    handleSend(`Continue from your previous response. Last user task: ${getLastUserPrompt(idx)}`);
+  };
+
+  const regenerateMessage = (idx: number) => {
+    const prompt = getLastUserPrompt(idx);
+    setMessages(prev => prev.filter((_, i) => i !== idx));
+    window.setTimeout(() => handleSend(prompt), 0);
+  };
+
+  const runFollowUp = (label: string, idx: number) => {
+    const prompt = getLastUserPrompt(idx);
+    if (label.toLowerCase().includes('research web')) {
+      const url = `https://www.google.com/search?q=${encodeURIComponent(prompt)}`;
+      window.open(url, '_blank');
+      addNotice('Opened web research in your browser');
+      return;
+    }
+    handleSend(`${label}: ${prompt}`);
   };
 
   const checkEngines = async () => {
@@ -246,31 +311,59 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
                   {msg.content}
                 </p>
                 
-                {msg.role === 'assistant' && idx === 0 && (
+                {msg.role === 'assistant' && (
                   <>
-                    {/* Collapsible Research Section */}
                     <div className="border border-gray-100 rounded-xl overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2 bg-gray-50/50 cursor-pointer hover:bg-gray-100/50 transition-colors">
+                      <div className="flex items-center justify-between px-4 py-2 bg-gray-50/50">
                         <div className="flex items-center space-x-2">
-                          <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center">
-                            <ChevronDown className="w-3 h-3 text-gray-500" />
+                          <div className="w-4 h-4 rounded-full bg-blue-50 flex items-center justify-center">
+                            <Brain className="w-3 h-3 text-blue-500" />
                           </div>
-                          <span className="text-xs font-medium text-gray-700">Research architecture patterns</span>
+                          <span className="text-xs font-medium text-gray-700">Thinking and research</span>
                         </div>
-                        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                        <button
+                          onClick={() => runFollowUp('Research web', idx)}
+                          className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-wider hover:underline"
+                        >
+                          <Search className="w-3 h-3 mr-1" />
+                          Web research
+                        </button>
+                      </div>
+                      <div className="px-4 py-2 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <ResearchStep label="Read task context" done />
+                        <ResearchStep label="Check local model route" done={!isTyping} />
+                        <ResearchStep label="Web research available" done />
                       </div>
                     </div>
 
-                    {/* Status Message */}
-                    <div className="flex items-start space-x-3 p-3 bg-red-50/50 rounded-xl border border-red-100 max-w-sm">
-                      <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Info className="w-3 h-3 text-red-500" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-gray-900">Blueprint Generation</span>
-                        <span className="text-[10px] text-gray-500 mt-0.5">Manus has stopped</span>
-                      </div>
-                      <span className="text-[10px] text-gray-400 ml-auto font-bold">5 / 4</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button onClick={() => copyMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Copy">
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => speakMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Speak">
+                        <Volume2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => editMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => continueMessage(idx)} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Continue">
+                        <StepForward className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => regenerateMessage(idx)} className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" title="Regenerate">
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {getFollowUps(msg.content).map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => runFollowUp(suggestion, idx)}
+                          className="px-3 py-1.5 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-100 text-[10px] font-bold text-gray-600 hover:text-blue-700 rounded-full transition-all"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}
