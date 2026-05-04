@@ -289,6 +289,7 @@ export const Sidebar = ({
         <SidebarSection title="SYSTEM" isCollapsed={isSidebarCollapsed} defaultExpanded>
           <SidebarItem icon={LayoutGrid} label="Dashboard" active={currentView === 'landing'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('landing')} />
           <SidebarItem icon={MessageSquare} label="Chat Lab" active={currentView === 'chat'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('chat')} />
+          <SidebarItem icon={Library} label="Model Hub" active={currentView === 'models'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('models')} />
           <SidebarItem icon={Shield} label="Data Controls" active={currentView === 'data'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('data')} />
           <SidebarItem icon={Globe} label="Cloud Browser" active={currentView === 'browser'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('browser')} />
           <SidebarItem icon={Monitor} label="My Computer" active={currentView === 'computer'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('computer')} />

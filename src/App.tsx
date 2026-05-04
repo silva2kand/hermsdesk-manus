@@ -37,7 +37,8 @@ import {
   Info, 
   Trash2, 
   MoreVertical,
-  Settings 
+  Settings,
+  Bell
 } from 'lucide-react';
 
 import { hermesAgents } from './data/hermesAgents';
@@ -151,6 +152,7 @@ function App() {
   const [selectedModel, setSelectedModel] = useState<{provider: string, model: string} | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
+  const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<string>('Profile');
   const [taskPrompt, setTaskPrompt] = useState('');
   const [isAgenticTask, setIsAgenticTask] = useState(false);
@@ -540,7 +542,25 @@ function App() {
         }}
       />
 
-      <RightApprovalSidebar agents={agents} />
+      {isApprovalsOpen && (
+        <div className="fixed inset-0 z-[90] flex justify-end bg-black/10 backdrop-blur-[1px] animate-in fade-in duration-150">
+          <button
+            className="flex-1 cursor-default"
+            onClick={() => setIsApprovalsOpen(false)}
+            aria-label="Close approvals panel"
+          />
+          <RightApprovalSidebar agents={agents} />
+        </div>
+      )}
+
+      <button
+        onClick={() => setIsApprovalsOpen(true)}
+        className="fixed right-4 bottom-5 z-[80] flex items-center gap-2 px-3 py-2 bg-gray-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-black"
+        title="Open approvals and notifications"
+      >
+        <Bell className="w-3.5 h-3.5" />
+        Approvals
+      </button>
 
       {toast && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[120] px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold shadow-xl">

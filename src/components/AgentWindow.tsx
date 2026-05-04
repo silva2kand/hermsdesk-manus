@@ -78,7 +78,7 @@ export const AgentWindow: React.FC<AgentWindowProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed top-20 right-10 w-[450px] h-[600px] bg-white rounded-[32px] shadow-2xl border border-gray-100 flex flex-col overflow-hidden z-[100] animate-in zoom-in-95 duration-300">
+    <div className="w-[min(450px,calc(100vw-2rem))] h-[min(600px,calc(100vh-6rem))] bg-white rounded-[24px] shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
       {/* Title Bar */}
       <div className={cn("p-4 flex items-center justify-between text-white transition-colors duration-500", agent.color)}>
         <div className="flex items-center space-x-3">
