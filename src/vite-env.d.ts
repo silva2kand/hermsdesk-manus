@@ -59,6 +59,8 @@ interface Window {
     deleteProject: (id: string) => Promise<any[]>;
     addProjectFiles: (id: string, files: string[]) => Promise<any>;
     startProjectTask: (id: string, prompt: string, agentId?: string) => Promise<any>;
+    getWideResearchRuns: () => Promise<any[]>;
+    startWideResearch: (brief: string, items?: string[]) => Promise<any>;
 
     // Tool Registry
     getTools: () => Promise<any[]>;

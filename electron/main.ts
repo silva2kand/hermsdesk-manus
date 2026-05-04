@@ -16,6 +16,7 @@ let orchestrator: any;
 let workspaceService: any;
 let microsoftGraph: any;
 let schedulerService: any;
+let wideResearchService: any;
 
 function initializeStoreAndServices() {
    try {
@@ -51,6 +52,7 @@ function initializeStoreAndServices() {
       },
       scheduledTasks: [],
       projects: [],
+      wideResearchRuns: [],
       generalSettings: {
         language: 'English',
         theme: 'Quantum Blue',
@@ -70,6 +72,7 @@ function initializeStoreAndServices() {
   workspaceService = new WorkspaceService(store)
   microsoftGraph = new MicrosoftGraphService(store)
   schedulerService = new SchedulerService(store, workspaceService, orchestrator)
+  wideResearchService = new WideResearchService(store, aiService)
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      // Fallback to a non-persistent object if store fails completely
@@ -87,6 +90,7 @@ function initializeStoreAndServices() {
      workspaceService = new WorkspaceService(store)
      microsoftGraph = new MicrosoftGraphService(store)
      schedulerService = new SchedulerService(store, workspaceService, orchestrator)
+     wideResearchService = new WideResearchService(store, aiService)
    }
  }
 
@@ -99,6 +103,7 @@ import { MultiAgentOrchestrator } from './services/MultiAgentOrchestrator'
 import { WorkspaceService } from './services/WorkspaceService'
 import { MicrosoftGraphService } from './services/MicrosoftGraphService'
 import { SchedulerService } from './services/SchedulerService'
+import { WideResearchService } from './services/WideResearchService'
 
 // The built directory structure
 //
@@ -198,6 +203,7 @@ function createWindow() {
   };
   schedulerService?.setWindow(win)
   schedulerService?.start()
+  wideResearchService?.setWindow(win)
 
   // IPC Handlers for AI
   ipcMain.handle('ai:list-models', async () => {
@@ -429,6 +435,8 @@ function createWindow() {
     const task = await orchestrator.createTask(context, agentId || 'hermes-full', win)
     return { ok: true, project, task }
   })
+  ipcMain.handle('wide-research:get-runs', () => wideResearchService.getRuns())
+  ipcMain.handle('wide-research:start', (_, { brief, items }) => wideResearchService.startRun(brief, items))
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {

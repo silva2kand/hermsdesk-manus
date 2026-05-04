@@ -115,4 +115,6 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   deleteProject: (id: string) => ipcRenderer.invoke('workspace:delete-project', id),
   addProjectFiles: (id: string, files: string[]) => ipcRenderer.invoke('workspace:add-project-files', { id, files }),
   startProjectTask: (id: string, prompt: string, agentId?: string) => ipcRenderer.invoke('workspace:start-project-task', { id, prompt, agentId }),
+  getWideResearchRuns: () => ipcRenderer.invoke('wide-research:get-runs'),
+  startWideResearch: (brief: string, items?: string[]) => ipcRenderer.invoke('wide-research:start', { brief, items }),
 })

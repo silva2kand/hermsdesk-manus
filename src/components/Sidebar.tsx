@@ -295,6 +295,7 @@ export const Sidebar = ({
           <SidebarItem icon={Monitor} label="My Computer" active={currentView === 'computer'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('computer')} />
           <SidebarItem icon={Palette} label="Personalization" active={currentView === 'personalization'} isCollapsed={isSidebarCollapsed} onClick={() => onOpenSettings()} />
           <SidebarItem icon={Brain} label="Knowledge" active={currentView === 'knowledge'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('knowledge')} />
+          <SidebarItem icon={Search} label="Wide Research" active={currentView === 'wide-research'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('wide-research')} />
           <SidebarItem icon={Zap} label="Skills Engine" active={currentView === 'skills'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('skills')} />
         </SidebarSection>
 
