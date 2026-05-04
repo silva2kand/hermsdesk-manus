@@ -27,7 +27,11 @@ import {
   File,
   Folder,
   Cloud,
-  Zap
+  Zap,
+  Brain,
+  Wrench,
+  FileText,
+  Volume2
 } from 'lucide-react';
 
 const ToolButton = ({ label, icon: Icon, onClick }: any) => (
@@ -51,7 +55,7 @@ const AppIcon = ({ icon: Icon, label, color }: any) => (
   </div>
 );
 
-export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: any) => {
+export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onNavigate }: any) => {
   const [showMore, setShowMore] = useState(false);
   const [showUploads, setShowUploads] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -87,6 +91,24 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
     }
     setShowUploads(false);
   };
+
+  const composeWhatsApp = async () => {
+    if (!prompt.trim()) {
+      onNavigate?.('whatsapp');
+      return;
+    }
+    const draft = await window.ipcRenderer?.saveWhatsAppDraft?.({
+      label: 'Dashboard compose',
+      message: prompt,
+      status: 'drafted'
+    }).catch(() => null);
+    const result = await window.ipcRenderer?.composeWhatsApp?.(prompt);
+    if (result?.ok && draft?.id) await window.ipcRenderer?.markWhatsAppOpened?.(draft.id).catch(() => null);
+  };
+
+  const openVideoCall = () => window.ipcRenderer?.openApp?.('video call');
+  const openVoiceStack = () => window.ipcRenderer?.openApp?.('voice stack');
+  const openResearch = () => window.ipcRenderer?.researchWebAutomation?.(prompt || 'HermesDesk ME research');
 
   const [activeConnectorsCount, setActiveConnectorsCount] = useState(0);
 
@@ -135,6 +157,19 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
                   }
                 }}
               />
+            </div>
+
+            <div className="px-6 pb-3 flex items-center gap-2 overflow-x-auto">
+              <ToolButton label="WhatsApp" icon={MsgIcon} onClick={composeWhatsApp} />
+              <ToolButton label="Computer" icon={Monitor} onClick={onOpenComputer} />
+              <ToolButton label="Connectors" icon={Puzzle} onClick={onOpenConnectors} />
+              <ToolButton label="Video Call" icon={Video} onClick={openVideoCall} />
+              <ToolButton label="Video Chat" icon={MessageCircle} onClick={openVideoCall} />
+              <ToolButton label="Voice Stack" icon={Volume2} onClick={openVoiceStack} />
+              <ToolButton label="Brain" icon={Brain} onClick={() => onNavigate?.('memory')} />
+              <ToolButton label="Skills" icon={Wrench} onClick={() => onNavigate?.('skills')} />
+              <ToolButton label="Knowledge" icon={FileText} onClick={() => onNavigate?.('knowledge')} />
+              <ToolButton label="Research" icon={Globe} onClick={openResearch} />
             </div>
             
             <div className="px-6 py-4 flex items-center justify-between border-t border-gray-50 bg-white">

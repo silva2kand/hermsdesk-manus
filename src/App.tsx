@@ -401,6 +401,7 @@ function App() {
             <LandingPage 
               onOpenConnectors={() => setView('connectors')} 
               onOpenComputer={() => setView('computer')} 
+              onNavigate={(nextView: string) => setView(nextView as any)}
               onStartTask={startTask} 
             />
           )}
