@@ -223,13 +223,31 @@ function createWindow() {
     const current = workspaceService.getEmailIntelligence?.() || { messages: [], folders: [], summary: {} }
     const statusById = new Map((current.messages || []).map((m: any) => [m.id, m.approvalStatus]))
     const processed = new Set(store.get('mailProcessedTaskIds', []) as string[])
+    const incomingMessages = (data.messages || []).map((message: any) => ({
+      ...message,
+      source,
+      approvalStatus: statusById.get(message.id) || message.approvalStatus || 'pending-review',
+      actionPolicy: 'approval-required-for-send-delete-move-pay-file-submit-contact'
+    }))
+    const incomingIds = new Set(incomingMessages.map((message: any) => message.id))
+    const retainedMessages = (current.messages || []).filter((message: any) => message.id && !incomingIds.has(message.id))
+    const messages = [...incomingMessages, ...retainedMessages]
+      .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+      .slice(0, 2000)
+    const foldersByKey = new Map<string, any>()
+    ;[...(current.folders || []), ...(data.folders || [])].forEach((folder: any) => {
+      const key = folder.id || `${source}:${folder.displayName || 'folder'}`
+      foldersByKey.set(key, { ...foldersByKey.get(key), ...folder, source: folder.source || source })
+    })
     const merged = {
       ...data,
-      messages: (data.messages || []).map((message: any) => ({
-        ...message,
-        approvalStatus: statusById.get(message.id) || message.approvalStatus || 'pending-review',
-        actionPolicy: 'approval-required-for-send-delete-move-pay-file-submit-contact'
-      }))
+      folders: Array.from(foldersByKey.values()),
+      messages,
+      summary: messages.reduce((acc: Record<string, number>, item: any) => {
+        const key = item.categoryId || item.source || 'general'
+        acc[key] = (acc[key] || 0) + 1
+        return acc
+      }, {})
     }
     workspaceService.saveEmailIntelligence(merged)
 
