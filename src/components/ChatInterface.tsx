@@ -178,7 +178,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       const newState = !currentState;
       const updated = await window.ipcRenderer.toggleConnector(id, newState);
       setChatConnectors(updated);
-      addNotice(`${name} ${newState ? 'enabled' : 'disabled'} for this chat`);
+      addNotice(`${name} route ${newState ? 'enabled' : 'disabled'} for this chat. Login/API access is separate where required.`);
     }
   };
 
@@ -1008,7 +1008,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Per-chat tool permissions</h3>
-                    <p className="text-[10px] text-gray-500 mt-0.5">ON lets ME use that connector in this conversation.</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">ON enables the route in this chat. OAuth/API login is still required for private data.</p>
                   </div>
                   <button onClick={() => setShowConnectorPanel(false)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-lg">
                     <X className="w-4 h-4" />

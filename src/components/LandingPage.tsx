@@ -233,7 +233,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
             >
               <div className="flex items-center space-x-2">
                 <Puzzle className="w-3.5 h-3.5 text-gray-400" />
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Connect your tools to ME</span>
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Enable real tool routes and logins</span>
               </div>
               <div className="flex items-center space-x-2">
                 <AppIcon icon={Globe} label="Browser" color="bg-blue-500" />

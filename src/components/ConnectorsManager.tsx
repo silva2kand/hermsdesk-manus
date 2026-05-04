@@ -34,7 +34,14 @@ const CategoryTab = ({ label, active, onClick, count }: any) => (
 const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connector, isConnected: boolean, onToggle: () => void }) => {
   const enabled = isConnected !== false;
   const authRequired = ['gmail', 'google-calendar', 'google-drive', 'outlook-mail', 'outlook-calendar', 'github', 'slack', 'notion', 'stripe', 'xero', 'whatsapp'].includes(connector.id);
-  const statusLabel = !enabled ? 'Disabled' : authRequired ? 'Enabled - auth needed for data access' : 'Enabled locally';
+  const localReal = ['my-browser', 'ollama', 'lm-studio', 'jan-turboquant', 'mcp-filesystem', 'mcp-windows-shell'].includes(connector.id);
+  const statusLabel = !enabled
+    ? 'Disabled'
+    : authRequired
+      ? 'Route enabled - login/API required for real data'
+      : localReal
+        ? 'Real local route enabled'
+        : 'Route enabled - configure credentials if needed';
   
   return (
     <div className="group p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between hover:border-blue-100 hover:shadow-sm transition-all">
@@ -63,7 +70,7 @@ const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connec
             ? 'bg-gray-50 text-gray-400 border border-gray-100' 
             : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm'
         }`}>
-          {enabled ? 'Enabled' : 'Enable'}
+          {enabled ? 'Route On' : 'Enable Route'}
         </button>
       </div>
     </div>
@@ -105,7 +112,7 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
       const newState = !currentState;
       const updatedState = await window.ipcRenderer.toggleConnector(id, newState);
       setConnectorsState(updatedState);
-      setNotice(`${newState ? 'Connected' : 'Disconnected'} ${id}`);
+      setNotice(`${newState ? 'Enabled route for' : 'Disabled route for'} ${id}. Authentication is still shown separately where required.`);
       setTimeout(() => setNotice(''), 2500);
     }
   };

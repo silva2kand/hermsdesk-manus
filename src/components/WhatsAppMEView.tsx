@@ -24,9 +24,11 @@ export const WhatsAppMEView = () => {
   const [drafts, setDrafts] = useState<any[]>([]);
   const [phone, setPhone] = useState('');
   const [label, setLabel] = useState('WhatsApp draft');
+  const [incomingMessage, setIncomingMessage] = useState('');
   const [message, setMessage] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [draftingReply, setDraftingReply] = useState(false);
 
   const showNotice = (text: string) => {
     setNotice(text);
@@ -73,6 +75,37 @@ export const WhatsAppMEView = () => {
     }
   };
 
+  const draftProfessionalReply = async () => {
+    const source = incomingMessage.trim() || message.trim();
+    if (!source) {
+      showNotice('Paste the message you received first.');
+      return;
+    }
+    setDraftingReply(true);
+    try {
+      const prompt = `Draft a concise, professional WhatsApp reply. Keep it natural, helpful, and clear. Do not over-explain. Received message:\n\n${source}`;
+      const response = await window.ipcRenderer?.chatBest?.({
+        model: 'Auto local model',
+        messages: [
+          { role: 'system', content: 'You are ME WhatsApp Reply Assistant. Write polished, human, professional WhatsApp replies. No markdown unless useful.' },
+          { role: 'user', content: prompt }
+        ]
+      }).catch(() => null);
+      const content = response?.message?.content || response?.content || '';
+      if (content.trim()) {
+        setLabel('Professional reply');
+        setMessage(content.trim());
+        showNotice('Professional reply drafted with the local model route.');
+      } else {
+        setLabel('Professional reply');
+        setMessage(`Hi, thanks for your message. I have seen this and I am checking it now. I will come back to you shortly with a clear update.`);
+        showNotice('Local model did not reply, so ME used a safe professional fallback.');
+      }
+    } finally {
+      setDraftingReply(false);
+    }
+  };
+
   const draftCount = useMemo(() => drafts.filter(d => d.status !== 'archived').length, [drafts]);
 
   return (
@@ -81,7 +114,7 @@ export const WhatsAppMEView = () => {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-black text-gray-900 font-serif tracking-tight">WhatsApp ME</h1>
-            <p className="text-sm text-gray-500 mt-1">Real WhatsApp communication workspace with safe manual-send approval.</p>
+            <p className="text-sm text-gray-500 mt-1">Real WhatsApp communication workspace: draft, professional reply, save, then open the real composer.</p>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -149,7 +182,17 @@ export const WhatsAppMEView = () => {
               </div>
 
               <label className="space-y-1.5 block">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Message</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Message received</span>
+                <textarea
+                  value={incomingMessage}
+                  onChange={e => setIncomingMessage(e.target.value)}
+                  placeholder="Paste the WhatsApp message you received here, then click Draft Pro Reply..."
+                  className="w-full h-24 px-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-green-50 resize-none"
+                />
+              </label>
+
+              <label className="space-y-1.5 block">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Message to send</span>
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}
@@ -174,6 +217,14 @@ export const WhatsAppMEView = () => {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  onClick={draftProfessionalReply}
+                  disabled={draftingReply}
+                  className="px-4 py-2 bg-green-50 border border-green-100 rounded-xl text-xs font-black text-green-700 hover:bg-green-100 transition-all flex items-center disabled:opacity-60"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 mr-2" />
+                  {draftingReply ? 'Drafting...' : 'Draft Pro Reply'}
+                </button>
                 <button
                   onClick={() => navigator.clipboard?.writeText(message).then(() => showNotice('Message copied.'))}
                   className="px-4 py-2 bg-white border border-gray-100 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all flex items-center"
@@ -207,7 +258,7 @@ export const WhatsAppMEView = () => {
                 <h2 className="text-xs font-black uppercase tracking-widest">Real Safety</h2>
               </div>
               <p className="text-xs text-gray-300 leading-6">
-                WhatsApp personal/free does not provide an official background read/send API. ME can draft, store, copy, and open real WhatsApp compose links. Sending stays manual so it is safe and compliant.
+                WhatsApp personal/free does not provide an official background read/send API. ME can help you reply like a professional by drafting from pasted messages, storing drafts, copying text, and opening real WhatsApp compose links. Sending stays manual so it is safe and compliant.
               </p>
             </div>
 
