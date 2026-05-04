@@ -47,6 +47,22 @@ const ChatQuickAction = ({ icon: Icon, label, onClick, className = '' }: { icon:
   </div>
 );
 
+const ComposerIconButton = ({ icon: Icon, label, onClick, className = '' }: { icon: any; label: string; onClick: () => void; className?: string }) => (
+  <div className="relative group/icon shrink-0">
+    <button
+      onClick={onClick}
+      className={`p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all ${className}`}
+      title={label}
+      aria-label={label}
+    >
+      <Icon className="w-4 h-4" />
+    </button>
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+      {label}
+    </div>
+  </div>
+);
+
 type ChatInterfaceProps = {
   initialModel?: { provider: string, model: string } | null;
   initialPrompt?: string;
@@ -502,6 +518,16 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const openKnowledgeView = () => {
     onNavigate?.('knowledge');
     addNotice('Opened Knowledge rules.');
+  };
+
+  const openAgentsView = () => {
+    onNavigate?.('agents');
+    addNotice('Opened live agents monitor.');
+  };
+
+  const openMailView = () => {
+    onNavigate?.('mail');
+    addNotice('Opened Mail ME workspace.');
   };
 
   const createJusticePack = async () => {
@@ -1014,6 +1040,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
               </div>
 
               <div className="flex items-center space-x-2">
+                <ComposerIconButton icon={Mail} label="Mail ME" onClick={openMailView} className="hover:text-red-600 hover:bg-red-50" />
+                <ComposerIconButton icon={Rocket} label="Agents" onClick={openAgentsView} className="hover:text-gray-950 hover:bg-gray-100" />
+                <ComposerIconButton icon={Radio} label="AutoResearch" onClick={startAutoResearch} className="hover:text-rose-700 hover:bg-rose-50" />
+                <ComposerIconButton icon={Scale} label="Justice" onClick={createJusticePack} className="hover:text-red-800 hover:bg-red-50" />
+                <ComposerIconButton icon={CreditCard} label="Purchase Guard" onClick={createPurchasePack} className="hover:text-emerald-800 hover:bg-emerald-50" />
+                <ComposerIconButton icon={FileText} label="Knowledge" onClick={openKnowledgeView} className="hover:text-emerald-700 hover:bg-emerald-50" />
                 <div className="relative group/icon">
                   <button 
                     onClick={toggleMicrophone} 
@@ -1054,18 +1086,23 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           <div className="mt-3 flex items-center justify-center px-4 relative">
             <button
               onClick={() => setShowConnectorPanel(prev => !prev)}
-              className="flex items-center space-x-3 px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-2xl transition-all"
+              className="relative group/connectors flex items-center gap-2 px-2.5 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-2xl transition-all"
+              title="Connectors and per-chat tool access"
+              aria-label="Connectors and per-chat tool access"
             >
-              <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Connectors</span>
+              <LayoutGrid className="w-4 h-4 text-gray-500" />
               <div className="flex items-center space-x-2">
                 {chatConnectorItems.filter(item => chatConnectors[connectorId(item.name)] !== false).slice(0, 8).map(item => (
                   <ConnectorIcon key={item.name} icon={item.icon} label={item.name} color={item.color} />
                 ))}
               </div>
-              <span className="text-[9px] font-black text-blue-600 uppercase">
-                {Object.values(chatConnectors).filter(Boolean).length} on
+              <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-blue-600 text-white text-[9px] font-black flex items-center justify-center border-2 border-white">
+                {Object.values(chatConnectors).filter(Boolean).length}
               </span>
               <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showConnectorPanel ? 'rotate-180' : ''}`} />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 invisible group-hover/connectors:opacity-100 group-hover/connectors:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                Tool access
+              </div>
             </button>
 
             {showConnectorPanel && (
