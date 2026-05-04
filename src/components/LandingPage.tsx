@@ -38,10 +38,11 @@ import {
 const ToolButton = ({ label, icon: Icon, onClick }: any) => (
   <button 
     onClick={onClick}
-    className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-100 rounded-2xl text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
+    className="w-9 h-9 flex items-center justify-center bg-white border border-gray-100 rounded-xl text-gray-500 hover:text-gray-950 hover:bg-gray-50 transition-all shadow-sm shrink-0"
+    title={label}
+    aria-label={label}
   >
-    <Icon className="w-3.5 h-3.5 text-gray-400" />
-    <span>{label}</span>
+    <Icon className="w-4 h-4" />
   </button>
 );
 
@@ -176,7 +177,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
               />
             </div>
 
-            <div className="px-6 pb-3 flex items-center gap-2 overflow-x-auto">
+            <div className="px-6 pb-3 flex items-center gap-1.5 overflow-x-auto">
               <ToolButton label="WhatsApp" icon={MsgIcon} onClick={composeWhatsApp} />
               <ToolButton label="Computer" icon={Monitor} onClick={onOpenComputer} />
               <ToolButton label="Connectors" icon={Puzzle} onClick={onOpenConnectors} />
@@ -213,12 +214,16 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
                 </div>
 
                 {activeConnectorsCount > 0 && (
-                  <div className="flex items-center space-x-0.5 px-3 py-1.5 bg-gray-50 rounded-2xl border border-gray-100">
+                  <button
+                    onClick={onOpenConnectors}
+                    className="relative flex items-center space-x-0.5 px-2 py-1.5 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
+                    title={`${activeConnectorsCount} active tool routes`}
+                    aria-label={`${activeConnectorsCount} active tool routes`}
+                  >
                      <div className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
                      <div className="w-2.5 h-2.5 bg-green-500 rounded-full" />
                      <div className="w-2.5 h-2.5 bg-red-500 rounded-full" />
-                     <span className="text-[10px] font-black text-gray-400 ml-1.5">+{activeConnectorsCount}</span>
-                  </div>
+                  </button>
                 )}
 
                 <button onClick={onOpenComputer} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all" title="My Computer">
