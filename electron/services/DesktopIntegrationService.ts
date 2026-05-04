@@ -256,11 +256,70 @@ export class DesktopIntegrationService {
 
   async getVoiceStackStatus() {
     try {
-      const response = await axios.get('http://localhost:7100/', { timeout: 2000 });
-      return { ok: true, url: 'http://localhost:7100/', status: response.status };
+      const [home, voices] = await Promise.all([
+        axios.get('http://localhost:7100/', { timeout: 2000 }),
+        axios.get('http://localhost:7100/voices', { timeout: 2000 }).catch(() => null)
+      ]);
+      return { ok: true, url: 'http://localhost:7100/', status: home.status, voices: voices?.data || null };
     } catch (error: any) {
       return { ok: false, url: 'http://localhost:7100/', error: error.message };
     }
+  }
+
+  async speakWithVoiceStack(text: string, options: any = {}) {
+    const cleanText = String(text || '').trim();
+    if (!cleanText) return { ok: false, error: 'No text to speak.' };
+
+    const voice = options.voice || 'tamil-jaffna';
+    const language = options.language || 'ta-LK';
+    const payload = {
+      text: cleanText,
+      voice,
+      language,
+      locale: language,
+      accent: options.accent || 'jaffna',
+      style: options.style || 'professional',
+      rate: options.rate || 1,
+      pitch: options.pitch || 1,
+      format: options.format || 'mp3'
+    };
+
+    const endpoints = ['/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
+    let lastError = '';
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await axios.post(`http://localhost:7100${endpoint}`, payload, {
+          timeout: 30000,
+          responseType: 'arraybuffer',
+          validateStatus: status => status >= 200 && status < 300
+        });
+
+        const contentType = String(response.headers?.['content-type'] || '');
+        if (contentType.includes('audio') || response.data?.byteLength > 1024) {
+          const ext = contentType.includes('wav') ? 'wav' : 'mp3';
+          const audioPath = path.join(app.getPath('temp'), `hermes-voice-${Date.now()}.${ext}`);
+          fs.writeFileSync(audioPath, Buffer.from(response.data));
+          await shell.openPath(audioPath);
+          return { ok: true, mode: 'audio-file', endpoint, voice, language, path: audioPath };
+        }
+
+        const body = Buffer.from(response.data).toString('utf8');
+        let parsed: any = {};
+        try { parsed = JSON.parse(body); } catch { parsed = { message: body }; }
+        return { ok: true, mode: 'voice-stack', endpoint, voice, language, response: parsed };
+      } catch (error: any) {
+        lastError = error?.response?.data
+          ? Buffer.from(error.response.data).toString('utf8').slice(0, 300)
+          : error?.message || String(error);
+      }
+    }
+
+    return {
+      ok: false,
+      url: 'http://localhost:7100/',
+      error: `Silva Voice Stack did not accept known speak endpoints. Last error: ${lastError || 'offline'}`
+    };
   }
 
   async getClassicOutlookStatus() {

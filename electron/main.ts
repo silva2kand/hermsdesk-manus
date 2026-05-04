@@ -468,6 +468,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   ipcMain.handle('desktop:open-terminal', (_, folderPath) => integrationService.openTerminal(folderPath))
   ipcMain.handle('desktop:whatsapp-compose', (_, { message, phone }) => integrationService.composeWhatsAppMessage(message, phone))
   ipcMain.handle('desktop:voice-stack-status', () => integrationService.getVoiceStackStatus())
+  ipcMain.handle('desktop:voice-stack-speak', (_, { text, options }) => integrationService.speakWithVoiceStack(text, options))
   ipcMain.handle('automation:get-events', () => automationService.getEvents())
   ipcMain.handle('automation:open-browser', (_, target) => automationService.openBrowser(target))
   ipcMain.handle('automation:research-web', (_, query) => automationService.researchWeb(query))

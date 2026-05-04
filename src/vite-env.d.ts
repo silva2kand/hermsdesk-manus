@@ -35,7 +35,8 @@ interface Window {
     openPath: (targetPath: string) => Promise<{ ok: boolean, path?: string, error?: string }>;
     openTerminal: (folderPath?: string) => Promise<{ ok: boolean, path?: string }>;
     composeWhatsApp: (message: string, phone?: string) => Promise<{ ok: boolean, url: string, mode: string }>;
-    getVoiceStackStatus: () => Promise<{ ok: boolean, url: string, status?: number, error?: string }>;
+    getVoiceStackStatus: () => Promise<{ ok: boolean, url: string, status?: number, error?: string, voices?: any }>;
+    speakVoiceStack: (text: string, options?: any) => Promise<{ ok: boolean, mode?: string, endpoint?: string, voice?: string, language?: string, path?: string, error?: string }>;
     getAutomationEvents: () => Promise<any[]>;
     openBrowserAutomation: (target?: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any }>;
     researchWebAutomation: (query: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any, query?: string }>;

@@ -72,6 +72,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [researchSteps, setResearchSteps] = useState<string[]>([]);
   const [provider, setProvider] = useState(initialModel?.provider || 'Jan');
   const [model, setModel] = useState(initialModel?.model || 'Auto local model');
+  const [voicePreset, setVoicePreset] = useState('tamil-jaffna');
   const [showConnectorPanel, setShowConnectorPanel] = useState(false);
   const [chatConnectors, setChatConnectors] = useState<{[key: string]: boolean}>({});
   const handledInitialPrompt = useRef('');
@@ -224,22 +225,37 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     addNotice('Copied response');
   };
 
-  const speakMessage = (content: string) => {
-    if (!window.speechSynthesis) {
-      addNotice('Speech is not available in this environment');
-      return;
-    }
-    window.speechSynthesis.cancel();
+  const voiceOptions: Record<string, any> = {
+    'tamil-jaffna': { voice: 'tamil-jaffna', language: 'ta-LK', accent: 'jaffna', style: 'professional' },
+    'tamil-india': { voice: 'tamil-india', language: 'ta-IN', accent: 'india', style: 'professional' },
+    'english-uk': { voice: 'english-uk', language: 'en-GB', accent: 'uk', style: 'professional' },
+    'english-us': { voice: 'english-us', language: 'en-US', accent: 'us', style: 'professional' }
+  };
+
+  const speakMessage = async (content: string) => {
     const spoken = content
       .replace(/```[\s\S]*?```/g, 'code block omitted')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/[*_#>~[\]{}]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
+
+    const voiceResult = await window.ipcRenderer?.speakVoiceStack?.(`ME says. ${spoken}`, voiceOptions[voicePreset]).catch((error: any) => ({ ok: false, error: error?.message }));
+    if (voiceResult?.ok) {
+      addNotice(`Silva Voice Stack speaking: ${(voiceResult as any).voice || voicePreset}`);
+      return;
+    }
+
+    if (!window.speechSynthesis) {
+      addNotice(voiceResult?.error || 'Speech is not available in this environment');
+      return;
+    }
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(`ME says. ${spoken}`);
+    utterance.lang = voiceOptions[voicePreset]?.language || 'en-GB';
     utterance.rate = 1;
     window.speechSynthesis.speak(utterance);
-    addNotice('ME speaking response');
+    addNotice(`Voice Stack offline; using Windows/browser fallback. ${voiceResult?.error || ''}`.trim());
   };
 
   const editMessage = (content: string) => {
@@ -843,6 +859,28 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           }`}>
             {engineStatus['Jan + TurboQuant'] === 'online' ? 'Jan online' : 'Jan offline'}
           </span>
+        </div>
+
+        <div className="w-px h-4 bg-gray-200" />
+
+        <div className="flex items-center space-x-3 group">
+          <div className="flex items-center space-x-1.5">
+            <Volume2 className="w-3 h-3 text-gray-400" />
+            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Voice</span>
+          </div>
+          <div className="relative">
+            <select
+              className="text-[11px] font-black text-gray-900 bg-white border border-gray-100 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-100 outline-none cursor-pointer hover:border-blue-200 transition-all appearance-none pr-6"
+              value={voicePreset}
+              onChange={(e) => setVoicePreset(e.target.value)}
+            >
+              <option value="tamil-jaffna">Tamil Jaffna</option>
+              <option value="tamil-india">Tamil India</option>
+              <option value="english-uk">English UK</option>
+              <option value="english-us">English US</option>
+            </select>
+            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+          </div>
         </div>
 
         <div className="w-px h-4 bg-gray-200" />

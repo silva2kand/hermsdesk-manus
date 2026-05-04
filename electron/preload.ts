@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   openTerminal: (folderPath?: string) => ipcRenderer.invoke('desktop:open-terminal', folderPath),
   composeWhatsApp: (message: string, phone?: string) => ipcRenderer.invoke('desktop:whatsapp-compose', { message, phone }),
   getVoiceStackStatus: () => ipcRenderer.invoke('desktop:voice-stack-status'),
+  speakVoiceStack: (text: string, options?: any) => ipcRenderer.invoke('desktop:voice-stack-speak', { text, options }),
   getAutomationEvents: () => ipcRenderer.invoke('automation:get-events'),
   openBrowserAutomation: (target?: string) => ipcRenderer.invoke('automation:open-browser', target),
   researchWebAutomation: (query: string) => ipcRenderer.invoke('automation:research-web', query),
