@@ -37,6 +37,8 @@ interface Window {
     composeWhatsApp: (message: string, phone?: string) => Promise<{ ok: boolean, url: string, mode: string }>;
     getVoiceStackStatus: () => Promise<{ ok: boolean, url: string, status?: number, error?: string, profiles?: any, accents?: any }>;
     speakVoiceStack: (text: string, options?: any) => Promise<{ ok: boolean, mode?: string, endpoint?: string, voice?: string, language?: string, path?: string, error?: string }>;
+    diagnoseVoiceStack: () => Promise<any>;
+    buildVoiceStack: () => Promise<{ ok: boolean, mode?: string, script?: string, message?: string, error?: string }>;
     getAutomationEvents: () => Promise<any[]>;
     openBrowserAutomation: (target?: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any }>;
     researchWebAutomation: (query: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any, query?: string }>;

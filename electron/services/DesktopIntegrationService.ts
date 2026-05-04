@@ -8,6 +8,9 @@ import { promisify } from 'util';
 import axios from 'axios';
 
 const execFileAsync = promisify(execFile);
+const VOICE_STACK_ROOT = 'C:\\Users\\Silva\\WorkSpace\\voicelcl\\silva-voice';
+const VOICE_STACK_LAUNCHER = path.join(VOICE_STACK_ROOT, 'run_server.bat');
+const VOICE_STACK_PYTHON = path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
 
 export class DesktopIntegrationService {
   private async runPowerShellJson(script: string) {
@@ -26,6 +29,22 @@ export class DesktopIntegrationService {
     const trimmed = stdout.trim();
     if (!trimmed) return null;
     return JSON.parse(trimmed);
+  }
+
+  private async runPowerShellText(script: string, timeout = 60000) {
+    const { stdout, stderr } = await execFileAsync('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      script
+    ], {
+      cwd: VOICE_STACK_ROOT,
+      timeout,
+      maxBuffer: 1024 * 1024 * 10,
+      windowsHide: true
+    });
+    return `${stdout || ''}${stderr ? `\n${stderr}` : ''}`.trim();
   }
 
   private async getFolderSize(folderPath: string, limit = 5000) {
@@ -241,13 +260,115 @@ export class DesktopIntegrationService {
       await axios.get('http://localhost:7100/', { timeout: 1500 });
       return { ok: true, alreadyRunning: true };
     } catch {
-      const scriptPath = 'C:\\Users\\Silva\\WorkSpace\\voicelcl\\silva-voice\\run_server.bat';
-      const workingDirectory = path.dirname(scriptPath);
-      if (!fs.existsSync(scriptPath)) return { ok: false, error: 'Silva Voice Stack launcher was not found.' };
-      const child = spawn(scriptPath, [], { cwd: workingDirectory, detached: true, stdio: 'ignore', windowsHide: true });
+      if (!fs.existsSync(VOICE_STACK_LAUNCHER)) return { ok: false, error: 'Silva Voice Stack launcher was not found.' };
+      const child = spawn(VOICE_STACK_LAUNCHER, [], { cwd: VOICE_STACK_ROOT, detached: true, stdio: 'ignore', windowsHide: true });
       child.unref();
       return { ok: true, started: true };
     }
+  }
+
+  async diagnoseVoiceStack() {
+    const rootExists = fs.existsSync(VOICE_STACK_ROOT);
+    const pythonExists = fs.existsSync(VOICE_STACK_PYTHON);
+    const launcherExists = fs.existsSync(VOICE_STACK_LAUNCHER);
+    const missingModels: string[] = [];
+    const modelPaths = [
+      'models\\kokoro\\en-gb\\m1.pth',
+      'models\\kokoro\\en-gb\\f1.pth',
+      'models\\kokoro\\en-us\\m1.pth',
+      'models\\kokoro\\en-us\\f1.pth',
+      'models\\kokoro\\en-in\\m1.pth',
+      'models\\kokoro\\en-in\\f1.pth',
+      'models\\piper\\ta\\tamil_m1.onnx',
+      'models\\xtts-v2\\model.pth'
+    ];
+    for (const modelPath of modelPaths) {
+      if (!fs.existsSync(path.join(VOICE_STACK_ROOT, modelPath))) missingModels.push(modelPath);
+    }
+
+    let python = null;
+    if (pythonExists) {
+      const script = `
+& '${VOICE_STACK_PYTHON}' -c "import importlib.util, torch, json; print(json.dumps({'torch': str(torch.__version__), 'cuda': bool(torch.cuda.is_available()), 'tts': importlib.util.find_spec('TTS') is not None, 'piper': importlib.util.find_spec('piper') is not None}))"
+`;
+      try {
+        python = JSON.parse(await this.runPowerShellText(script, 30000));
+      } catch (error: any) {
+        python = { error: error.message };
+      }
+    }
+
+    return {
+      ok: rootExists && pythonExists && launcherExists && missingModels.length === 0 && Boolean((python as any)?.tts),
+      root: VOICE_STACK_ROOT,
+      rootExists,
+      pythonExists,
+      launcherExists,
+      python,
+      missingModels,
+      recommendedAction: missingModels.length
+        ? 'Run Build Voice Stack, then add/download the missing Kokoro/Piper voice model files listed here.'
+        : 'Run Build Voice Stack to refresh Python packages and restart the server.'
+    };
+  }
+
+  async buildVoiceStackNeeds() {
+    if (!fs.existsSync(VOICE_STACK_ROOT)) {
+      return { ok: false, error: `Voice Stack folder not found: ${VOICE_STACK_ROOT}` };
+    }
+
+    const repairScript = path.join(VOICE_STACK_ROOT, 'repair_voice_stack.ps1');
+    const script = `
+$ErrorActionPreference = 'Continue'
+Set-Location -LiteralPath '${VOICE_STACK_ROOT}'
+Write-Host '=== Silva Voice Stack self-build / repair ==='
+if (!(Test-Path '.\\venv_311\\Scripts\\python.exe')) {
+  Write-Host 'Creating Python 3.11 virtual environment...'
+  py -3.11 -m venv .\\venv_311
+}
+$py = '.\\venv_311\\Scripts\\python.exe'
+& $py -m pip install --upgrade pip setuptools wheel
+& $py -m pip install -e .
+& $py -m pip install piper-tts
+Write-Host 'Trying CUDA PyTorch install for RTX GPU. If this fails, existing CPU torch remains.'
+& $py -m pip install --upgrade torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+Write-Host ''
+Write-Host 'Checking runtime...'
+& $py -c "import importlib.util, torch, json; print(json.dumps({'torch': str(torch.__version__), 'cuda': bool(torch.cuda.is_available()), 'tts': importlib.util.find_spec('TTS') is not None, 'piper': importlib.util.find_spec('piper') is not None}, indent=2))"
+Write-Host ''
+Write-Host 'Model files still required for premium advertised voices:'
+@(
+  'models\\kokoro\\en-gb\\m1.pth',
+  'models\\kokoro\\en-gb\\f1.pth',
+  'models\\kokoro\\en-us\\m1.pth',
+  'models\\kokoro\\en-us\\f1.pth',
+  'models\\kokoro\\en-in\\m1.pth',
+  'models\\kokoro\\en-in\\f1.pth',
+  'models\\piper\\ta\\tamil_m1.onnx'
+) | ForEach-Object {
+  if (Test-Path $_) { Write-Host "OK    $_" } else { Write-Host "MISS  $_" }
+}
+Write-Host ''
+Write-Host 'Restarting Silva Voice Stack...'
+Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'silva_voice.server' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Process -FilePath '.\\run_server.bat' -WorkingDirectory '${VOICE_STACK_ROOT}' -WindowStyle Hidden
+Write-Host 'Repair script finished. Close this window after checking any MISS lines above.'
+Pause
+`;
+    fs.writeFileSync(repairScript, script, 'utf8');
+    const child = spawn('powershell.exe', ['-NoExit', '-ExecutionPolicy', 'Bypass', '-File', repairScript], {
+      cwd: VOICE_STACK_ROOT,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    child.unref();
+    return {
+      ok: true,
+      mode: 'visible-repair-terminal',
+      script: repairScript,
+      message: 'Opened Silva Voice Stack self-build terminal. It installs/repairs Python packages, checks GPU/Piper/TTS, lists missing models, and restarts the server.'
+    };
   }
 
   async composeWhatsAppMessage(message: string, phone?: string) {

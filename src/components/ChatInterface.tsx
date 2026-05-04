@@ -450,8 +450,25 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const openVoiceStack = async () => {
     const status = await window.ipcRenderer?.getVoiceStackStatus?.();
+    const diagnosis = await window.ipcRenderer?.diagnoseVoiceStack?.().catch(() => null);
     await window.ipcRenderer?.openApp?.('voice stack');
-    addNotice(status?.ok ? 'Silva Voice Stack is online at port 7100.' : 'Opening Voice Stack page. Start the voice server if it is offline.');
+    addNotice(status?.ok && diagnosis?.ok
+      ? 'Silva Voice Stack is online and runtime checks passed.'
+      : 'Voice Stack opened. Use Build Voice Stack to repair missing packages/models.');
+  };
+
+  const buildVoiceStack = async () => {
+    addNotice('Starting Silva Voice Stack self-build terminal...');
+    const result = await window.ipcRenderer?.buildVoiceStack?.().catch((error: any) => ({ ok: false, error: error?.message }));
+    if (result?.ok) {
+      addNotice('Build Voice Stack opened. It will repair packages, check models, and restart the server.');
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Voice Stack self-build started.\n\nScript: ${(result as any).script || 'repair_voice_stack.ps1'}\n\nIt will repair the Python environment, install/refresh local TTS dependencies, check CUDA/Piper/TTS, list missing premium voice model files, and restart the server.`
+      }]);
+    } else {
+      addNotice(`Build Voice Stack failed: ${result?.error || 'unknown error'}`);
+    }
   };
 
   const openWebResearch = async (query?: string) => {
@@ -546,6 +563,28 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
+
+    if (/(build|repair|fix|install|setup|self[-\s]?build).*(voice|tts|speech|silva voice)|voice.*(build|repair|fix|install|setup|self[-\s]?build)/i.test(outgoing)) {
+      const userMessage = { role: 'user', content: outgoing };
+      setMessages(prev => [...prev, userMessage]);
+      setInput('');
+      setIsTyping(true);
+      setResearchSteps(['Diagnosing Silva Voice Stack', 'Preparing self-build repair script', 'Opening visible repair terminal']);
+      try {
+        const diagnosis = await window.ipcRenderer?.diagnoseVoiceStack?.().catch(() => null);
+        const result = await window.ipcRenderer?.buildVoiceStack?.().catch((error: any) => ({ ok: false, error: error?.message }));
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: result?.ok
+            ? `I started the Silva Voice Stack self-build.\n\nWhat it does now:\n- Repairs/creates the Python 3.11 virtual environment.\n- Installs the local voice package.\n- Installs Piper TTS support.\n- Tries CUDA PyTorch for RTX acceleration.\n- Checks TTS/Piper/CUDA status.\n- Lists any missing premium model files.\n- Restarts the Voice Stack server.\n\nRepair script: ${(result as any).script}\n\nCurrent diagnosis before repair:\n${JSON.stringify(diagnosis, null, 2)}`
+            : `I could not start the Voice Stack self-build.\n\nError: ${result?.error || 'unknown error'}`
+        }]);
+      } finally {
+        setIsTyping(false);
+        setResearchSteps([]);
+      }
+      return;
+    }
 
     // Fetch knowledge rules to augment the system prompt
     let systemPrompt = "You are ME, an advanced AI agentic desktop application. You are local-first and privacy-focused.";
@@ -968,6 +1007,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
                 <ComposerIconButton icon={MessageSquare} label="WhatsApp" onClick={composeWhatsApp} className="hover:text-green-600 hover:bg-green-50" />
                 <ComposerIconButton icon={Video} label="Video Call" onClick={openVideoCall} className="hover:text-blue-600 hover:bg-blue-50" />
                 <ComposerIconButton icon={Volume2} label="Voice Stack" onClick={openVoiceStack} className="hover:text-cyan-600 hover:bg-cyan-50" />
+                <ComposerIconButton icon={Wrench} label="Build Voice Stack" onClick={buildVoiceStack} className="hover:text-cyan-700 hover:bg-cyan-50" />
                 <ComposerIconButton icon={Smile} label="Emoji" onClick={() => setInput(prev => `${prev}${prev ? ' ' : ''}:)`)} />
                 <ComposerIconButton icon={Monitor} label="Computer" onClick={openComputerView} />
                 <ComposerIconButton icon={Wrench} label="Mythos Skills" onClick={openSkillsView} className="hover:text-orange-600 hover:bg-orange-50" />
