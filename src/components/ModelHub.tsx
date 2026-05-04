@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, Download, Trash2, CheckCircle2, Box, Cpu, HardDrive, 
   RefreshCw, Plus, Shield, Zap, Sparkles, Filter, Info, Play, 
-  AlertCircle, ChevronRight, Activity, Layers, Monitor
+  AlertCircle, ChevronRight, Activity, Layers, Monitor,
+  Globe, Share2, Copy
 } from 'lucide-react';
 
 interface LocalModel {
@@ -25,6 +26,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const [hfResults, setHfResults] = useState<any[]>([]);
   const [activeDownloads, setActiveDownloads] = useState<{[key: string]: number}>({});
   const [modelsPath, setModelsPath] = useState('');
+  const [libraryModels, setLibraryModels] = useState<any[]>([]);
   const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, activeModel: string, models: any[] }>({
     apiOnline: false,
     installed: false,
@@ -33,6 +35,10 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     models: []
   });
   const [engineMessage, setEngineMessage] = useState('');
+  const [otherEngines, setOtherEngines] = useState<{ ollamaOnline: boolean, lmStudioOnline: boolean }>({
+    ollamaOnline: false,
+    lmStudioOnline: false
+  });
   const [pcCapabilities, setPcCapabilities] = useState({
     gpu: 'Detecting...',
     vram: '...',
@@ -43,6 +49,17 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
 
   const [localModels, setLocalModels] = useState<LocalModel[]>([]);
 
+  const fetchLibrary = async () => {
+    if (window.ipcRenderer?.listLibraryModels) {
+      try {
+        const models = await window.ipcRenderer.listLibraryModels();
+        setLibraryModels(models);
+      } catch (e) {
+        console.error('Failed to fetch library models:', e);
+      }
+    }
+  };
+
   const refreshInstalledModels = async () => {
     if (!window.ipcRenderer) return;
 
@@ -50,18 +67,22 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
       window.ipcRenderer.listModels(),
       window.ipcRenderer.listLibraryModels()
     ]);
+    setOtherEngines(prev => ({ ...prev, ollamaOnline: Array.isArray(ollamaModels) && ollamaModels.length > 0 }));
 
-    const ollama = Array.isArray(ollamaModels) ? ollamaModels.map((m: any) => ({
-      id: `ollama:${m.digest || m.name}`,
-      name: m.name,
-      provider: 'Ollama',
-      size: `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB`,
-      status: 'installed' as const,
-      description: 'Local model detected via Ollama',
-      quantization: 'Detected',
-      tags: ['Local', 'Ollama'],
-      vramRequired: 'Calculated'
-    })) : [];
+    const ollama = Array.isArray(ollamaModels) ? ollamaModels.map((m: any) => {
+      const gbSize = m.size / (1024 * 1024 * 1024);
+      return {
+        id: `ollama:${m.digest || m.name}`,
+        name: m.name,
+        provider: 'Ollama',
+        size: `${gbSize.toFixed(1)} GB`,
+        status: 'installed' as const,
+        description: 'Local model detected via Ollama',
+        quantization: m.name.includes('q4') ? 'Q4' : m.name.includes('q8') ? 'Q8' : m.name.includes('fp16') ? 'FP16' : 'Unknown',
+        tags: ['Local', 'Ollama'],
+        vramRequired: `~${(gbSize * 1.2).toFixed(1)} GB`
+      };
+    }) : [];
 
     const library = Array.isArray(libraryModels) ? libraryModels.map((m: any) => ({
       id: m.id,
@@ -83,34 +104,71 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     if (!window.ipcRenderer) return;
     const status = await window.ipcRenderer.janStatus();
     setJanStatus(status);
+    if (status.apiOnline) {
+      await fetchLibrary();
+    }
   };
 
   // Fetch real PC capabilities and Jan status on mount
   useEffect(() => {
+    let isMounted = true;
+    let interval: ReturnType<typeof setInterval>;
+
     const init = async () => {
       if (window.ipcRenderer) {
-        const caps = await window.ipcRenderer.scanPC();
-        setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) });
-        
-        const path = await window.ipcRenderer.getModelsPath();
-        setModelsPath(path);
-        await refreshJanStatus();
-        
-        // Listen for real-time progress
-        window.ipcRenderer.on('ai:download-progress', (_: any, data: { modelId: string, progress: number }) => {
-          setActiveDownloads(prev => ({ ...prev, [data.modelId]: data.progress }));
-        });
+        try {
+          const caps = await window.ipcRenderer.scanPC();
+          if (isMounted) setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) });
+          
+          const path = await window.ipcRenderer.getModelsPath();
+          if (isMounted) setModelsPath(path);
+          
+          const status = await window.ipcRenderer.janStatus();
+          if (isMounted) setJanStatus(status);
+          const lmStudio = await window.ipcRenderer.checkLMStudio();
+          if (isMounted) setOtherEngines(prev => ({ ...prev, lmStudioOnline: Boolean(lmStudio?.online) }));
 
-        await refreshInstalledModels();
+          await refreshInstalledModels();
+        } catch (e) {
+          console.error('ModelHub init error:', e);
+        }
       }
     };
+
     init();
+    
+    // Refresh library and local models every 30 seconds
+    interval = setInterval(() => {
+      if (isMounted && window.ipcRenderer) {
+        refreshInstalledModels();
+      }
+    }, 30000);
+
+    const handleProgress = (_: any, data: { modelId: string, progress: number }) => {
+      if (isMounted) {
+        setActiveDownloads(prev => ({ ...prev, [data.modelId]: data.progress }));
+        if (data.progress === 100) {
+          setTimeout(() => isMounted && fetchLibrary(), 1000);
+        }
+      }
+    };
+
+    window.ipcRenderer?.on('ai:download-progress', handleProgress);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      if (window.ipcRenderer?.removeAllListeners) {
+        window.ipcRenderer.removeAllListeners('ai:download-progress');
+      }
+    };
   }, []);
 
   const recommendedModels = useMemo(() => {
     return [
+      { id: 'MiniMaxAI/MiniMax-M2.5-GGUF', name: 'MiniMax M2.5 GGUF (mimo2.5)', size: '15-30 GB', vram: '12 GB', reason: 'SOTA Agentic' },
       { id: 'bartowski/Meta-Llama-3-8B-Instruct-GGUF', name: 'Llama 3 8B Instruct GGUF', size: '4-8 GB', vram: '6 GB', reason: 'Balanced' },
-      { id: 'bartowski/Mistral-7B-Instruct-v0.3-GGUF', name: 'Mistral 7B Instruct GGUF', size: '4-7 GB', vram: '6 GB', reason: 'Fast' },
+      { id: 'bartowski/Mistral-7B-Instruct-v0.3-GGUF', name: 'Mistral 7B Instruct v0.3', size: '4-7 GB', vram: '6 GB', reason: 'Fast' },
       { id: 'bartowski/Phi-3-mini-4k-instruct-GGUF', name: 'Phi-3 Mini GGUF', size: '2-4 GB', vram: '4 GB', reason: 'Lightning Fast' }
     ];
   }, []);
@@ -151,12 +209,14 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   };
 
   const handleDownload = async (modelId: string) => {
-    console.log('Downloading model:', modelId);
+    // Handle alias
+    const targetId = modelId.toLowerCase() === 'mimo2.5' ? 'MiniMaxAI/MiniMax-M2.5-GGUF' : modelId;
+    console.log('Downloading model:', targetId);
     if (window.ipcRenderer) {
-      setActiveDownloads(prev => ({ ...prev, [modelId]: 0 }));
+      setActiveDownloads(prev => ({ ...prev, [targetId]: 0 }));
       
       try {
-        const result = await window.ipcRenderer.downloadHF(modelId);
+        const result = await window.ipcRenderer.downloadHF(targetId);
         if (!result.ok) {
           throw new Error(result.error || 'Download failed. Try a GGUF model repository.');
         }
@@ -169,7 +229,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         setTimeout(() => {
           setActiveDownloads(prev => {
             const next = { ...prev };
-            delete next[modelId];
+            delete next[targetId];
             return next;
           });
         }, 3000);
@@ -178,7 +238,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         alert(e instanceof Error ? e.message : 'Download failed. Search for the model first, then try again.');
         setActiveDownloads(prev => {
           const next = { ...prev };
-          delete next[modelId];
+          delete next[targetId];
           return next;
         });
       }
@@ -186,23 +246,34 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   };
 
   const handleLoadModel = async (model: LocalModel) => {
-    console.log('Loading model:', model.name);
-    setEngineMessage(`Loading ${model.name} through Jan/TurboQuant...`);
-    if (window.ipcRenderer && model.provider === 'Jan') {
-      const result = await window.ipcRenderer.loadJanModel({ name: model.name, path: model.path });
-      await refreshJanStatus();
-      if (!result.ok) {
-        setEngineMessage(result.error || 'Jan/TurboQuant could not start. Install or start Jan and try again.');
-        return;
+    try {
+      console.log('Loading model:', model.name);
+      setEngineMessage(`Loading ${model.name} through Jan/TurboQuant...`);
+      
+      if (window.ipcRenderer && model.provider === 'Jan') {
+        // Wrap IPC in a try-catch and add a timeout safety
+        const result = await window.ipcRenderer.loadJanModel({ name: model.name, path: model.path });
+        
+        if (result && result.ok) {
+          await refreshJanStatus();
+          if (result.warning) {
+            setEngineMessage(result.warning);
+          } else {
+            setEngineMessage(`${result.model || model.name} is selected for Jan/TurboQuant chat.`);
+          }
+        } else {
+          setEngineMessage(result?.error || 'Jan/TurboQuant could not start. Install or start Jan and try again.');
+          return;
+        }
       }
-      if (result.warning) {
-        setEngineMessage(result.warning);
-      } else {
-        setEngineMessage(`${result.model || model.name} is selected for Jan/TurboQuant chat.`);
+
+      // Final step: Update global state and navigate
+      if (onLoadModel) {
+        onLoadModel(model.name, model.provider);
       }
-    }
-    if (onLoadModel) {
-      onLoadModel(model.name, model.provider);
+    } catch (error) {
+      console.error('CRITICAL: handleLoadModel crashed:', error);
+      setEngineMessage('A system error occurred while loading the model. Please check the console.');
     }
   };
 
@@ -225,69 +296,141 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     <div className="flex flex-col h-full bg-[#fafafa]">
       <div className="p-8 max-w-5xl mx-auto w-full space-y-8">
         
-        {/* PC Capabilities & Jan Detection */}
-        <div className="p-6 bg-gray-900 rounded-[32px] text-white flex items-center justify-between shadow-2xl shadow-gray-200">
-          <div className="flex items-center space-x-6">
-            <div className="w-16 h-16 bg-blue-600 rounded-3xl flex items-center justify-center text-2xl shadow-lg shadow-blue-500/20">
-              <Cpu className="w-8 h-8" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="p-8 bg-gray-900 rounded-[40px] text-white space-y-4 shadow-2xl shadow-gray-200 overflow-hidden relative group">
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:rotate-12 transition-transform duration-700">
+              <Cpu className="w-32 h-32" />
             </div>
-            <div>
-              <div className="flex items-center space-x-3">
-                <h2 className="text-lg font-black tracking-tight uppercase">System Capability Detected</h2>
-                <div className={`px-2 py-0.5 text-white text-[8px] font-black uppercase rounded-full ${pcCapabilities.approximate ? 'bg-yellow-500' : 'bg-green-500 animate-pulse'}`}>
+            <div className="relative z-10">
+              <div className="flex items-center space-x-3 mb-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <Cpu className="w-5 h-5 text-white" />
+                </div>
+                <h2 className="text-xl font-black uppercase tracking-tight">System Capability Detected</h2>
+              </div>
+              <div className="flex items-center space-x-2 mb-4">
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${pcCapabilities.approximate ? 'bg-orange-500/20 text-orange-400' : 'bg-green-500/20 text-green-400'}`}>
                   {pcCapabilities.approximate ? 'Fast Estimate' : 'Optimal'}
+                </span>
+                <span className="text-[10px] font-bold text-gray-400">Windows 11 x64</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">GPU</p>
+                  <p className="text-sm font-black text-white truncate">{pcCapabilities.gpu}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">VRAM</p>
+                  <p className="text-sm font-black text-blue-400">{pcCapabilities.vram}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">RAM</p>
+                  <p className="text-sm font-black text-white">{pcCapabilities.ram}</p>
                 </div>
               </div>
-              <div className="flex items-center space-x-4 mt-2">
-                <div className="flex items-center space-x-1.5">
-                  <Monitor className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="text-[11px] font-bold text-gray-300">{pcCapabilities.gpu}</span>
+            </div>
+            <button 
+              onClick={() => window.ipcRenderer?.scanPC()}
+              className="mt-6 w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+            >
+              Rescan PC
+            </button>
+          </div>
+
+          <div className={`p-8 rounded-[40px] text-white space-y-4 shadow-2xl transition-all duration-500 relative overflow-hidden group ${janStatus.apiOnline ? 'bg-blue-600 shadow-blue-100' : 'bg-orange-500 shadow-orange-100'}`}>
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
+              <Zap className="w-32 h-32" />
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <h2 className="text-xl font-black uppercase tracking-tight">Built-in Jan + TurboQuant Engine</h2>
                 </div>
-                <div className="flex items-center space-x-1.5">
-                  <Activity className="w-3.5 h-3.5 text-purple-400" />
-                  <span className="text-[11px] font-bold text-gray-300">{pcCapabilities.vram} VRAM</span>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <Layers className="w-3.5 h-3.5 text-green-400" />
-                  <span className="text-[11px] font-bold text-gray-300">{pcCapabilities.ram} RAM</span>
+                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${janStatus.apiOnline ? 'bg-white/20 text-white' : 'bg-white/20 text-white'}`}>
+                  {janStatus.apiOnline ? 'Online' : 'Offline'}
                 </div>
               </div>
+              <p className="text-sm text-white/80 font-medium leading-relaxed mb-4">
+                {janStatus.apiOnline 
+                  ? 'Jan/TurboQuant engine is active. Your RTX 5000A is optimized for high-speed GGUF inference.' 
+                  : janStatus.installed
+                    ? 'Jan is installed but its local API is not responding on port 1337. Press Start Jan or open Jan manually, then refresh.'
+                    : 'Jan/TurboQuant runtime was not found in the known local paths. Install Jan or place nitro.exe in the app bin folder.'}
+              </p>
+            </div>
+            <div className="flex items-center space-x-3 mt-6">
+              <button 
+                onClick={handleStartJan}
+                className="flex-1 py-4 bg-white text-gray-900 rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl shadow-black/10"
+              >
+                {janStatus.apiOnline ? 'Restart Server' : 'Start Jan TurboQuant'}
+              </button>
             </div>
           </div>
-          <button 
-            onClick={handleScan}
-            disabled={isScanning}
-            className="px-6 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-xs font-black transition-all border border-white/10 flex items-center"
-          >
-            {isScanning ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2 text-yellow-400" />}
-            {isScanning ? 'Detecting...' : 'Rescan PC'}
-          </button>
         </div>
 
-        <div className="p-5 bg-white border border-gray-100 rounded-3xl flex items-center justify-between shadow-sm">
-          <div className="flex items-center space-x-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${janStatus.apiOnline ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-              <Zap className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="text-sm font-black text-gray-900">Built-in Jan + TurboQuant Engine</h3>
-                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${janStatus.apiOnline ? 'bg-green-50 text-green-600' : janStatus.installed ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-600'}`}>
-                  {janStatus.apiOnline ? 'Ready' : janStatus.installed ? 'Installed' : 'Needs Jan'}
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-500 mt-1">
-                Search GGUF models, download to the Aion library, then Load to route chat through Jan/TurboQuant.
-              </p>
-              {engineMessage && <p className="text-[10px] text-blue-600 font-bold mt-2 max-w-2xl">{engineMessage}</p>}
-            </div>
+        {/* Connect to Other Apps Section */}
+        <div className="p-8 bg-blue-600 rounded-[40px] text-white space-y-6 shadow-2xl shadow-blue-200 overflow-hidden relative group">
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
+            <Globe className="w-48 h-48" />
           </div>
-          <div className="flex items-center space-x-2">
-            <button onClick={refreshJanStatus} className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Refresh Jan status">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button onClick={handleStartJan} className="px-5 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black hover:bg-gray-800 transition-all">
-              {janStatus.apiOnline ? 'Restart Check' : 'Start Jan'}
+          <div className="relative z-10">
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                <Share2 className="w-5 h-5 text-white" />
+              </div>
+              <h2 className="text-xl font-black uppercase tracking-tight">Connect to Other Local Apps</h2>
+            </div>
+            <p className="text-sm text-blue-100 max-w-xl font-medium leading-relaxed">
+              Your local models are compatible with OpenAI-style APIs. Use the connection details below to power apps like 
+              <span className="font-bold text-white mx-1">Cursor</span>, 
+              <span className="font-bold text-white mx-1">AnythingLLM</span>, 
+              or <span className="font-bold text-white mx-1">VS Code Extensions</span>.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+            {[
+              { name: 'Jan/TurboQuant', port: '1337', url: 'http://localhost:1337/v1', online: janStatus.apiOnline },
+              { name: 'Ollama', port: '11434', url: 'http://localhost:11434', online: otherEngines.ollamaOnline },
+              { name: 'LM Studio', port: '1234', url: 'http://localhost:1234/v1', online: otherEngines.lmStudioOnline }
+            ].map((engine) => (
+              <div key={engine.name} className="p-4 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">{engine.name}</span>
+                  <div className={`w-2 h-2 rounded-full ${engine.online ? 'bg-green-400 animate-pulse' : 'bg-orange-300'}`} />
+                </div>
+                <div className="bg-black/20 p-2 rounded-xl border border-white/5 flex items-center justify-between group/url">
+                  <code className="text-[10px] font-mono text-blue-100 truncate mr-2">{engine.url}</code>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(engine.url);
+                      setEngineMessage(`Copied ${engine.name} URL to clipboard!`);
+                    }}
+                    className="p-1.5 hover:bg-white/20 rounded-lg transition-all"
+                  >
+                    <Copy className="w-3 h-3 text-white" />
+                  </button>
+                </div>
+                <p className="text-[9px] text-blue-200 font-bold">API Key: <span className="text-white">not-needed</span></p>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-4 flex items-center justify-between relative z-10 border-t border-white/10">
+            <div className="flex items-center space-x-2">
+              <HardDrive className="w-4 h-4 text-blue-200" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-100">Model Files:</span>
+              <code className="text-[10px] bg-black/20 px-2 py-0.5 rounded text-white font-mono">{modelsPath}</code>
+            </div>
+            <button 
+              onClick={() => window.ipcRenderer?.revealModelsFolder()}
+              className="text-[10px] font-black uppercase tracking-widest bg-white text-blue-600 px-4 py-2 rounded-xl hover:bg-blue-50 transition-all shadow-lg shadow-black/10"
+            >
+              Open Model Files
             </button>
           </div>
         </div>
@@ -317,49 +460,128 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
             )}
           </div>
 
-          {hfResults.length > 0 && (
-            <div className="bg-white border border-gray-100 rounded-[32px] overflow-hidden shadow-xl animate-in fade-in zoom-in-95 duration-200">
-              <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Hugging Face Results</span>
-                <span className="text-[10px] font-bold text-blue-500">{hfResults.length} found</span>
+          {/* Recommended Models */}
+          {!searchQuery && hfResults.length === 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2 px-1">
+                <Sparkles className="w-4 h-4 text-blue-500" />
+                <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Recommended for Your PC</h2>
               </div>
-              <div className="divide-y divide-gray-50">
-                {hfResults.map((m) => (
-                  <div key={m.id} className="p-4 flex items-center justify-between hover:bg-blue-50/30 transition-colors group">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-white border border-gray-100 rounded-lg flex items-center justify-center">
-                        <Box className="w-4 h-4 text-gray-400" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {recommendedModels.map((m) => (
+                  <div key={m.id} className="p-5 bg-white border border-gray-100 rounded-[28px] flex items-center justify-between group hover:border-blue-100 transition-all">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                        <Box className="w-5 h-5" />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-gray-900">{m.name}</p>
-                        <p className="text-[10px] text-gray-400 font-medium">
-                          {m.size && <span className="text-blue-500 mr-2">{m.size}</span>}
-                          ÔÇó {m.downloads.toLocaleString()} downloads
-                        </p>
+                        <h3 className="text-sm font-black text-gray-900">{m.name}</h3>
+                        <div className="flex items-center space-x-2 mt-0.5">
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{m.size}</span>
+                          <span className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">{m.reason}</span>
+                        </div>
                       </div>
                     </div>
                     <button 
-                      onClick={() => handleDownload(m.name)}
-                      className="px-4 py-1.5 bg-gray-900 text-white rounded-xl text-[10px] font-black hover:bg-gray-800 transition-all group-hover:opacity-100"
+                      onClick={() => handleDownload(m.id)}
+                      disabled={activeDownloads[m.id] !== undefined}
+                      className="p-2.5 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-100 transition-all"
                     >
-                      {activeDownloads[m.name] !== undefined ? `${activeDownloads[m.name]}%` : 'Download'}
+                      {activeDownloads[m.id] !== undefined ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Jan Models */}
+          {janStatus.apiOnline && (
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2 px-1">
+                <Cpu className="w-4 h-4 text-blue-500" />
+                <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Jan/TurboQuant Engine</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {janStatus.models.map((m: any) => (
+                  <div key={m.id} className="p-5 bg-white border border-gray-100 rounded-[28px] flex items-center justify-between group hover:border-blue-100 transition-all">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                        <Box className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-gray-900">{m.id}</h3>
+                        <div className="flex items-center space-x-2 mt-0.5">
+                          <span className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">Jan Library</span>
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Active</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => onLoadModel?.(m.id, 'Jan')}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-100"
+                    >
+                      Load
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Search Results */}
+          {hfResults.length > 0 && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center space-x-2">
+                  <Search className="w-4 h-4 text-blue-500" />
+                  <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Hugging Face GGUF Search</h2>
+                </div>
+                <span className="text-[10px] font-bold text-gray-400">{hfResults.length} models found</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {hfResults.map((model) => (
+                  <div key={model.id} className="group p-5 bg-white border border-gray-100 rounded-[28px] hover:border-blue-200 hover:shadow-xl hover:shadow-blue-50/50 transition-all flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 group-hover:scale-105 transition-transform">
+                        <Cpu className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-gray-900 group-hover:text-blue-600 transition-colors">{model.name}</h3>
+                        <div className="flex items-center space-x-3 mt-1">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center">
+                            <Download className="w-3 h-3 mr-1" />
+                            {model.downloads.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{model.size}</span>
+                          {model.tags?.slice(0, 2).map((tag: string) => (
+                            <span key={tag} className="px-1.5 py-0.5 bg-gray-50 text-gray-400 text-[8px] font-black uppercase rounded border border-gray-100">{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleDownload(model.name)}
+                      disabled={activeDownloads[model.name] !== undefined}
+                      className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                        activeDownloads[model.name] !== undefined 
+                          ? 'bg-blue-50 text-blue-400 cursor-not-allowed' 
+                          : 'bg-gray-900 text-white hover:bg-gray-800 shadow-lg shadow-gray-200'
+                      }`}
+                    >
+                      {activeDownloads[model.name] !== undefined ? `Downloading ${activeDownloads[model.name]}%` : 'Download'}
                     </button>
                   </div>
                 ))}
               </div>
               {Object.keys(activeDownloads).length > 0 && (
-                <div className="p-4 bg-blue-50 border-t border-blue-100 space-y-3">
+                <div className="p-4 bg-blue-50 border-t border-blue-100 space-y-3 rounded-[28px]">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Zap className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
                       <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">TurboQuant Real-Time Monitor</span>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping" />
-                      <span className="text-[8px] font-black text-blue-500 uppercase">Processing</span>
-                    </div>
                   </div>
-                  
                   {Object.entries(activeDownloads).map(([id, progress]) => (
                     <div key={id} className="space-y-1.5">
                       <div className="flex justify-between text-[9px] font-bold text-blue-800">
@@ -372,15 +594,123 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      {progress === 100 && (
-                        <p className="text-[8px] text-blue-500 font-mono truncate">
-                          Saved to: {modelsPath}\{id.replace(/\//g, '_')}.gguf
-                        </p>
-                      )}
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Cloud Providers (Free Tier Only) */}
+        <div className="space-y-4 pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center space-x-2">
+              <Zap className="w-4 h-4 text-blue-500" />
+              <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Free Cloud APIs (Ready)</h2>
+            </div>
+            <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Unlimited Free Tier Only</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-5 bg-white border border-gray-100 rounded-[28px] flex items-center justify-between group hover:border-blue-100 transition-all">
+              <div className="flex items-center space-x-4">
+                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900">OpenRouter (Free Tier)</h3>
+                  <p className="text-[10px] text-gray-500">Auto-routes to best free model (Llama 3, Gemma 2...)</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => onLoadModel?.('openrouter/auto-free', 'OpenRouter')}
+                className="px-4 py-2 bg-gray-50 text-gray-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100"
+              >
+                Use
+              </button>
+            </div>
+            <div className="p-5 bg-white border border-gray-100 rounded-[28px] flex items-center justify-between group hover:border-green-100 transition-all">
+              <div className="flex items-center space-x-4">
+                <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900">NVIDIA NIM (Free)</h3>
+                  <p className="text-[10px] text-gray-500">Fast inference on Llama 3 70B & 8B</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => onLoadModel?.('meta/llama3-70b-instruct', 'Nvidia')}
+                className="px-4 py-2 bg-gray-50 text-gray-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100"
+              >
+                Use
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Local Library Section */}
+          {libraryModels.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center space-x-2">
+                  <HardDrive className="w-4 h-4 text-green-500" />
+                  <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Local TurboQuant Library</h2>
+                </div>
+                <button 
+                  onClick={() => window.ipcRenderer?.revealModelsFolder()}
+                  className="text-[10px] font-bold text-blue-500 hover:underline uppercase tracking-widest"
+                >
+                  Open Folder
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {libraryModels.map((model) => (
+                  <div key={model.id} className="group p-6 bg-white border border-gray-100 rounded-[32px] hover:border-green-200 hover:shadow-xl hover:shadow-green-50/50 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-4">
+                        <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-500">
+                          <Cpu className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-black text-gray-900">{model.name}</h3>
+                          <p className="text-[10px] text-gray-500 leading-relaxed line-clamp-2">{model.description}</p>
+                          <div className="flex items-center space-x-3 pt-2">
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{model.quantization}</span>
+                            <span className="text-[9px] font-bold text-green-600 uppercase tracking-widest">{(model.size / (1024 * 1024 * 1024)).toFixed(1)} GB</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col space-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => handleLoadModel({
+                            id: model.id,
+                            name: model.name,
+                            path: model.path,
+                            provider: model.provider || 'Jan',
+                            size: `${(model.size / (1024 * 1024 * 1024)).toFixed(1)} GB`,
+                            status: 'installed',
+                            description: model.description,
+                            quantization: model.quantization,
+                            tags: model.tags || [],
+                            vramRequired: model.vramRequired || 'N/A'
+                          })}
+                          className="p-2 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-all shadow-lg shadow-gray-200"
+                          title="Load Model"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteModel(model.id)}
+                          className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all"
+                          title="Delete Model"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -439,6 +769,15 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
             <button onClick={() => window.ipcRenderer?.revealModelsFolder()} className="text-[10px] font-bold text-blue-600 hover:underline">Open Library Folder</button>
           </div>
           <div className="bg-white border border-gray-100 rounded-[32px] overflow-hidden shadow-sm divide-y divide-gray-50">
+            {localModels.length === 0 && (
+              <div className="p-8 text-center">
+                <p className="text-sm font-black text-gray-900">No installed local models detected yet</p>
+                <p className="text-xs text-gray-500 mt-1">Ollama, LM Studio, or Jan models will appear here after refresh.</p>
+                <button onClick={refreshInstalledModels} className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-black">
+                  Refresh Models
+                </button>
+              </div>
+            )}
             {localModels.map((model) => (
               <div key={model.id} className="p-6 flex items-center justify-between hover:bg-gray-50/50 transition-all group">
                 <div className="flex items-start space-x-4">
@@ -453,7 +792,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                     <p className="text-[11px] text-gray-500 font-medium leading-relaxed max-w-md">{model.description}</p>
                     <div className="flex items-center space-x-4 pt-1">
                       <div className="flex items-center space-x-2">
-                        {model.tags.map(tag => (
+                        {(model.tags || []).map(tag => (
                           <span key={tag} className="px-1.5 py-0.5 bg-gray-50 text-gray-400 text-[8px] font-black uppercase rounded border border-gray-100">{tag}</span>
                         ))}
                       </div>

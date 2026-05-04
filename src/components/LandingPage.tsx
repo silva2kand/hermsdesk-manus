@@ -26,7 +26,8 @@ import {
   X,
   File,
   Folder,
-  Cloud
+  Cloud,
+  Zap
 } from 'lucide-react';
 
 const ToolButton = ({ label, icon: Icon, onClick }: any) => (
@@ -54,11 +55,21 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
   const [showMore, setShowMore] = useState(false);
   const [showUploads, setShowUploads] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const [isPreparing, setIsPreparing] = useState(false);
 
-  const startTask = (text = prompt) => {
+  const startTask = (text = prompt, agentic = false) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    onStartTask?.(trimmed);
+    
+    if (agentic) {
+      setIsPreparing(true);
+      setTimeout(() => {
+        onStartTask?.(trimmed, agentic);
+        setIsPreparing(false);
+      }, 800);
+    } else {
+      onStartTask?.(trimmed, agentic);
+    }
   };
 
   const attachFiles = async () => {
@@ -76,6 +87,31 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
     }
     setShowUploads(false);
   };
+
+  const [activeConnectorsCount, setActiveConnectorsCount] = useState(0);
+
+  React.useEffect(() => {
+    if (window.ipcRenderer) {
+      window.ipcRenderer.getConnectors().then((c: any) => {
+        setActiveConnectorsCount(Object.values(c).filter(Boolean).length);
+      });
+    }
+  }, []);
+
+  if (isPreparing) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-white animate-in fade-in duration-500">
+        <div className="w-20 h-20 bg-gray-900 rounded-3xl flex items-center justify-center mb-6 shadow-2xl shadow-gray-200 animate-bounce">
+          <Zap className="w-10 h-10 text-blue-400 fill-blue-400" />
+        </div>
+        <h2 className="text-xl font-serif text-gray-900">Initializing TurboQuant Agent...</h2>
+        <div className="flex items-center space-x-2 mt-4">
+          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping" />
+          <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Routing to Local Model Hub</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 bg-[#fafafa]">
@@ -124,12 +160,14 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
                   )}
                 </div>
 
-                <div className="flex items-center space-x-0.5 px-3 py-1.5 bg-gray-50 rounded-2xl border border-gray-100">
-                   <div className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
-                   <div className="w-2.5 h-2.5 bg-green-500 rounded-full" />
-                   <div className="w-2.5 h-2.5 bg-red-500 rounded-full" />
-                   <span className="text-[10px] font-black text-gray-400 ml-1.5">+11</span>
-                </div>
+                {activeConnectorsCount > 0 && (
+                  <div className="flex items-center space-x-0.5 px-3 py-1.5 bg-gray-50 rounded-2xl border border-gray-100">
+                     <div className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
+                     <div className="w-2.5 h-2.5 bg-green-500 rounded-full" />
+                     <div className="w-2.5 h-2.5 bg-red-500 rounded-full" />
+                     <span className="text-[10px] font-black text-gray-400 ml-1.5">+{activeConnectorsCount}</span>
+                  </div>
+                )}
 
                 <button onClick={onOpenComputer} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all" title="My Computer">
                   <Monitor className="w-5 h-5" />
@@ -179,10 +217,10 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
 
           {/* Tool Shortcuts */}
           <div className="flex items-center justify-center space-x-3 pt-4 relative">
-            <ToolButton label="Create slides" icon={Layout} onClick={() => startTask('Create a slide deck outline with titles, speaker notes, and image ideas.')} />
-            <ToolButton label="Build website" icon={Globe} onClick={() => startTask('Build a polished website with responsive sections and real content.')} />
-            <ToolButton label="Develop desktop apps" icon={Monitor} onClick={() => startTask('Plan and build a Windows desktop app feature with Electron.')} />
-            <ToolButton label="Design" icon={Palette} onClick={() => startTask('Design a clean interface and explain the layout choices.')} />
+            <ToolButton label="Create slides" icon={Layout} onClick={() => startTask('Create a slide deck outline with titles, speaker notes, and image ideas.', true)} />
+            <ToolButton label="Build website" icon={Globe} onClick={() => startTask('Build a polished website with responsive sections and real content.', true)} />
+            <ToolButton label="Develop desktop apps" icon={Monitor} onClick={() => startTask('Plan and build a Windows desktop app feature with Electron.', true)} />
+            <ToolButton label="Design" icon={Palette} onClick={() => startTask('Design a clean interface and explain the layout choices.', true)} />
             
             <div className="relative">
               <button 
@@ -196,16 +234,16 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
               
               {showMore && (
                 <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-2xl p-2 z-[60] animate-in fade-in slide-in-from-top-2">
-                  <ToolItem icon={Monitor} label="Develop apps" />
-                  <ToolItem icon={Calendar} label="Schedule task" />
-                  <ToolItem icon={SearchIcon} label="Wide Research" />
-                  <ToolItem icon={Table} label="Spreadsheet" />
-                  <ToolItem icon={BarChart3} label="Visualization" />
-                  <ToolItem icon={Video} label="Video" />
-                  <ToolItem icon={Music} label="Audio" />
+                  <ToolItem icon={Monitor} label="Develop apps" onClick={() => startTask('Develop a new application feature', true)} />
+                  <ToolItem icon={Calendar} label="Schedule task" onClick={() => startTask('Schedule a new automated task', true)} />
+                  <ToolItem icon={SearchIcon} label="Wide Research" onClick={() => startTask('Perform extensive web and local research', true)} />
+                  <ToolItem icon={Table} label="Spreadsheet" onClick={() => startTask('Analyze data in a spreadsheet', true)} />
+                  <ToolItem icon={BarChart3} label="Visualization" onClick={() => startTask('Create data visualizations', true)} />
+                  <ToolItem icon={Video} label="Video" onClick={() => startTask('Generate a video production plan', true)} />
+                  <ToolItem icon={Music} label="Audio" onClick={() => startTask('Create an audio/music workflow', true)} />
                   <div className="h-px bg-gray-50 my-1" />
-                  <ToolItem icon={MessageCircle} label="Chat mode" />
-                  <ToolItem icon={Layout} label="Playbook" />
+                  <ToolItem icon={MessageCircle} label="Chat mode" onClick={() => startTask('Enter interactive chat mode', false)} />
+                  <ToolItem icon={Layout} label="Playbook" onClick={() => startTask('Create a step-by-step playbook', true)} />
                 </div>
               )}
             </div>
@@ -216,8 +254,8 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer }: a
   );
 };
 
-const ToolItem = ({ icon: Icon, label }: any) => (
-  <button className="flex items-center w-full px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
+const ToolItem = ({ icon: Icon, label, onClick }: any) => (
+  <button onClick={onClick} className="flex items-center w-full px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 rounded-xl transition-colors">
     <Icon className="w-4 h-4 mr-3 text-gray-400" />
     {label}
   </button>

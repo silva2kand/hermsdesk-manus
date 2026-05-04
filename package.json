@@ -9,6 +9,7 @@
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "vite",
+    "electron:build": "vite build && electron-builder",
     "shortcut": "powershell.exe -ExecutionPolicy Bypass -File ./scripts/create-shortcut.ps1"
   },
   "build": {

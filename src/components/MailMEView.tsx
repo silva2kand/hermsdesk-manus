@@ -8,34 +8,114 @@ import { mailCategories } from '../data/hermesAgents';
 export const MailMEView = () => {
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
-  const [workflowEmails, setWorkflowEmails] = useState([
-    { email: 'support@me.bot', desc: 'Automatically creates support tickets' },
-    { email: 'orders@me.bot', desc: 'Processes incoming customer orders' }
-  ]);
-  const [approvedSenders, setApprovedSenders] = useState([
-    'newtonstore0@gmail.com',
-    'silvak2023@outlook.com',
-    'sva23@live.co.uk',
-    'yourshop1@hotmail.com',
-    'shivakand115@gmail.com',
-    'silvakretail@gmail.com'
-  ]);
-  const [enabledCategories, setEnabledCategories] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(mailCategories.map(category => [category.id, true]))
-  );
+  const [workflowEmails, setWorkflowEmails] = useState<{email: string, desc: string}[]>([]);
+  const [approvedSenders, setApprovedSenders] = useState<string[]>([]);
+  const [enabledCategories, setEnabledCategories] = useState<Record<string, boolean>>({});
   const [connectorState, setConnectorState] = useState<Record<string, boolean>>({});
+  const [classicOutlookStatus, setClassicOutlookStatus] = useState<any>(null);
+  const [classicOutlookMessages, setClassicOutlookMessages] = useState<any[]>([]);
+  const [loadingOutlook, setLoadingOutlook] = useState(false);
+  const [graphStatus, setGraphStatus] = useState<any>(null);
+  const [graphMessages, setGraphMessages] = useState<any[]>([]);
+  const [graphLogin, setGraphLogin] = useState<any>(null);
+  const [loadingGraph, setLoadingGraph] = useState(false);
 
   React.useEffect(() => {
-    refreshMailConnectors();
+    const loadSettings = async () => {
+      if (window.ipcRenderer) {
+        const settings = await (window.ipcRenderer as any).getMailSettings();
+        setWorkflowEmails(settings.workflowEmails);
+        setApprovedSenders(settings.approvedSenders);
+        setEnabledCategories(settings.enabledCategories);
+        refreshMailConnectors();
+        refreshClassicOutlook();
+        refreshGraphStatus();
+      }
+    };
+    loadSettings();
   }, []);
+
+  const saveSettings = async (updates: any) => {
+    if (window.ipcRenderer) {
+      const current = { workflowEmails, approvedSenders, enabledCategories };
+      const next = { ...current, ...updates };
+      await (window.ipcRenderer as any).saveMailSettings(next);
+    }
+  };
 
   const refreshMailConnectors = async () => {
     const state = await window.ipcRenderer?.getConnectors?.();
     setConnectorState(state || {});
   };
 
+  const refreshClassicOutlook = async () => {
+    if (!window.ipcRenderer?.getClassicOutlookStatus) return;
+    const status = await window.ipcRenderer.getClassicOutlookStatus();
+    setClassicOutlookStatus(status);
+  };
+
+  const readClassicOutlook = async () => {
+    if (!window.ipcRenderer?.listClassicOutlookMessages) return;
+    setLoadingOutlook(true);
+    try {
+      const result = await window.ipcRenderer.listClassicOutlookMessages(12);
+      if (Array.isArray(result)) {
+        setClassicOutlookMessages(result);
+        showNotice(`Read ${result.length} recent classic Outlook messages locally.`);
+      } else {
+        showNotice(result.error || 'Could not read classic Outlook messages.');
+      }
+    } finally {
+      setLoadingOutlook(false);
+    }
+  };
+
+  const refreshGraphStatus = async () => {
+    const status = await window.ipcRenderer?.getMicrosoftGraphStatus?.();
+    if (status) setGraphStatus(status);
+  };
+
+  const startGraphLogin = async () => {
+    const result = await window.ipcRenderer?.startMicrosoftGraphLogin?.();
+    setGraphLogin(result);
+    if (result?.ok) {
+      showNotice(`Microsoft sign-in opened. Enter code ${result.userCode}.`);
+    } else {
+      showNotice(result?.error || 'Could not start Microsoft sign-in.');
+    }
+  };
+
+  const completeGraphLogin = async () => {
+    setLoadingGraph(true);
+    try {
+      const result = await window.ipcRenderer?.completeMicrosoftGraphLogin?.();
+      if (result?.ok) {
+        setGraphLogin(null);
+        await refreshGraphStatus();
+        showNotice(`Microsoft Graph connected: ${result.profile?.mail || result.profile?.userPrincipalName || result.profile?.displayName}`);
+      } else {
+        showNotice(result?.error || 'Microsoft sign-in is not complete yet.');
+      }
+    } finally {
+      setLoadingGraph(false);
+    }
+  };
+
+  const readGraphInbox = async () => {
+    setLoadingGraph(true);
+    try {
+      const messages = await window.ipcRenderer?.listMicrosoftGraphMessages?.(12);
+      setGraphMessages(messages || []);
+      showNotice(`Read ${messages?.length || 0} Microsoft Graph messages.`);
+    } catch (error: any) {
+      showNotice(error?.message || 'Could not read Microsoft Graph mailbox.');
+    } finally {
+      setLoadingGraph(false);
+    }
+  };
+
   const copyEmail = () => {
-    navigator.clipboard.writeText('newtonstore0422@me.bot');
+    navigator.clipboard.writeText('no-mail-connected@me.local');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -49,20 +129,32 @@ export const MailMEView = () => {
     const name = window.prompt('Workflow name, for example returns or invoices');
     if (!name) return;
     const safe = name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'workflow';
-    setWorkflowEmails(prev => [...prev, { email: `${safe}@me.bot`, desc: `Creates ${name} tasks automatically` }]);
+    const next = [...workflowEmails, { email: `${safe}@me.bot`, desc: `Creates ${name} tasks automatically` }];
+    setWorkflowEmails(next);
+    saveSettings({ workflowEmails: next });
     showNotice(`Workflow email created: ${safe}@me.bot`);
   };
 
   const addSender = () => {
     const email = window.prompt('Approved sender email');
     if (!email) return;
-    setApprovedSenders(prev => prev.includes(email) ? prev : [...prev, email]);
+    const next = approvedSenders.includes(email) ? approvedSenders : [...approvedSenders, email];
+    setApprovedSenders(next);
+    saveSettings({ approvedSenders: next });
     showNotice(`Approved sender added: ${email}`);
   };
 
   const removeSender = (email: string) => {
-    setApprovedSenders(prev => prev.filter(sender => sender !== email));
+    const next = approvedSenders.filter(sender => sender !== email);
+    setApprovedSenders(next);
+    saveSettings({ approvedSenders: next });
     showNotice(`Removed approved sender: ${email}`);
+  };
+
+  const toggleCategory = (id: string) => {
+    const next = { ...enabledCategories, [id]: !enabledCategories[id] };
+    setEnabledCategories(next);
+    saveSettings({ enabledCategories: next });
   };
 
   return (
@@ -100,7 +192,7 @@ export const MailMEView = () => {
           </button>
         </div>
         <div className="bg-white/80 p-3 rounded-xl border border-blue-100/50 flex items-center justify-center">
-          <code className="text-sm font-black text-blue-700">newtonstore0422@me.bot</code>
+          <code className="text-sm font-black text-blue-700">no-mail-connected@me.local</code>
         </div>
       </div>
 
@@ -112,17 +204,155 @@ export const MailMEView = () => {
           onRefresh={refreshMailConnectors}
         />
         <MailConnectorStatus
-          label="Gmail"
-          connected={Boolean(connectorState.gmail || connectorState['google-account'])}
-          detail={connectorState.gmail || connectorState['google-account'] ? 'Connected for mail tasks' : 'Not connected yet'}
-          onRefresh={refreshMailConnectors}
+          label="Microsoft Graph"
+          connected={Boolean(graphStatus?.connected)}
+          detail={graphStatus?.connected ? graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName || 'Connected mailbox' : 'OAuth mailbox not connected'}
+          onRefresh={refreshGraphStatus}
         />
         <MailConnectorStatus
-          label="Outlook Mail"
-          connected={Boolean(connectorState['outlook-mail'])}
-          detail={connectorState['outlook-mail'] ? 'Connected for mail tasks' : 'Not connected yet'}
-          onRefresh={refreshMailConnectors}
+          label="Classic Outlook"
+          connected={Boolean(classicOutlookStatus?.ok)}
+          detail={classicOutlookStatus?.ok ? `${classicOutlookStatus.itemCount || 0} inbox items via desktop profile` : 'Desktop profile not readable yet'}
+          onRefresh={refreshClassicOutlook}
         />
+      </div>
+
+      <div className="p-6 bg-white border border-gray-100 rounded-3xl space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-black text-gray-900">Microsoft Graph Mailbox</h3>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Uses your app registration: delegated `Mail.Read`, `Mail.ReadWrite`, `MailboxSettings.Read`, `offline_access`. No client secret.
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            {!graphStatus?.connected && (
+              <button
+                onClick={startGraphLogin}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all"
+              >
+                Connect Microsoft
+              </button>
+            )}
+            {graphLogin?.userCode && (
+              <button
+                onClick={completeGraphLogin}
+                disabled={loadingGraph}
+                className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300"
+              >
+                Complete Login
+              </button>
+            )}
+            {graphStatus?.connected && (
+              <button
+                onClick={readGraphInbox}
+                disabled={loadingGraph}
+                className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300"
+              >
+                {loadingGraph ? 'Reading...' : 'Read Graph Inbox'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {graphLogin?.userCode && (
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+            <p className="text-[10px] font-bold text-blue-700">Enter this Microsoft code:</p>
+            <p className="text-2xl font-black tracking-widest text-blue-900 mt-1">{graphLogin.userCode}</p>
+            <p className="text-[10px] text-blue-700 mt-2">{graphLogin.message}</p>
+          </div>
+        )}
+
+        {graphStatus?.connected && (
+          <div className="p-3 bg-green-50 border border-green-100 rounded-2xl text-[10px] font-bold text-green-700">
+            Connected: {graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName || graphStatus.profile?.displayName}
+          </div>
+        )}
+
+        {graphMessages.length > 0 && (
+          <div className="divide-y divide-gray-50 border border-gray-100 rounded-2xl overflow-hidden">
+            {graphMessages.map((message) => (
+              <button
+                key={message.id}
+                onClick={() => {
+                  navigator.clipboard.writeText(`From: ${message.sender} <${message.senderEmail}>\nSubject: ${message.subject}\n\n${message.bodyPreview}`);
+                  showNotice('Graph email summary copied for ME task input.');
+                }}
+                className="w-full p-4 text-left hover:bg-blue-50/40 transition-all"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-black text-gray-900 truncate">{message.subject || '(No subject)'}</p>
+                  <span className={`text-[8px] font-black uppercase ${message.unread ? 'text-blue-600' : 'text-gray-300'}`}>
+                    {message.unread ? 'Unread' : 'Read'}
+                  </span>
+                </div>
+                <p className="text-[10px] font-bold text-gray-500 mt-1">{message.sender || message.senderEmail} · {new Date(message.receivedAt).toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500 mt-2 line-clamp-2">{message.bodyPreview}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="p-6 bg-white border border-gray-100 rounded-3xl space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-black text-gray-900">Classic Outlook Local Inbox</h3>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Reads your installed classic Outlook profile on this PC using Windows COM. No paid API, no cloud relay.
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => window.ipcRenderer?.openApp('classic outlook')}
+              className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all"
+            >
+              Open Outlook
+            </button>
+            <button
+              onClick={readClassicOutlook}
+              disabled={loadingOutlook}
+              className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300"
+            >
+              {loadingOutlook ? 'Reading...' : 'Read Inbox'}
+            </button>
+          </div>
+        </div>
+
+        {classicOutlookStatus?.ok && (
+          <div className="p-3 bg-green-50 border border-green-100 rounded-2xl text-[10px] font-bold text-green-700">
+            Profile: {classicOutlookStatus.profile || 'Default'} · Accounts: {(classicOutlookStatus.accounts || []).map((a: any) => a.smtpAddress || a.displayName).filter(Boolean).join(', ') || 'local Outlook account'}
+          </div>
+        )}
+        {classicOutlookStatus && !classicOutlookStatus.ok && (
+          <div className="p-3 bg-orange-50 border border-orange-100 rounded-2xl text-[10px] font-bold text-orange-700">
+            {classicOutlookStatus.error || 'Classic Outlook could not be reached. Open Outlook once, then refresh.'}
+          </div>
+        )}
+
+        {classicOutlookMessages.length > 0 && (
+          <div className="divide-y divide-gray-50 border border-gray-100 rounded-2xl overflow-hidden">
+            {classicOutlookMessages.map((message) => (
+              <button
+                key={message.id}
+                onClick={() => {
+                  navigator.clipboard.writeText(`From: ${message.sender}\nSubject: ${message.subject}\n\n${message.bodyPreview}`);
+                  showNotice('Email summary copied for ME task input.');
+                }}
+                className="w-full p-4 text-left hover:bg-blue-50/40 transition-all"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-black text-gray-900 truncate">{message.subject || '(No subject)'}</p>
+                  <span className={`text-[8px] font-black uppercase ${message.unread ? 'text-blue-600' : 'text-gray-300'}`}>
+                    {message.unread ? 'Unread' : 'Read'}
+                  </span>
+                </div>
+                <p className="text-[10px] font-bold text-gray-500 mt-1">{message.sender || message.senderEmail} · {new Date(message.receivedAt).toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500 mt-2 line-clamp-2">{message.bodyPreview}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Workflow Emails */}
@@ -203,7 +433,7 @@ export const MailMEView = () => {
           {mailCategories.map(category => (
             <button
               key={category.id}
-              onClick={() => setEnabledCategories(prev => ({ ...prev, [category.id]: !prev[category.id] }))}
+              onClick={() => toggleCategory(category.id)}
               className="p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between hover:border-blue-100 hover:bg-blue-50/30 transition-all text-left"
             >
               <div className="flex items-center space-x-3">

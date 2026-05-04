@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, 
   Palette, 
@@ -16,7 +16,11 @@ import {
   Globe,
   Cpu,
   Smile,
-  Monitor
+  Monitor,
+  Bell,
+  Languages,
+  Moon,
+  Sun
 } from 'lucide-react';
 
 const SettingTab = ({ 
@@ -44,7 +48,70 @@ const SettingTab = ({
 );
 
 export const Settings = () => {
-  const [activeTab, setActiveTab] = useState('Personalization');
+  const [activeTab, setActiveTab] = useState('General');
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [settings, setSettings] = useState<any>({
+    language: 'English',
+    theme: 'Quantum Blue',
+    appearance: 'Dark',
+    notifications: {
+      productUpdates: true,
+      earlyAccess: false,
+      taskEmail: true
+    }
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (window.ipcRenderer) {
+        const savedSettings = await (window.ipcRenderer as any).getGeneralSettings();
+        setSettings(savedSettings);
+        const keys = await (window.ipcRenderer as any).getAPIKeys();
+        setApiKeys(keys);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const saveAPIKey = async (provider: string, key: string) => {
+    if (window.ipcRenderer) {
+      await (window.ipcRenderer as any).saveAPIKey(provider, key);
+      setApiKeys(prev => ({ ...prev, [provider]: key }));
+    }
+  };
+
+  const saveSettings = async (updates: any) => {
+    if (window.ipcRenderer) {
+      const next = { ...settings, ...updates };
+      setSettings(next);
+      await (window.ipcRenderer as any).saveGeneralSettings(next);
+    }
+  };
+
+  const handleCreateShortcut = async () => {
+    if (window.ipcRenderer) {
+      const result = await (window.ipcRenderer as any).createShortcut();
+      if (result.success) {
+        alert('Desktop shortcut created successfully!');
+      } else {
+        alert('Failed to create shortcut: ' + result.error);
+      }
+    }
+  };
+
+  const themes = [
+    { name: 'Quantum Blue', color: 'bg-blue-600' },
+    { name: 'Cyber Neon', color: 'bg-green-400' },
+    { name: 'Eco Fusion', color: 'bg-emerald-500' },
+    { name: 'Solar Flare', color: 'bg-orange-500' }
+  ];
+
+  const cloudProviders = [
+    { id: 'gemini', name: 'Google Gemini', icon: Globe, color: 'bg-blue-500' },
+    { id: 'nvidia', name: 'NVIDIA NIM', icon: Cpu, color: 'bg-green-600' },
+    { id: 'openrouter', name: 'OpenRouter', icon: Zap, color: 'bg-purple-600' },
+    { id: 'huggingface', name: 'Hugging Face', icon: Smile, color: 'bg-orange-500' },
+  ];
 
   return (
     <div className="flex h-full bg-[#fafafa]">
@@ -73,13 +140,8 @@ export const Settings = () => {
                  <span className="text-[10px] font-bold text-gray-400 uppercase">Free Tiers Available</span>
                </div>
                
-               {[
-                 { name: 'Google Gemini', icon: Globe, connected: true, color: 'bg-blue-500' },
-                 { name: 'NVIDIA NIM', icon: Cpu, connected: false, color: 'bg-green-600' },
-                 { name: 'OpenRouter', icon: Zap, connected: true, color: 'bg-purple-600' },
-                 { name: 'Hugging Face', icon: Smile, connected: false, color: 'bg-orange-500' },
-               ].map((p) => (
-                 <div key={p.name} className="p-4 rounded-xl border border-gray-100 bg-white flex items-center justify-between">
+               {cloudProviders.map((p) => (
+                 <div key={p.id} className="p-4 rounded-xl border border-gray-100 bg-white flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className={`w-10 h-10 ${p.color} rounded-xl flex items-center justify-center`}>
                         <p.icon className="w-5 h-5 text-white" />
@@ -90,14 +152,18 @@ export const Settings = () => {
                           type="password" 
                           placeholder="Enter API Key" 
                           className="text-[10px] border-none p-0 focus:ring-0 text-gray-400 bg-transparent w-40"
-                          defaultValue={p.connected ? '********' : ''}
+                          value={apiKeys[p.id] || ''}
+                          onChange={(e) => setApiKeys({ ...apiKeys, [p.id]: e.target.value })}
                         />
                       </div>
                     </div>
-                    <button className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      p.connected ? 'bg-gray-100 text-gray-400' : 'bg-gray-900 text-white hover:bg-gray-800'
-                    }`}>
-                      {p.connected ? 'Connected' : 'Connect'}
+                    <button 
+                      onClick={() => saveAPIKey(p.id, apiKeys[p.id])}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        apiKeys[p.id] ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-900 text-white hover:bg-gray-800'
+                      }`}
+                    >
+                      {apiKeys[p.id] ? 'Saved' : 'Connect'}
                     </button>
                  </div>
                ))}
@@ -189,8 +255,114 @@ export const Settings = () => {
             </div>
           )}
 
+          {activeTab === 'General' && (
+            <div className="space-y-8">
+              <section className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Languages className="w-5 h-5 text-gray-400" />
+                  <h3 className="text-sm font-semibold text-gray-900">Language</h3>
+                </div>
+                <select 
+                  value={settings.language}
+                  onChange={(e) => saveSettings({ language: e.target.value })}
+                  className="w-full p-2.5 bg-white border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none"
+                >
+                  <option>English</option>
+                  <option>Spanish</option>
+                  <option>French</option>
+                  <option>German</option>
+                </select>
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Moon className="w-5 h-5 text-gray-400" />
+                  <h3 className="text-sm font-semibold text-gray-900">Appearance</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  {['Light', 'Dark', 'Follow System'].map((mode) => (
+                    <button 
+                      key={mode}
+                      onClick={() => saveSettings({ appearance: mode })}
+                      className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center space-y-2 ${
+                        settings.appearance === mode ? 'border-blue-600 bg-white shadow-sm' : 'border-gray-50 bg-gray-50/50 hover:border-gray-200'
+                      }`}
+                    >
+                      <div className={`w-full h-12 rounded-lg border ${mode === 'Dark' ? 'bg-gray-900' : 'bg-white'}`} />
+                      <span className="text-xs font-medium">{mode}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Bell className="w-5 h-5 text-gray-400" />
+                  <h3 className="text-sm font-semibold text-gray-900">Communication Preferences</h3>
+                </div>
+                <div className="space-y-3">
+                  {[
+                    { id: 'productUpdates', label: 'Receive product updates' },
+                    { id: 'earlyAccess', label: 'Receive early access to feature releases' },
+                    { id: 'taskEmail', label: 'Email me when my queued task starts' }
+                  ].map((pref) => (
+                    <div key={pref.id} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl">
+                      <span className="text-xs font-medium text-gray-700">{pref.label}</span>
+                      <button 
+                        onClick={() => saveSettings({ notifications: { ...settings.notifications, [pref.id]: !settings.notifications[pref.id] } })}
+                        className={`w-9 h-5 rounded-full relative transition-all ${settings.notifications[pref.id] ? 'bg-blue-600' : 'bg-gray-200'}`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${settings.notifications[pref.id] ? 'left-4.5' : 'left-0.5'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center space-x-3">
+                  <Monitor className="w-5 h-5 text-gray-400" />
+                  <h3 className="text-sm font-semibold text-gray-900">System Integration</h3>
+                </div>
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-blue-900">Desktop Shortcut</p>
+                    <p className="text-[10px] text-blue-700">Create a new shortcut on your Windows desktop for quick access.</p>
+                  </div>
+                  <button 
+                    onClick={handleCreateShortcut}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+                  >
+                    Create Shortcut
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
+
           {activeTab === 'Personalization' && (
             <div className="space-y-8">
+              {/* TurboQuant Themes */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900">TurboQuant Themes</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {themes.map((theme) => (
+                    <button 
+                      key={theme.name}
+                      onClick={() => saveSettings({ theme: theme.name })}
+                      className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center space-y-2 ${
+                        settings.theme === theme.name ? 'border-blue-600 bg-white' : 'border-gray-50 bg-gray-50/50 hover:border-gray-200'
+                      }`}
+                    >
+                      <div className={`w-full h-12 ${theme.color} rounded-lg shadow-sm`} />
+                      <span className="text-[10px] font-black uppercase tracking-tighter">{theme.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
               {/* User Persona Section */}
               <section className="space-y-4">
                 <div className="flex items-center justify-between">

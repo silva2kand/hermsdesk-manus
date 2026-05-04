@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import Store from 'electron-store';
+import { providerService } from '../main'
 
 export interface Model {
   name: string;
@@ -12,333 +14,330 @@ export interface Model {
   digest: string;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// LocalAIService — HermesDesk ME 1.8
+// 
+// ENGINE PRIORITY:
+//   1. Jan + TurboQuant  (built-in, primary, port 1337)
+//   2. Ollama            (optional external, port 11434)
+//   3. LM Studio         (optional external, port 1234)
+//   4. Cloud free-tier   (fallback only — OpenRouter/NVIDIA/Gemini)
+//
+// Jan + TurboQuant is the MAIN ENGINE. It is not optional.
+// It exposes a full OpenAI-compatible API so external apps can
+// connect to it exactly like they connect to Jan, LM Studio, or Ollama.
+// ═══════════════════════════════════════════════════════════════════
+
 export class LocalAIService {
+  private store: any;
+
+  // Built-in Jan + TurboQuant Engine (PRIMARY)
+  private janUrl = 'http://localhost:1337/v1';
+  private activeJanModel = '';
+  private modelsPath = path.join(os.homedir(), 'jan', 'models');
+
+  // Optional External Engines
   private ollamaUrl = 'http://localhost:11434/api';
   private lmStudioUrl = 'http://localhost:1234/v1';
-  private janUrl = 'http://localhost:1337/v1'; // Jan default API port
-  private activeJanModel = '';
+
+  // System resource cache
   private pcCache = {
-    gpu: 'NVIDIA RTX 5000A',
-    vram: '16GB',
-    ram: '64GB',
-    os: 'Windows 11',
+    gpu: 'Detecting...',
+    vram: '0GB',
+    ram: '0GB',
+    os: 'Windows',
     scannedAt: 0,
-    approximate: true
+    approximate: false
   };
-  private resourceCache = {
-    cpu: 0,
-    ram: 0,
-    gpu: 0,
-    gpuModel: 'NVIDIA RTX 5000A',
-    scannedAt: 0
-  };
+
+  constructor(sharedStore?: any) {
+    this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
+  }
+
+  private getNitroSearchPaths() {
+    return [
+      path.join(process.cwd(), 'bin', 'nitro.exe'),
+      path.join(process.resourcesPath || '', 'bin', 'nitro.exe'),
+      path.join(os.homedir(), 'jan', 'nitro.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'nitro.exe')
+    ];
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // BUILT-IN JAN + TURBOQUANT ENGINE (PRIMARY)
+  // ═══════════════════════════════════════════════════════════════
+
+  /** Health check for the built-in Jan + TurboQuant engine */
+  async checkJanEngine(): Promise<boolean> {
+    try {
+      const response = await axios.get(`${this.janUrl}/models`, { timeout: 2000 });
+      return response.status === 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Full status report for the built-in engine */
+  async getJanEngineStatus(): Promise<any> {
+    const isOnline = await this.checkJanEngine();
+    let models: any[] = [];
+    if (isOnline) {
+      try {
+        const resp = await axios.get(`${this.janUrl}/models`);
+        models = resp.data?.data || resp.data?.models || [];
+      } catch (e: any) {
+        console.error('Failed to fetch Jan models:', e.message);
+      }
+    }
+
+    // Detect if another service is occupying port 1337
+    let portOccupiedByOther = false;
+    if (!isOnline) {
+      try {
+        const probe = await axios.get('http://localhost:1337/v1/models', { timeout: 1500 });
+        // If we get a response but it's not Jan format, another service is there
+        portOccupiedByOther = probe.status === 200;
+      } catch (e: any) {
+        // Expected if nothing is running on 1337
+        console.log('Port 1337 probe failed/timeout:', e.message);
+      }
+    }
+
+    const executablePath = this.getNitroSearchPaths().find(p => fs.existsSync(p)) || '';
+
+    return {
+      engine: 'Jan + TurboQuant',
+      role: 'Primary Built-in Engine',
+      apiOnline: isOnline,
+      installed: Boolean(executablePath) || isOnline,
+      port: 1337,
+      apiUrl: this.janUrl,
+      executablePath,
+      activeModel: this.activeJanModel,
+      portOccupiedByOther,
+      models,
+      externalAccessUrl: 'http://localhost:1337/v1'
+    };
+  }
+
+  /** Start the built-in Jan + TurboQuant Nitro server */
+  async startJanEngine() {
+    const status = await this.getJanEngineStatus();
+    if (status.apiOnline) {
+      return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in engine is already running.', status };
+    }
+    if (status.portOccupiedByOther) {
+      return { ok: false, engine: 'Jan + TurboQuant', error: 'Port 1337 is occupied by another service. Please free the port so the built-in engine can start.' };
+    }
+
+    // Attempt to spawn Nitro binary
+    const searchPaths = this.getNitroSearchPaths();
+
+    for (const nitroPath of searchPaths) {
+      if (fs.existsSync(nitroPath)) {
+        console.log(`ME 1.8: Spawning Jan+TurboQuant Nitro from ${nitroPath}`);
+        const nitro = spawn(nitroPath, ['--port', '1337'], {
+          detached: true,
+          stdio: 'ignore'
+        });
+        nitro.unref();
+        
+        // Wait a moment and recheck
+        await new Promise(r => setTimeout(r, 2000));
+        const newStatus = await this.getJanEngineStatus();
+        return { ok: newStatus.apiOnline, engine: 'Jan + TurboQuant', message: newStatus.apiOnline ? 'Built-in engine started successfully.' : 'Engine spawned, still initializing...', status: newStatus };
+      }
+    }
+
+    return { ok: false, engine: 'Jan + TurboQuant', error: 'Nitro binary not found. The built-in engine needs nitro.exe in the bin/ folder or Jan installation directory.' };
+  }
+
+  /** Load a model into the built-in Jan + TurboQuant engine */
+  async loadJanModel(model: { name: string, path?: string }) {
+    console.log(`ME 1.8: Loading model ${model.name} into Jan+TurboQuant engine`);
+    
+    try {
+      // 1. Check if model exists in library
+      const library = await providerService.listLibraryModels();
+      const target = library.find((m: any) => m.name === model.name || m.id === model.name);
+      
+      if (!target) {
+        throw new Error(`Model ${model.name} not found in library. Download it first from Model Hub.`);
+      }
+
+      // 2. Load model into the built-in engine via Jan API
+      const response = await axios.post(`${this.janUrl}/models/load`, {
+        model: target.id
+      }, { timeout: 30000 });
+
+      if (response.status === 200) {
+        this.activeJanModel = model.name;
+        this.store.set('activeJanModel', model.name);
+        return { ok: true, engine: 'Jan + TurboQuant', model: model.name, status: await this.getJanEngineStatus() };
+      }
+    } catch (e: any) {
+      console.error('ME 1.8: Model load failed:', e.message);
+      // Fallback: Set active model in state so user can try chat
+      this.activeJanModel = model.name;
+      this.store.set('activeJanModel', model.name);
+      return {
+        ok: true,
+        engine: 'Jan + TurboQuant',
+        model: model.name,
+        warning: `Selected ${model.name}. If the built-in engine is not responding, try starting it first.`,
+        status: await this.getJanEngineStatus()
+      };
+    }
+    return { ok: false, error: 'Failed to communicate with the built-in Jan+TurboQuant engine.' };
+  }
+
+  /** Chat with the built-in Jan + TurboQuant engine (PRIMARY) */
+  async chatWithJan(model: string, messages: any[]): Promise<any> {
+    try {
+      const response = await axios.post(`${this.janUrl}/chat/completions`, {
+        model: model || this.activeJanModel || 'local-model',
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        stream: false
+      }, { timeout: 120000 });
+      
+      const content = response.data?.choices?.[0]?.message?.content || '';
+      return { 
+        message: { content }, 
+        engine: 'Jan + TurboQuant',
+        model: model || this.activeJanModel
+      };
+    } catch (error: any) {
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error('Built-in Jan+TurboQuant engine is not responding on port 1337.');
+      }
+      throw new Error(`Jan+TurboQuant error: ${error.message}`);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SMART ENGINE ROUTER — chatWithBestAvailable
+  // Priority: Jan+TurboQuant → Ollama → LM Studio → Error
+  // ═══════════════════════════════════════════════════════════════
+
+  async chatWithBestAvailable(model: string, messages: any[]): Promise<any> {
+    // 1. Try built-in Jan + TurboQuant first (PRIMARY)
+    try {
+      let janOnline = await this.checkJanEngine();
+      if (!janOnline) {
+        console.log('ME 1.8: Jan is offline. Attempting auto-start...');
+        const startResult = await this.startJanEngine();
+        if (startResult.ok) {
+          janOnline = true;
+          // Wait slightly for model loading if needed
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
+      if (janOnline) {
+        console.log('ME 1.8: Routing to built-in Jan+TurboQuant engine');
+        return await this.chatWithJan(model, messages);
+      }
+    } catch (e) {
+      console.log('ME 1.8: Jan+TurboQuant unavailable, trying fallbacks...');
+    }
+
+    // 2. Try Ollama (optional external)
+    try {
+      const ollamaCheck = await axios.get(`${this.ollamaUrl}/tags`, { timeout: 3000 });
+      if (ollamaCheck.status === 200) {
+        console.log('ME 1.8: Routing to Ollama (optional external)');
+        const result = await this.chatWithOllama(model, messages);
+        return { ...result, engine: 'Ollama (External)' };
+      }
+    } catch (e) {
+      console.log('ME 1.8: Ollama unavailable...');
+    }
+
+    // 3. Try LM Studio (optional external)
+    try {
+      const lmCheck = await this.checkLMStudio();
+      if (lmCheck?.online) {
+        console.log('ME 1.8: Routing to LM Studio (optional external)');
+        const result = await this.chatWithLMStudio(model, messages);
+        return { ...result, engine: 'LM Studio (External)' };
+      }
+    } catch (e) {
+      console.log('ME 1.8: LM Studio unavailable...');
+    }
+
+    // 4. All local engines offline
+    return { 
+      message: { content: 'All local engines are offline. We tried starting the built-in Jan+TurboQuant engine automatically but it failed to respond. Please ensure Ollama or LM Studio are running, or switch to a cloud provider like Gemini or OpenRouter in the sidebar.' },
+      engine: 'None (All Offline)'
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // FULL ENGINE STATUS — all engines at once
+  // ═══════════════════════════════════════════════════════════════
+
+  async getFullEngineStatus() {
+    const [janOnline, ollamaModels, lmStudio] = await Promise.all([
+      this.checkJanEngine().catch(() => false),
+      this.listOllamaModels().catch(() => []),
+      this.checkLMStudio().catch(() => null)
+    ]);
+
+    return {
+      primary: {
+        name: 'Jan + TurboQuant',
+        role: 'Built-in Engine',
+        online: janOnline,
+        port: 1337,
+        url: this.janUrl,
+        activeModel: this.activeJanModel
+      },
+      ollama: {
+        name: 'Ollama',
+        role: 'Optional External',
+        online: ollamaModels.length > 0 || false,
+        port: 11434,
+        models: ollamaModels
+      },
+      lmStudio: {
+        name: 'LM Studio',
+        role: 'Optional External',
+        online: lmStudio?.online || false,
+        port: 1234
+      }
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // OPTIONAL EXTERNAL ENGINES
+  // ═══════════════════════════════════════════════════════════════
 
   async listOllamaModels(): Promise<Model[]> {
     try {
-      const response = await axios.get(`${this.ollamaUrl}/tags`);
+      const response = await axios.get(`${this.ollamaUrl}/tags`, { timeout: 5000 });
       return response.data.models || [];
-    } catch (error) {
+    } catch (error: any) {
       return [];
-    }
-  }
-
-  async checkJanEngine() {
-    try {
-      const response = await axios.get(`${this.janUrl}/models`, { timeout: 2000 });
-      return response.data;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  async getJanEngineStatus() {
-    const api = await this.checkJanEngine();
-    const executablePath = this.findJanExecutable();
-    const models = Array.isArray(api?.data) ? api.data : Array.isArray(api) ? api : [];
-
-    return {
-      apiOnline: Boolean(api),
-      installed: Boolean(executablePath),
-      executablePath,
-      activeModel: this.activeJanModel,
-      models
-    };
-  }
-
-  async startJanEngine() {
-    const alreadyOnline = await this.checkJanEngine();
-    if (alreadyOnline) {
-      return { ok: true, alreadyOnline: true, status: await this.getJanEngineStatus() };
-    }
-
-    const executablePath = this.findJanExecutable();
-    if (!executablePath) {
-      return {
-        ok: false,
-        error: 'Jan is not installed. Install Jan, then come back to Model Hub and press Start Jan.'
-      };
-    }
-
-    const child = spawn(executablePath, [], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: false
-    });
-    child.unref();
-
-    const online = await this.waitForJanApi(20000);
-    return {
-      ok: online,
-      error: online ? undefined : 'Jan opened, but the local API did not become ready yet. Enable Jan local API/server and try Load again.',
-      status: await this.getJanEngineStatus()
-    };
-  }
-
-  async loadJanModel(model: { name: string, path?: string }) {
-    const start = await this.startJanEngine();
-    if (!start.ok && !start.status?.apiOnline) {
-      return start;
-    }
-
-    const candidates = [
-      model.name,
-      model.path,
-      model.path ? path.basename(model.path) : ''
-    ].filter(Boolean) as string[];
-
-    for (const candidate of candidates) {
-      const loaded = await this.tryJanLoadCandidate(candidate, model.path);
-      if (loaded) {
-        this.activeJanModel = candidate;
-        return { ok: true, model: candidate, status: await this.getJanEngineStatus() };
-      }
-    }
-
-    this.activeJanModel = model.name;
-    return {
-      ok: true,
-      model: model.name,
-      warning: 'Jan API is online, but it did not expose a supported load endpoint. The app selected the model for chat; if Jan replies model-not-found, import the GGUF once in Jan.',
-      status: await this.getJanEngineStatus()
-    };
-  }
-
-  private findJanExecutable() {
-    const home = os.homedir();
-    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
-    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
-    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
-
-    const candidates = [
-      path.join(localAppData, 'Programs', 'Jan', 'Jan.exe'),
-      path.join(localAppData, 'Programs', 'jan', 'Jan.exe'),
-      path.join(localAppData, 'Jan', 'Jan.exe'),
-      path.join(programFiles, 'Jan', 'Jan.exe'),
-      path.join(programFilesX86, 'Jan', 'Jan.exe')
-    ];
-
-    return candidates.find(candidate => fs.existsSync(candidate)) || '';
-  }
-
-  private async waitForJanApi(timeoutMs: number) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < timeoutMs) {
-      if (await this.checkJanEngine()) return true;
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    return false;
-  }
-
-  private async tryJanLoadCandidate(model: string, filePath?: string) {
-    const payloads = [
-      { model },
-      { id: model },
-      { model, path: filePath },
-      { id: model, path: filePath }
-    ];
-    const endpoints = [
-      `${this.janUrl}/models/load`,
-      `${this.janUrl}/model/load`,
-      `${this.janUrl}/models/${encodeURIComponent(model)}/load`
-    ];
-
-    for (const endpoint of endpoints) {
-      for (const payload of payloads) {
-        try {
-          await axios.post(endpoint, payload, { timeout: 10000 });
-          return true;
-        } catch (error: any) {
-          if (error?.response?.status && ![404, 405].includes(error.response.status)) {
-            console.warn(`Jan load attempt failed at ${endpoint}: ${error.message}`);
-          }
-        }
-      }
-    }
-
-    return false;
-  }
-
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
-    let timer: NodeJS.Timeout | undefined;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<T>(resolve => {
-          timer = setTimeout(() => resolve(fallback), timeoutMs);
-        })
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  }
-
-  private fallbackPcResources() {
-    return {
-      gpu: this.pcCache.gpu,
-      vram: this.pcCache.vram,
-      ram: this.pcCache.ram,
-      os: this.pcCache.os,
-      approximate: this.pcCache.approximate
-    };
-  }
-
-  async scanPCResources() {
-    if (Date.now() - this.pcCache.scannedAt < 60_000) {
-      return this.fallbackPcResources();
-    }
-
-    try {
-      const [graphics, mem, osInfo] = await Promise.all([
-        this.withTimeout(si.graphics(), 1800, { controllers: [] } as any),
-        this.withTimeout(si.mem(), 1200, { total: 0 } as any),
-        this.withTimeout(si.osInfo(), 1200, { distro: 'Windows', release: '11' } as any)
-      ]);
-      
-      // Filter for discrete GPUs, prefer NVIDIA
-      const controllers = graphics.controllers || [];
-      
-      // Look for NVIDIA discrete GPU first
-      const nvidiaGpu = controllers.find((c: any) =>
-        (c.vendor.toLowerCase().includes('nvidia') || c.model.toLowerCase().includes('nvidia')) && 
-        !c.model.toLowerCase().includes('uhd') &&
-        !c.model.toLowerCase().includes('iris')
-      );
-      
-      // If we found an NVIDIA GPU, use it. Otherwise, use the first controller but check if it's actually integrated.
-      let gpu = nvidiaGpu;
-      if (!gpu) {
-        // Try to find any discrete GPU (not Intel UHD/Iris)
-        gpu = controllers.find((c: any) =>
-          !c.model.toLowerCase().includes('uhd') && 
-          !c.model.toLowerCase().includes('iris') &&
-          !c.vendor.toLowerCase().includes('intel')
-        );
-      }
-      
-      // Final fallback to the first controller
-      if (!gpu) gpu = controllers[0];
-      
-      const next = {
-        gpu: gpu?.model || 'NVIDIA RTX 5000A',
-        vram: gpu?.vram ? `${(gpu.vram / 1024).toFixed(0)}GB` : '16GB',
-        ram: mem.total ? `${(mem.total / (1024 * 1024 * 1024)).toFixed(0)}GB` : this.pcCache.ram,
-        os: `${osInfo.distro} ${osInfo.release}`,
-        scannedAt: Date.now(),
-        approximate: controllers.length === 0
-      };
-      this.pcCache = next;
-
-      return {
-        gpu: next.gpu,
-        vram: next.vram,
-        ram: next.ram,
-        os: next.os,
-        approximate: next.approximate
-      };
-    } catch (error) {
-      console.warn('Fast PC capability scan fell back to cached values.');
-      return this.fallbackPcResources();
-    }
-  }
-
-  async getResourceUsage() {
-    if (Date.now() - this.resourceCache.scannedAt < 2500) {
-      return {
-        cpu: this.resourceCache.cpu,
-        ram: this.resourceCache.ram,
-        gpu: this.resourceCache.gpu,
-        gpuModel: this.resourceCache.gpuModel
-      };
-    }
-
-    try {
-      const [cpuLoad, mem] = await Promise.all([
-        this.withTimeout(si.currentLoad(), 900, { currentLoad: this.resourceCache.cpu } as any),
-        this.withTimeout(si.mem(), 900, { active: 0, total: 0 } as any)
-      ]);
-
-      const next = {
-        cpu: Math.round(cpuLoad.currentLoad),
-        ram: mem.total ? Math.round((mem.active / mem.total) * 100) : this.resourceCache.ram,
-        gpu: this.resourceCache.gpu || 0,
-        gpuModel: this.pcCache.gpu,
-        scannedAt: Date.now()
-      };
-
-      this.resourceCache = next;
-      return {
-        cpu: next.cpu,
-        ram: next.ram,
-        gpu: next.gpu,
-        gpuModel: next.gpuModel
-      };
-    } catch (error) {
-      return {
-        cpu: this.resourceCache.cpu,
-        ram: this.resourceCache.ram,
-        gpu: this.resourceCache.gpu,
-        gpuModel: this.pcCache.gpu
-      };
-    }
-  }
-
-  async pullOllamaModel(name: string, onProgress?: (status: string, percent: number) => void) {
-    try {
-      const response = await axios.post(`${this.ollamaUrl}/pull`, { name }, { responseType: 'stream' });
-      
-      // In Electron main process, we'd handle the stream and send events to renderer
-      // This is a simplified version for the logic
-      return response.data;
-    } catch (error) {
-      console.error('Failed to pull Ollama model:', error);
-      throw error;
     }
   }
 
   async chatWithOllama(model: string, messages: any[]) {
     try {
       const response = await axios.post(`${this.ollamaUrl}/chat`, {
-        model,
-        messages,
+        model: model || 'llama3',
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
         stream: false
-      }, { timeout: 30000 }); // 30s timeout
+      }, { timeout: 120000 });
       return response.data;
     } catch (error: any) {
-      if (error.response?.status === 404) {
-        const installed = await this.listOllamaModels();
-        const installedList = installed.map(m => m.name).join(', ');
-        console.warn(`Ollama model not found: ${model}`);
-        return {
-          message: {
-            content: installedList
-              ? `Model "${model}" is not installed in Ollama. Choose one of the installed models: ${installedList}.`
-              : `Model "${model}" is not installed in Ollama. Open Model Hub and download a model, or run "ollama pull ${model}".`
-          }
-        };
+      if (error.code === 'ECONNREFUSED') {
+        return { message: { content: 'Ollama is not running. It is an optional external engine — the built-in Jan+TurboQuant engine is the primary.' } };
       }
-      console.error('Ollama chat error:', error.message);
-      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED') {
-        return { message: { content: 'Error: Ollama is not running. Please start Ollama and try again.' } };
+      if (error.response?.status === 404) {
+        return { message: { content: `Model "${model}" not found in Ollama. Pull it first with: ollama pull ${model}` } };
+      }
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        return { message: { content: 'Ollama timed out while generating a response. This often happens if the selected model is too large for your hardware. Try switching to a smaller model (e.g., Phi-3 or Gemma 2b) or increasing your system RAM/VRAM.' } };
       }
       return { message: { content: `Ollama error: ${error.message}` } };
     }
@@ -348,51 +347,96 @@ export class LocalAIService {
     try {
       const response = await axios.post(`${this.lmStudioUrl}/chat/completions`, {
         model: model || 'local-model',
-        messages,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
         stream: false
-      }, { timeout: 45000 }); // Increased timeout
-      return { content: response.data.choices[0].message.content };
+      }, { timeout: 120000 });
+      return { message: { content: response.data.choices[0].message.content } };
     } catch (error: any) {
-      console.error('LM Studio chat error:', error.message);
-      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED') {
-        return { content: 'Error: LM Studio is not running. Please start LM Studio and ensure "Local Server" is ON.' };
+      if (error.code === 'ECONNREFUSED') {
+        return { message: { content: 'LM Studio is not running. It is an optional external engine.' } };
       }
-      if (error.code === 'ECONNABORTED') {
-        return { content: 'Error: LM Studio connection timed out. The model might be too large for your VRAM or the server is busy.' };
-      }
-      return { content: `LM Studio error: ${error.message}` };
-    }
-  }
-
-  async chatWithJan(model: string, messages: any[]) {
-    try {
-      const response = await axios.post(`${this.janUrl}/chat/completions`, {
-        model: this.activeJanModel || model || 'llama-3-8b-q4',
-        messages,
-        stream: false
-      }, { timeout: 45000 }); // Increased timeout
-      return { content: response.data.choices[0].message.content };
-    } catch (error: any) {
-      console.error('Jan chat error:', error.message);
-      if (error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED') {
-        return { content: 'Jan/TurboQuant engine is not running. Open Model Hub and press Start Jan, then load a downloaded model.' };
-      }
-      if (error.code === 'ECONNABORTED') {
-        return { content: 'Error: Jan connection timed out. Please check if the model is loaded correctly in Jan.' };
-      }
-      if (error.response?.status === 404) {
-        return { content: `Jan could not find "${model}". Load it from Model Hub first, or import the downloaded GGUF from the Aion model library into Jan once.` };
-      }
-      return { content: `Jan/TurboQuant error: ${error.message}` };
+      return { message: { content: `LM Studio error: ${error.message}` } };
     }
   }
 
   async checkLMStudio() {
     try {
       const response = await axios.get(`${this.lmStudioUrl}/models`, { timeout: 2000 });
-      return response.data;
+      if (response.status === 200) {
+        return { online: true, url: this.lmStudioUrl, provider: 'LM Studio' };
+      }
+    } catch (e: any) {
+      console.log('LM Studio probe failed:', e.message);
+    }
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SYSTEM RESOURCES (Real hardware detection)
+  // ═══════════════════════════════════════════════════════════════
+
+  async scanPCResources() {
+    try {
+      const gpus = await si.graphics();
+      const mem = await si.mem();
+      const osInfo = await si.osInfo();
+      
+      // Prioritize discrete NVIDIA GPUs
+      let mainGpu = gpus.controllers.find(c => 
+        (c.vendor.toLowerCase().includes('nvidia') || c.model.toLowerCase().includes('rtx')) && 
+        c.vram && c.vram > 2048
+      );
+
+      // If no discrete found, pick the one with most VRAM
+      if (!mainGpu && gpus.controllers.length > 0) {
+        mainGpu = gpus.controllers.reduce((prev, current) => 
+          ((prev.vram || 0) > (current.vram || 0)) ? prev : current
+        , gpus.controllers[0]);
+      }
+      
+      const vramGB = mainGpu?.vram ? Math.round(mainGpu.vram / 1024) : 0;
+      const ramGB = Math.round(mem.total / (1024 * 1024 * 1024));
+
+      this.pcCache = {
+        gpu: mainGpu?.model || 'Integrated Graphics',
+        vram: `${vramGB}GB`,
+        ram: `${ramGB}GB`,
+        os: `${osInfo.distro} ${osInfo.release}`,
+        scannedAt: Date.now(),
+        approximate: !mainGpu
+      };
+      
+      return this.pcCache;
+    } catch (e) {
+      console.error('ME 1.8: PC Scan failed:', e);
+      return this.pcCache;
+    }
+  }
+
+  async getResourceUsage() {
+    try {
+      const [cpuLoad, mem, gpuData] = await Promise.all([
+        si.currentLoad(),
+        si.mem(),
+        si.graphics().catch(() => null)
+      ]);
+
+      // Real GPU utilization from systeminformation
+      let gpuUtil = 0;
+      if (gpuData?.controllers?.[0]) {
+        // si.graphics() provides utilizationGpu on some systems
+        gpuUtil = (gpuData.controllers[0] as any).utilizationGpu || 0;
+      }
+
+      return {
+        cpu: Math.round(cpuLoad.currentLoad),
+        ram: Math.round((mem.active / mem.total) * 100),
+        gpu: gpuUtil,
+        gpuModel: this.pcCache.gpu,
+        engine: await this.checkJanEngine() ? 'Jan + TurboQuant' : 'Offline'
+      };
     } catch (error) {
-      return null;
+      return { cpu: 0, ram: 0, gpu: 0, gpuModel: this.pcCache.gpu, engine: 'Unknown' };
     }
   }
 }

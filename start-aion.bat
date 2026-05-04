@@ -9,4 +9,5 @@ if exist "%PACKAGED_EXE%" (
 )
 
 cd /d "%APP_DIR%"
+set "ELECTRON_RUN_AS_NODE="
 npm run dev

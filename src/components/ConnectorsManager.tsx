@@ -31,38 +31,44 @@ const CategoryTab = ({ label, active, onClick, count }: any) => (
   </button>
 );
 
-const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connector, isConnected: boolean, onToggle: () => void }) => (
-  <div className="group p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between hover:border-blue-100 hover:shadow-sm transition-all">
-    <div className="flex items-center space-x-4">
-      <div className={`w-12 h-12 ${connector.color} rounded-xl flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105`}>
-        <connector.icon className="w-6 h-6" />
-      </div>
-      <div>
-        <div className="flex items-center space-x-2">
-          <h4 className="text-sm font-bold text-gray-900">{connector.title}</h4>
-          {connector.isNew && (
-            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[8px] font-black uppercase rounded-full">New</span>
-          )}
+const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connector, isConnected: boolean, onToggle: () => void }) => {
+  const enabled = isConnected !== false;
+  const authRequired = ['gmail', 'google-calendar', 'google-drive', 'outlook-mail', 'outlook-calendar', 'github', 'slack', 'notion', 'stripe', 'xero', 'whatsapp'].includes(connector.id);
+  const statusLabel = !enabled ? 'Disabled' : authRequired ? 'Enabled - auth needed for data access' : 'Enabled locally';
+  
+  return (
+    <div className="group p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between hover:border-blue-100 hover:shadow-sm transition-all">
+      <div className="flex items-center space-x-4">
+        <div className={`w-12 h-12 ${connector.color} rounded-xl flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105`}>
+          <connector.icon className="w-6 h-6" />
         </div>
-        <p className="text-[11px] text-gray-500 leading-tight mt-1 max-w-[240px]">{connector.desc}</p>
-        <p className={`text-[9px] font-black uppercase mt-1 ${isConnected ? 'text-green-600' : 'text-orange-600'}`}>
-          {isConnected ? 'Connected to ME' : 'Not connected - click to set up'}
-        </p>
+        <div>
+          <div className="flex items-center space-x-2">
+            <h4 className="text-sm font-bold text-gray-900">{connector.title}</h4>
+            {connector.isNew && (
+              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[8px] font-black uppercase rounded-full">New</span>
+            )}
+          </div>
+          <p className="text-[11px] text-gray-500 leading-tight mt-1 max-w-[240px]">{connector.desc}</p>
+          <p className={`text-[9px] font-black uppercase mt-1 ${enabled ? (authRequired ? 'text-orange-600' : 'text-green-600') : 'text-gray-400'}`}>
+            {statusLabel}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <button 
+          onClick={onToggle}
+          className={`px-4 py-1.5 rounded-xl text-[11px] font-bold transition-all ${
+          enabled 
+            ? 'bg-gray-50 text-gray-400 border border-gray-100' 
+            : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm'
+        }`}>
+          {enabled ? 'Enabled' : 'Enable'}
+        </button>
       </div>
     </div>
-    <div className="flex items-center space-x-2">
-      <button 
-        onClick={onToggle}
-        className={`px-4 py-1.5 rounded-xl text-[11px] font-bold transition-all ${
-        isConnected 
-          ? 'bg-gray-50 text-gray-400 border border-gray-100' 
-          : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm'
-      }`}>
-        {isConnected ? 'Connected' : 'Connect'}
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: ConnectorsManagerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,7 +83,9 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
     const fetchState = async () => {
       if (window.ipcRenderer) {
         const state = await window.ipcRenderer.getConnectors();
-        setConnectorsState(state);
+        // If state is empty or an array (old version), convert to object
+        const normalizedState = Array.isArray(state) ? {} : state;
+        setConnectorsState(normalizedState);
       }
       const savedMcp = window.localStorage.getItem('hermsdesk.customMcpServers');
       if (savedMcp) {
@@ -93,7 +101,8 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
 
   const toggleConnector = async (id: string) => {
     if (window.ipcRenderer) {
-      const newState = !connectorsState[id];
+      const currentState = connectorsState[id] !== false; // Default to true if undefined
+      const newState = !currentState;
       const updatedState = await window.ipcRenderer.toggleConnector(id, newState);
       setConnectorsState(updatedState);
       setNotice(`${newState ? 'Connected' : 'Disconnected'} ${id}`);

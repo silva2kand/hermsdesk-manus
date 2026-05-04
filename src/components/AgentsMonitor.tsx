@@ -17,7 +17,13 @@ const statusLabel: Record<string, string> = {
   'needs-approval': 'Approval gated'
 };
 
-export const AgentsMonitor = () => {
+export const AgentsMonitor = ({ 
+  agents = [], 
+  onAgentAction 
+}: { 
+  agents?: any[], 
+  onAgentAction?: (id: string, action: string) => void 
+}) => {
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState('');
   const [activity, setActivity] = useState([
@@ -25,24 +31,40 @@ export const AgentsMonitor = () => {
     { agent: 'Paperclip Mail Organizer', action: 'Routing rules ready for Mail ME approvals', time: new Date().toLocaleTimeString() }
   ]);
 
+  const displayAgents = agents.length > 0 ? agents : hermesAgents;
+
   const filteredAgents = useMemo(() => {
     const q = query.toLowerCase();
-    return hermesAgents.filter(agent =>
+    return displayAgents.filter(agent =>
       agent.name.toLowerCase().includes(q) ||
       agent.role.toLowerCase().includes(q) ||
-      agent.capability.toLowerCase().includes(q) ||
-      agent.connector.toLowerCase().includes(q)
+      (agent.capability && agent.capability.toLowerCase().includes(q)) ||
+      (agent.connector && agent.connector.toLowerCase().includes(q))
     );
-  }, [query]);
+  }, [query, displayAgents]);
 
   const showNotice = (message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(''), 3500);
   };
 
-  const runAgentAction = async (agent: HermesAgent) => {
-    const next = { agent: agent.name, action: 'Opened approval workflow', time: new Date().toLocaleTimeString() };
+  const runAgentAction = async (agent: any) => {
+    const next = { agent: agent.name, action: 'Initializing ME 1.7 production module...', time: new Date().toLocaleTimeString() };
     setActivity(prev => [next, ...prev].slice(0, 8));
+
+    if (onAgentAction) {
+      onAgentAction(agent.id, 'open');
+      showNotice(`${agent.name} is now active and monitoring the system. Check the Console for live logs.`);
+      return;
+    }
+
+    if (agent.id.endsWith('-full')) {
+      if (window.ipcRenderer) {
+        await window.ipcRenderer.createAgentTask(`Initialize ${agent.name} protocol`, agent.id);
+        showNotice(`${agent.name} is now active and monitoring the system. Check the Console for live logs.`);
+      }
+      return;
+    }
 
     if (agent.id === 'hermes-pc') {
       const scan = await window.ipcRenderer?.scanPC?.();

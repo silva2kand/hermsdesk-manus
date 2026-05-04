@@ -1,38 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Plus, 
-  Smile, 
-  Monitor, 
-  Mic, 
-  ArrowUp,
-  Search,
-  ChevronDown,
-  Info,
-  ExternalLink,
-  ChevronRight,
-  File,
-  Folder,
-  Globe,
-  MessageSquare as MsgIcon,
-  Mail,
-  Briefcase,
-  Cpu,
-  Zap,
-  Github,
-  Layout,
-  Calculator,
-  Palette,
-  HardDrive,
-  Wrench,
-  Brain,
-  RefreshCw,
-  Copy,
-  Volume2,
-  Edit3,
-  StepForward,
-  RotateCcw,
-  X
+  Plus, Smile, Monitor, Mic, ArrowUp, Search, ChevronDown, Info, ExternalLink, ChevronRight, File, Folder, Globe,
+  MessageSquare as MsgIcon, Mail, Briefcase, Cpu, Zap, Github, Layout, Calculator, Palette, HardDrive, Wrench, Brain,
+  RefreshCw, Copy, Volume2, Edit3, StepForward, RotateCcw, X, Rocket, LayoutGrid, FileText, MessageSquare, Video
 } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }) => (
   <div className="flex items-center space-x-2 text-xs text-gray-500 py-1">
@@ -42,6 +14,9 @@ const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }
     <span className={done ? "text-gray-400" : "text-gray-600"}>{label}</span>
   </div>
 );
+
+const connectorId = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
+const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name;
 
 const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string, color: string }) => (
   <div className="relative group cursor-pointer">
@@ -55,74 +30,117 @@ const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string,
   </div>
 );
 
-export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: { provider: string, model: string } | null, initialPrompt?: string }) => {
+export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { initialModel?: { provider: string, model: string } | null, initialPrompt?: string, isAgentic?: boolean }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [input, setInput] = useState('');
   const [notice, setNotice] = useState('');
-  const [messages, setMessages] = useState<any[]>([
-    {
-      role: 'assistant',
-      content: "ME is ready. I can help you design and build a local-first, agentic Windows workstation with Hermes, Paperclip, Space agents, UK professional workflows, and approval-gated local tools. Let's start by outlining the architecture and core components."
-    }
-  ]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [researchSteps, setResearchSteps] = useState<string[]>([]);
   const [provider, setProvider] = useState(initialModel?.provider || 'Ollama');
-  const [model, setModel] = useState(initialModel?.model || 'llama3:8b');
+  const [model, setModel] = useState(initialModel?.model || '');
   const [showConnectorPanel, setShowConnectorPanel] = useState(false);
-  const [chatConnectors, setChatConnectors] = useState<{[key: string]: boolean}>({
-    'LM Studio': true,
-    Ollama: true,
-    Canva: true,
-    GitHub: true,
-    Gmail: true,
-    Gemini: true,
-    Grok: true,
-    'Hugging Face': true,
-    Playwright: false,
-    Stripe: false,
-    Notion: false,
-    'Custom API': false
-  });
+  const [chatConnectors, setChatConnectors] = useState<{[key: string]: boolean}>({});
+  const handledInitialPrompt = useRef('');
   const [engineStatus, setEngineStatus] = useState<{[key: string]: 'online' | 'offline' | 'checking'}>({
+    'Jan + TurboQuant': 'checking',
     Ollama: 'checking',
-    'LM Studio': 'checking',
-    'Jan': 'checking'
+    'LM Studio': 'checking'
   });
 
   // Update when initialModel changes
   React.useEffect(() => {
-    if (initialModel) {
-      setProvider(initialModel.provider);
-      setModel(initialModel.model);
-    }
+    let isMounted = true;
+    const fetchData = async () => {
+      if (window.ipcRenderer) {
+        try {
+          // Fetch real connector state
+          const state = await window.ipcRenderer.getConnectors();
+          if (!isMounted) return;
+          const normalized = Array.isArray(state) ? {} : state;
+          setChatConnectors(normalized);
+
+          if (initialModel && initialModel.model && initialModel.provider) {
+            setProvider(initialModel.provider);
+            setModel(initialModel.model);
+          } else {
+            // Auto-detect best local engine
+            const [ollama, jan, lmstudio] = await Promise.all([
+              window.ipcRenderer.listModels().catch(() => []),
+              window.ipcRenderer.janStatus().catch(() => null),
+              window.ipcRenderer.checkLMStudio().catch(() => null)
+            ]);
+
+            if (!isMounted) return;
+
+            if (jan && jan.apiOnline) {
+              setProvider('Jan');
+              const janModels = jan.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
+              if (janModels.length) setModel(janModels[0]);
+              setEngineStatus(prev => ({ ...prev, 'Jan + TurboQuant': 'online' }));
+            } else if (ollama && ollama.length > 0) {
+              setProvider('Ollama');
+              setModel(ollama[0].name);
+              setEngineStatus(prev => ({ ...prev, Ollama: 'online' }));
+            } else if (lmstudio) {
+              setProvider('LM Studio');
+              setEngineStatus(prev => ({ ...prev, 'LM Studio': 'online' }));
+            }
+          }
+        } catch (error) {
+          console.error('ChatInterface initialization error:', error);
+        }
+      }
+    };
+    fetchData();
+    return () => { isMounted = false; };
   }, [initialModel]);
 
   const [providerModels, setProviderModels] = useState<{[key: string]: string[]}>({
-    'Ollama': ['llama3:8b', 'mistral:7b', 'phi3:mini', 'codellama'],
-    'LM Studio': ['local-model', 'qwen-2.5-7b', 'llama-3-8b-instruct'],
-    'Jan': ['llama-3-8b-q4', 'mistral-7b-v0.3', 'phi-3-mini-4k'],
+    'Ollama': [],
+    'LM Studio': [],
+    'Jan': [],
     'Gemini': ['gemini-1.5-pro', 'gemini-1.5-flash'],
-    'OpenRouter': ['gpt-4o', 'claude-3-5-sonnet', 'deepseek-v2']
+    'OpenRouter': [
+      'openrouter/auto-free',
+      'google/gemma-2-9b-it:free', 
+      'mistralai/mistral-7b-instruct:free', 
+      'meta-llama/llama-3-8b-instruct:free',
+      'microsoft/phi-3-mini-128k-instruct:free',
+      'qwen/qwen-2-7b-instruct:free'
+    ],
+    'Nvidia': [
+      'meta/llama3-70b-instruct',
+      'meta/llama3-8b-instruct',
+      'mistralai/mistral-7b-instruct-v0.2',
+      'google/gemma-7b',
+      'nvidia/llama-3.1-405b-instruct'
+    ]
   });
 
   const chatConnectorItems = [
     { name: 'LM Studio', icon: Monitor, color: 'bg-blue-700', desc: 'Local model server' },
-    { name: 'Ollama', icon: Cpu, color: 'bg-gray-700', desc: 'Offline local LLMs' },
-    { name: 'Canva', icon: Palette, color: 'bg-purple-500', desc: 'Design generation' },
-    { name: 'GitHub', icon: Github, color: 'bg-gray-900', desc: 'Repos, PRs, code search' },
-    { name: 'Gmail', icon: Mail, color: 'bg-red-500', desc: 'Email search and drafts' },
-    { name: 'Gemini', icon: Zap, color: 'bg-blue-500', desc: 'Cloud multimodal model' },
-    { name: 'Grok', icon: Brain, color: 'bg-gray-900', desc: 'Reasoning and analysis' },
-    { name: 'Hugging Face', icon: Smile, color: 'bg-yellow-500', desc: 'Models and datasets' },
-    { name: 'Playwright', icon: Globe, color: 'bg-green-600', desc: 'Browser automation' },
-    { name: 'Stripe', icon: Calculator, color: 'bg-blue-600', desc: 'Payments and invoices' },
-    { name: 'Notion', icon: Layout, color: 'bg-gray-400', desc: 'Pages and workspace docs' },
-    { name: 'Custom API', icon: Wrench, color: 'bg-orange-500', desc: 'Any REST endpoint' }
+    { name: 'Ollama', icon: Cpu, color: 'bg-gray-800', desc: 'Local inference engine' },
+    { name: 'GitHub', icon: Github, color: 'bg-black', desc: 'Code sync & issues' },
+    { name: 'Notion', icon: FileText, color: 'bg-gray-900', desc: 'Workspace & docs' },
+    { name: 'WhatsApp', icon: MessageSquare, color: 'bg-green-600', desc: 'Direct messaging' },
+    { name: 'Gmail', icon: Mail, color: 'bg-red-600', desc: 'Email automation' },
+    { name: 'Google Drive', icon: HardDrive, color: 'bg-blue-600', desc: 'Cloud file access' },
+    { name: 'Browser', icon: Globe, color: 'bg-indigo-600', desc: 'Web research & scraping' },
+    { name: 'Slack', icon: MessageSquare, color: 'bg-purple-600', desc: 'Team communication' },
+    { name: 'Linear', icon: LayoutGrid, color: 'bg-blue-800', desc: 'Task management' }
   ];
 
-  const toggleChatConnector = (name: string) => {
-    setChatConnectors(prev => ({ ...prev, [name]: !prev[name] }));
-    addNotice(`${name} ${chatConnectors[name] ? 'disabled' : 'enabled'} for this chat`);
+  const toggleChatConnector = async (name: string) => {
+    if (window.ipcRenderer) {
+      const id = connectorId(name);
+      const currentState = chatConnectors[id] !== false;
+      const newState = !currentState;
+      const updated = await window.ipcRenderer.toggleConnector(id, newState);
+      setChatConnectors(updated);
+      addNotice(`${name} ${newState ? 'enabled' : 'disabled'} for this chat`);
+    }
   };
 
   const addNotice = (message: string) => {
@@ -186,33 +204,113 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
     window.setTimeout(() => handleSend(prompt), 0);
   };
 
-  const runFollowUp = (label: string, idx: number) => {
+  const runFollowUp = async (label: string, idx: number) => {
     const prompt = getLastUserPrompt(idx);
+    
     if (label.toLowerCase().includes('research web')) {
       const url = `https://www.google.com/search?q=${encodeURIComponent(prompt)}`;
       window.open(url, '_blank');
       addNotice('Opened web research in your browser');
       return;
     }
+
+    if (label.toLowerCase().includes('start jan engine')) {
+      addNotice('Attempting to start Jan+TurboQuant engine...');
+      const result = await window.ipcRenderer.startJan();
+      if (result.ok) {
+        addNotice('Jan engine started successfully!');
+        checkEngines();
+      } else {
+        addNotice(`Failed to start Jan: ${result.error || 'Unknown error'}`);
+      }
+      return;
+    }
+
+    if (label.toLowerCase().includes('check engine status')) {
+      checkEngines();
+      addNotice('Refreshing engine status...');
+      return;
+    }
+
     handleSend(`${label}: ${prompt}`);
+  };
+
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = React.useRef<any>(null);
+
+  const toggleMicrophone = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsRecording(false);
+      addNotice('Meeting Assistant: Capture stopped.');
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        addNotice('Error: System hardware (Microphone) transcription is not supported in this browser.');
+        return;
+      }
+
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+          setIsRecording(true);
+          addNotice('Meeting Assistant: System hardware active (Listening...)');
+        };
+
+        recognition.onresult = (event: any) => {
+          let transcript = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              transcript += event.results[i][0].transcript;
+            }
+          }
+          if (transcript) {
+            setInput(prev => prev + (prev ? ' ' : '') + transcript);
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error);
+          setIsRecording(false);
+          addNotice(`Microphone error: ${event.error}`);
+        };
+
+        recognition.onend = () => {
+          setIsRecording(false);
+        };
+
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch (err) {
+        console.error('Failed to start speech recognition:', err);
+        addNotice('Error: System hardware (Microphone) access failed.');
+      }
+    }
   };
 
   const checkEngines = async () => {
     if (!window.ipcRenderer) return;
     
-    setEngineStatus(prev => ({ ...prev, Ollama: 'checking', 'LM Studio': 'checking', Jan: 'checking' }));
+    setEngineStatus(prev => ({ ...prev, Ollama: 'checking', 'LM Studio': 'checking', 'Jan + TurboQuant': 'checking' }));
     
     try {
       const ollamaModels = await window.ipcRenderer.listModels();
       const lmStudioStatus = await window.ipcRenderer.checkLMStudio();
-      const janStatus = await window.ipcRenderer.checkJan();
+      const janStatus = await window.ipcRenderer.janStatus();
       const libraryModels = await window.ipcRenderer.listLibraryModels();
+      const janApiModels = janStatus?.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
 
       setProviderModels(prev => ({
         ...prev,
         Ollama: ollamaModels?.length ? ollamaModels.map((m: any) => m.name) : prev.Ollama,
         'LM Studio': lmStudioStatus?.data?.length ? lmStudioStatus.data.map((m: any) => m.id) : prev['LM Studio'],
-        Jan: libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan
+        Jan: janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : []
       }));
 
       const ollamaNames = ollamaModels?.map((m: any) => m.name) || [];
@@ -221,23 +319,23 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
       if (provider === 'Ollama' && ollamaNames.length > 0 && !ollamaNames.includes(model)) {
         setModel(ollamaNames[0]);
         addNotice(`Switched to installed Ollama model: ${ollamaNames[0]}`);
-      } else if (provider === 'Ollama' && ollamaNames.length === 0 && janNames.length > 0) {
+      } else if (provider === 'Ollama' && ollamaNames.length === 0 && janStatus?.apiOnline && (janApiModels.length || janNames.length > 0)) {
         setProvider('Jan');
-        setModel(janNames[0]);
-        addNotice(`Ollama has no installed models. Switched to Jan: ${janNames[0]}`);
+        setModel(janApiModels[0] || janNames[0]);
+        addNotice(`Ollama has no installed models. Switched to Jan: ${janApiModels[0] || janNames[0]}`);
       }
 
       setEngineStatus({
+        'Jan + TurboQuant': janStatus && janStatus.apiOnline ? 'online' : 'offline',
         Ollama: ollamaModels && ollamaModels.length > 0 ? 'online' : 'offline',
-        'LM Studio': lmStudioStatus ? 'online' : 'offline',
-        'Jan': janStatus ? 'online' : 'offline'
+        'LM Studio': lmStudioStatus ? 'online' : 'offline'
       });
     } catch (e) {
       console.error('Engine check failed:', e);
       setEngineStatus({
+        'Jan + TurboQuant': 'offline',
         Ollama: 'offline',
-        'LM Studio': 'offline',
-        'Jan': 'offline'
+        'LM Studio': 'offline'
       });
     }
   };
@@ -268,155 +366,247 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
     window.ipcRenderer.openApp(app);
   };
 
+  const composeWhatsApp = async () => {
+    const message = input.trim() || getLastUserPrompt();
+    const result = await window.ipcRenderer?.composeWhatsApp?.(message);
+    addNotice(result?.ok ? 'Opened WhatsApp composer. Review and press Send manually.' : 'Could not open WhatsApp.');
+  };
+
+  const openVideoCall = async () => {
+    await window.ipcRenderer?.openApp?.('video call');
+    addNotice('Opened video call room in your browser.');
+  };
+
+  const openVoiceStack = async () => {
+    const status = await window.ipcRenderer?.getVoiceStackStatus?.();
+    await window.ipcRenderer?.openApp?.('voice stack');
+    addNotice(status?.ok ? 'Silva Voice Stack is online at port 7100.' : 'Opening Voice Stack page. Start the voice server if it is offline.');
+  };
+
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
 
+    // Fetch knowledge rules to augment the system prompt
+    let systemPrompt = "You are ME, an advanced AI agentic desktop application. You are local-first and privacy-focused.";
+    if (window.ipcRenderer) {
+      const knowledge = await window.ipcRenderer.getKnowledge();
+      const activeRules = knowledge.map((k: any) => `[${k.title}]:\n${k.rules}`).join('\n\n');
+      if (activeRules) {
+        systemPrompt += `\n\nUse the following knowledge base rules for context:\n${activeRules}`;
+      }
+    }
+
     const userMessage = { role: 'user', content: outgoing };
+    const chatHistory = [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+      userMessage
+    ];
+
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
+    if (isAgentic && researchSteps.length === 0) {
+      setResearchSteps(['Processing agentic request', 'Routing to best model']);
+    }
 
-    console.log('Sending message to provider:', provider, 'model:', model);
+    console.log('Sending message with knowledge-augmented prompt');
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 90s UI timeout
+
       if (window.ipcRenderer) {
         let response;
         const normalizedProvider = provider.toLowerCase().replace(' ', '');
 
-        if (['ollama', 'lmstudio', 'jan'].includes(normalizedProvider)) {
-          // Local providers
+        if (['ollama', 'lmstudio', 'jan', 'jan+turboquant'].includes(normalizedProvider)) {
           response = await window.ipcRenderer.chat({ 
-            model, 
-            messages: [...messages, userMessage],
+            model: normalizedProvider === 'ollama' && model && !model.includes(':') ? `${model}:latest` : model, 
+            messages: chatHistory,
             provider: normalizedProvider
           });
-        } else {
-          // Cloud providers
+        } else if (['gemini', 'nvidia', 'openrouter'].includes(normalizedProvider)) {
+          // Cloud providers — force free tier if not already specified
+          let cloudModel = model;
+          if (normalizedProvider === 'openrouter' && !model.includes('/')) {
+            cloudModel = 'openrouter/auto-free';
+          } else if (normalizedProvider === 'nvidia' && !model.includes('/')) {
+            cloudModel = 'meta/llama3-70b-instruct';
+          }
+
           response = await window.ipcRenderer.chatProvider({
             provider: normalizedProvider,
-            model: model,
-            messages: [...messages, userMessage]
+            model: cloudModel,
+            messages: chatHistory
+          });
+        } else {
+          // Default: use smart engine routing (Jan+TQ → Ollama → LM Studio)
+          response = await window.ipcRenderer.chatBest({
+            model,
+            messages: chatHistory
           });
         }
-        
-        console.log('Provider response:', response);
-        
-        if (response && (response.content || response.choices || response.message)) {
-          let aiContent = '';
-          if (response.content) aiContent = response.content;
-          else if (response.choices) aiContent = response.choices[0].message.content;
-          else if (response.message) aiContent = response.message.content; // Ollama format
-          
-          setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
+
+        clearTimeout(timeoutId);
+
+        if (response) {
+          const content = response.content || response.message?.content || (response.choices && response.choices[0]?.message?.content) || "No response content received.";
+          const engine = response.engine || provider;
+          setMessages(prev => [...prev, { role: 'assistant', content, engine }]);
         } else {
-          setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${provider} returned an empty response. Ensure the engine is running and model is loaded.` }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${provider} returned an empty response. Open Model Hub and refresh engine status before retrying.` }]);
         }
       } else {
         // Fallback for non-electron environment
-        setTimeout(() => {
-          setMessages(prev => [...prev, { role: 'assistant', content: `Simulator: Received message from ${provider}. Please run in Electron for real local model routing.` }]);
-          setIsTyping(false);
-        }, 1000);
+        addNotice('System Error: Electron IPC bridge not detected.');
+        setIsTyping(false);
         return;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Chat error:', e);
-      setMessages(prev => [...prev, { role: 'assistant', content: `Connection error. Please check if ${provider} is online and reachable.` }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.message || "Request timed out or failed."}` }]);
     } finally {
       setIsTyping(false);
+      setResearchSteps([]);
     }
   };
 
   React.useEffect(() => {
-    if (initialPrompt) {
-      handleSend(initialPrompt);
+    if (initialPrompt && handledInitialPrompt.current !== initialPrompt) {
+      handledInitialPrompt.current = initialPrompt;
+      if (isAgentic) {
+        setResearchSteps(['Reading task context', 'Checking available local engines']);
+        setTimeout(() => {
+          setResearchSteps(prev => [...prev, 'Searching knowledge base']);
+          handleSend(initialPrompt);
+        }, 500);
+      } else {
+        handleSend(initialPrompt);
+      }
     }
   }, [initialPrompt]);
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-8 space-y-8">
-        <div className="max-w-3xl mx-auto space-y-8">
+    <div className="flex flex-col h-full bg-white relative overflow-hidden">
+      <div 
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto scroll-smooth scrollbar-hide px-4 pt-4 pb-32"
+      >
+        <div className="max-w-4xl mx-auto space-y-6">
           {messages.map((msg, idx) => (
-            <div key={idx} className="flex flex-col space-y-4">
-              <div className="flex items-center space-x-2">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${msg.role === 'assistant' ? 'bg-gray-900' : 'bg-blue-600'}`}>
-                  <span className="text-white text-[10px] font-bold">{msg.role === 'assistant' ? 'M' : 'U'}</span>
+            <div 
+              key={idx} 
+              className={cn(
+                "flex flex-col space-y-4 animate-in fade-in slide-in-from-bottom-3 duration-500",
+                msg.role === 'user' ? 'items-end' : 'items-start'
+              )}
+            >
+              <div className={cn("flex items-center space-x-2", msg.role === 'user' && "flex-row-reverse space-x-reverse")}>
+                <div className={cn(
+                  "w-8 h-8 rounded-2xl flex items-center justify-center shadow-sm",
+                  msg.role === 'assistant' ? 'bg-black text-white' : 'bg-blue-600 text-white'
+                )}>
+                  {msg.role === 'assistant' ? <Rocket className="w-4 h-4" /> : <span className="text-[10px] font-black uppercase">YOU</span>}
                 </div>
-                <span className="text-sm font-bold text-gray-900">{msg.role === 'assistant' ? 'ME' : 'you'}</span>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{msg.role === 'assistant' ? 'Hermes ME' : 'User'}</span>
+                  {msg.engine && <span className="text-[8px] font-bold text-gray-400 uppercase">{msg.engine}</span>}
+                </div>
               </div>
               
-              <div className="pl-8 space-y-4">
-                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+              <div className={cn(
+                "max-w-[85%] group/msg relative",
+                msg.role === 'user' ? 'mr-10' : 'ml-10'
+              )}>
+                <div className={cn(
+                  "p-4 rounded-[28px] text-sm leading-relaxed whitespace-pre-wrap select-text",
+                  msg.role === 'assistant' ? 'bg-gray-50 text-gray-800' : 'bg-blue-600 text-white shadow-xl shadow-blue-500/10'
+                )}>
                   {msg.content}
-                </p>
-                
-                {msg.role === 'assistant' && (
-                  <>
-                    <div className="border border-gray-100 rounded-xl overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2 bg-gray-50/50">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-4 h-4 rounded-full bg-blue-50 flex items-center justify-center">
-                            <Brain className="w-3 h-3 text-blue-500" />
-                          </div>
-                          <span className="text-xs font-medium text-gray-700">Thinking and research</span>
-                        </div>
-                        <button
-                          onClick={() => runFollowUp('Research web', idx)}
-                          className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-wider hover:underline"
-                        >
-                          <Search className="w-3 h-3 mr-1" />
-                          Web research
-                        </button>
-                      </div>
-                      <div className="px-4 py-2 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <ResearchStep label="Read task context" done />
-                        <ResearchStep label="Check local model route" done={!isTyping} />
-                        <ResearchStep label="Web research available" done />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button onClick={() => copyMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Copy">
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => speakMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Speak">
-                        <Volume2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => editMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => continueMessage(idx)} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Continue">
-                        <StepForward className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => regenerateMessage(idx)} className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" title="Regenerate">
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {getFollowUps(msg.content).map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          onClick={() => runFollowUp(suggestion, idx)}
-                          className="px-3 py-1.5 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-100 text-[10px] font-bold text-gray-600 hover:text-blue-700 rounded-full transition-all"
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
+                </div>
               </div>
+                
+              {msg.role === 'assistant' && (
+                <div className="ml-10 space-y-4 w-full max-w-[85%]">
+                  <div className="border border-gray-100 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50/50">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 rounded-full bg-blue-50 flex items-center justify-center">
+                          <Brain className="w-3 h-3 text-blue-500" />
+                        </div>
+                        <span className="text-xs font-medium text-gray-700">Thinking and research</span>
+                      </div>
+                      <button
+                        onClick={() => runFollowUp('Research web', idx)}
+                        className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-wider hover:underline"
+                      >
+                        <Search className="w-3 h-3 mr-1" />
+                        Web research
+                      </button>
+                    </div>
+                    <div className="px-4 py-2 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <ResearchStep label="Read task context" done />
+                      <ResearchStep label="Check local model route" done={!isTyping} />
+                      <ResearchStep label="Web research available" done />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button onClick={() => copyMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Copy">
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => speakMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Speak">
+                      <Volume2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => editMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Edit">
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => continueMessage(idx)} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Continue">
+                      <StepForward className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => regenerateMessage(idx)} className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" title="Regenerate">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {getFollowUps(msg.content).map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        onClick={() => runFollowUp(suggestion, idx)}
+                        className="px-3 py-1.5 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-100 text-[10px] font-bold text-gray-600 hover:text-blue-700 rounded-full transition-all"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
+          {researchSteps.length > 0 && (
+            <div className="max-w-2xl mx-auto w-full p-4 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-1 mb-4">
+              <div className="flex items-center space-x-2 mb-2">
+                <Zap className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Local Agent Process</span>
+              </div>
+              {researchSteps.map((step, i) => (
+                <ResearchStep key={i} label={step} done={i < researchSteps.length - 1} />
+              ))}
+            </div>
+          )}
           {isTyping && (
-            <div className="flex items-center space-x-2 pl-8">
-              <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="flex flex-col items-start space-y-4 ml-10 animate-in fade-in duration-300">
+              <div className="flex items-center space-x-3">
+                <div className="flex space-x-1">
+                  <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" />
+                </div>
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Thinking...</span>
+              </div>
             </div>
           )}
         </div>
@@ -450,14 +640,14 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
           {['Ollama', 'LM Studio', 'Jan'].includes(provider) && (
             <div className="flex items-center space-x-1.5 px-2 py-0.5 bg-white border border-gray-100 rounded-full shadow-sm">
               <div className={`w-1.5 h-1.5 rounded-full ${
-                engineStatus[provider] === 'online' ? 'bg-green-500 animate-pulse' : 
-                engineStatus[provider] === 'offline' ? 'bg-red-500' : 'bg-gray-300'
+                engineStatus[engineKey(provider)] === 'online' ? 'bg-green-500 animate-pulse' : 
+                engineStatus[engineKey(provider)] === 'offline' ? 'bg-red-500' : 'bg-gray-300'
               }`} />
               <span className={`text-[8px] font-black uppercase tracking-tighter ${
-                engineStatus[provider] === 'online' ? 'text-green-600' : 
-                engineStatus[provider] === 'offline' ? 'text-red-600' : 'text-gray-400'
+                engineStatus[engineKey(provider)] === 'online' ? 'text-green-600' : 
+                engineStatus[engineKey(provider)] === 'offline' ? 'text-red-600' : 'text-gray-400'
               }`}>
-                {engineStatus[provider] || 'Local'}
+                {engineStatus[engineKey(provider)] || 'Local'}
               </span>
             </div>
           )}
@@ -465,9 +655,19 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
 
         <div className="w-px h-4 bg-gray-200" />
 
-        <div className="flex items-center space-x-2 px-3 py-1 bg-green-50 border border-green-100 rounded-full">
-          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-          <span className="text-[8px] font-black text-green-700 uppercase tracking-widest">TurboQuant active</span>
+        <div className={`flex items-center space-x-2 px-3 py-1 border rounded-full ${
+          engineStatus['Jan + TurboQuant'] === 'online'
+            ? 'bg-green-50 border-green-100'
+            : 'bg-orange-50 border-orange-100'
+        }`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${
+            engineStatus['Jan + TurboQuant'] === 'online' ? 'bg-green-500 animate-pulse' : 'bg-orange-500'
+          }`} />
+          <span className={`text-[8px] font-black uppercase tracking-widest ${
+            engineStatus['Jan + TurboQuant'] === 'online' ? 'text-green-700' : 'text-orange-700'
+          }`}>
+            {engineStatus['Jan + TurboQuant'] === 'online' ? 'Jan online' : 'Jan offline'}
+          </span>
         </div>
 
         <div className="w-px h-4 bg-gray-200" />
@@ -524,66 +724,149 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
             />
             <div className="flex items-center justify-between px-3 py-2">
               <div className="flex items-center space-x-0.5">
-                <div className="relative">
+                <div className="relative group/icon">
                   <button 
                     onClick={() => setShowUploadOptions(!showUploadOptions)}
-                    className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="Add content"
+                    className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Add content
+                  </div>
                   {showUploadOptions && (
-                    <div className="absolute bottom-full left-0 mb-2 w-40 bg-white border rounded-xl shadow-xl p-1 z-50 border-gray-100">
+                    <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border rounded-2xl shadow-2xl p-1.5 z-50 border-gray-100 animate-in fade-in slide-in-from-bottom-2">
                       <button 
                         onClick={() => { handleFileUpload(); setShowUploadOptions(false); }}
-                        className="flex items-center w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                        className="flex items-center w-full px-3 py-2.5 text-xs font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-all"
                       >
-                        <File className="w-3.5 h-3.5 mr-2" />
+                        <File className="w-4 h-4 mr-2.5" />
                         Upload Files
                       </button>
                       <button 
                         onClick={() => { handleFolderUpload(); setShowUploadOptions(false); }}
-                        className="flex items-center w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                        className="flex items-center w-full px-3 py-2.5 text-xs font-bold text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all"
                       >
-                        <Folder className="w-3.5 h-3.5 mr-2" />
+                        <Folder className="w-4 h-4 mr-2.5" />
                         Upload Folder
                       </button>
                       <button
-                        onClick={() => addNotice('Google Drive connects from Settings > Connectors')}
-                        className="flex items-center w-full px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 rounded-lg transition-colors border-t mt-1 pt-2"
+                        onClick={() => { addNotice('Google Drive connects from Settings > Connectors'); setShowUploadOptions(false); }}
+                        className="flex items-center w-full px-3 py-2.5 text-xs font-bold text-gray-600 hover:bg-green-50 hover:text-green-600 rounded-xl transition-all border-t mt-1.5 pt-2"
                       >
-                         <HardDrive className="w-3.5 h-3.5 mr-2 text-green-600" />
+                         <HardDrive className="w-4 h-4 mr-2.5 text-green-600" />
                          Google Drive
                       </button>
                     </div>
                   )}
                 </div>
-                <button onClick={() => setInput(prev => `${prev}${prev ? ' ' : ''}:)`)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Emoji">
-                  <Smile className="w-4 h-4" />
-                </button>
-                <button onClick={() => handleFolderUpload()} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="My Computer">
-                  <Monitor className="w-4 h-4" />
-                </button>
-                <button onClick={() => setInput(prev => prev || 'Use my enabled skills to ')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Skills">
-                  <Wrench className="w-4 h-4" />
-                </button>
-                <button onClick={() => setInput(prev => prev || 'Remember this for future tasks: ')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Memory">
-                  <Brain className="w-4 h-4" />
-                </button>
+
+                <div className="relative group/icon">
+                  <button onClick={composeWhatsApp} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all">
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    WhatsApp
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button onClick={openVideoCall} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                    <Video className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Video call
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button onClick={openVoiceStack} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-all">
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Voice stack
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button onClick={() => setInput(prev => `${prev}${prev ? ' ' : ''}:)`)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
+                    <Smile className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Emoji
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button onClick={() => handleFolderUpload()} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
+                    <Monitor className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    My Computer
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button 
+                    onClick={async () => {
+                      const skills = await window.ipcRenderer?.getInstalledSkills?.();
+                      addNotice(`Skills Engine: ${skills?.length || 0} installed local skills`);
+                    }} 
+                    className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
+                  >
+                    <Wrench className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Skills Engine
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button 
+                    onClick={() => addNotice('Memory Base opens from the Memory section; no cloud sync is running.')} 
+                    className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
+                  >
+                    <Brain className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Memory Base
+                  </div>
+                </div>
               </div>
+
               <div className="flex items-center space-x-2">
-                <button onClick={() => addNotice('Voice input is ready for browser speech permissions in the next build')} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Microphone">
-                  <Mic className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || isTyping}
-                  className={`p-2 rounded-full transition-all ${
-                    input.trim() && !isTyping ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-gray-100 text-gray-300'
-                  }`}
-                >
-                  <ArrowUp className="w-4 h-4" />
-                </button>
+                <div className="relative group/icon">
+                  <button 
+                    onClick={toggleMicrophone} 
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all",
+                      isRecording ? "bg-red-50 text-red-600 animate-pulse" : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                    )}
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Microphone
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button 
+                    onClick={() => handleSend()}
+                    disabled={!input.trim() || isTyping}
+                    className={cn(
+                      "p-2 rounded-full transition-all shadow-sm",
+                      input.trim() && !isTyping 
+                        ? 'bg-gray-900 text-white hover:bg-black hover:shadow-lg hover:shadow-black/10' 
+                        : 'bg-gray-100 text-gray-300'
+                    )}
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Send Message
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -596,7 +879,7 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
             >
               <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Connectors</span>
               <div className="flex items-center space-x-2">
-                {chatConnectorItems.filter(item => chatConnectors[item.name]).slice(0, 8).map(item => (
+                {chatConnectorItems.filter(item => chatConnectors[connectorId(item.name)] !== false).slice(0, 8).map(item => (
                   <ConnectorIcon key={item.name} icon={item.icon} label={item.name} color={item.color} />
                 ))}
               </div>
@@ -634,8 +917,8 @@ export const ChatInterface = ({ initialModel, initialPrompt }: { initialModel?: 
                           <p className="text-[9px] text-gray-500">{item.desc}</p>
                         </div>
                       </div>
-                      <div className={`w-9 h-5 rounded-full relative transition-all ${chatConnectors[item.name] ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${chatConnectors[item.name] ? 'left-4' : 'left-0.5'}`} />
+                      <div className={`w-9 h-5 rounded-full relative transition-all ${chatConnectors[connectorId(item.name)] !== false ? 'bg-blue-600' : 'bg-gray-200'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${chatConnectors[connectorId(item.name)] !== false ? 'left-4' : 'left-0.5'}`} />
                       </div>
                     </button>
                   ))}

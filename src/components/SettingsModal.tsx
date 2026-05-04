@@ -9,11 +9,11 @@ import {
   ChevronDown, Heart, Coffee, Camera, Map, Compass, Key
 } from 'lucide-react';
 import { ConnectorsManager } from './ConnectorsManager';
+import { SkillsRegistry } from './SkillsRegistry';
 import { MailMEView } from './MailMEView';
 import { DataControlsView } from './DataControlsView';
 import { MyComputerSettings } from './MyComputerSettings';
 import { KnowledgeView } from './KnowledgeView';
-import { SkillsRegistry } from './SkillsRegistry';
 import { ScheduledTasksView } from './ScheduledTasksView';
 import { APIKeyManager } from './APIKeyManager';
 
@@ -74,7 +74,7 @@ const SettingToggle = ({ title, desc, defaultChecked = false }: any) => (
   </div>
 );
 
-const WorkspacePanel = ({ tab, onAction }: any) => {
+const WorkspacePanel = ({ tab, onAction, setNotice }: any) => {
   const config: Record<string, any> = {
     Account: { title: 'Account', icon: CreditCard, desc: 'Manage identity, authentication, workspace membership, and billing.', primary: 'Copy account summary' },
     Usage: { title: 'Usage', icon: PieChart, desc: 'Review token consumption, API calls, connector activity, and workspace quotas.', primary: 'Export usage report' },
@@ -97,17 +97,18 @@ const WorkspacePanel = ({ tab, onAction }: any) => {
         <p className="text-sm text-gray-500 mt-1">{item.desc}</p>
       </div>
 
-      <div className="p-6 bg-gray-900 text-white rounded-3xl flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center">
-            <Icon className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-black">{item.title} Control Center</p>
-            <p className="text-[11px] text-gray-300 mt-0.5">Local-first settings are saved in this workspace session.</p>
-          </div>
+      <div className="p-8 bg-gray-50 border border-gray-100 rounded-[2rem] flex flex-col items-center justify-center text-center space-y-4">
+        <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-gray-400">
+          <Icon className="w-8 h-8" />
         </div>
-        <button onClick={() => onAction(item.primary, tab)} className="px-5 py-2 bg-white text-gray-900 rounded-xl text-[11px] font-black hover:bg-gray-100 transition-all">
+        <div>
+          <p className="text-sm font-bold text-gray-900">No active {item.title.toLowerCase()} found</p>
+          <p className="text-[11px] text-gray-400 max-w-xs mt-1">This workspace section is currently empty. Data and history will appear here once you begin working with specialized agents.</p>
+        </div>
+        <button 
+          onClick={() => onAction(item.primary, tab)}
+          className="px-6 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all shadow-lg shadow-gray-200"
+        >
           {item.primary}
         </button>
       </div>
@@ -119,6 +120,24 @@ const WorkspacePanel = ({ tab, onAction }: any) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <button 
+          onClick={async () => {
+            const res = await window.ipcRenderer.createShortcut();
+            if (res.success) {
+              setNotice('Desktop shortcut created!');
+              setTimeout(() => setNotice(''), 3000);
+            } else {
+              setNotice(`Error: ${res.error}`);
+            }
+          }}
+          className="p-4 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-2xl text-left transition-all group"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-black text-white">Create Desktop Shortcut</p>
+            <Zap className="w-3.5 h-3.5 text-blue-400" />
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1">Generate a launch shortcut on your Windows desktop.</p>
+        </button>
         {['Open local folder', 'Export JSON', 'Refresh status', 'Reset module'].map(action => (
           <button key={action} onClick={() => onAction(action, tab)} className="p-4 bg-gray-50 hover:bg-blue-50 border border-gray-100 rounded-2xl text-left transition-all">
             <p className="text-xs font-black text-gray-900">{action}</p>
@@ -365,12 +384,12 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                   onAddCustomMCP={() => showSettingsNotice('Custom MCP registry is ready. Add a server URL when available.')}
                 />
               )}
+              {activeTab === 'Skills' && <SkillsRegistry />}
               {activeTab === 'Data' && <DataControlsView />}
               {activeTab === 'Cloud' && <DataControlsView mode="cloud" />}
               {activeTab === 'Computer' && <MyComputerSettings />}
               {activeTab === 'Knowledge' && <KnowledgeView />}
               {activeTab === 'APIKeys' && <APIKeyManager />}
-              {activeTab === 'Skills' && <SkillsRegistry />}
               {activeTab === 'Scheduled' && <ScheduledTasksView />}
               
               {activeTab === 'General' && (
@@ -461,7 +480,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
               )}
 
               {(['Account', 'Usage', 'SharedTasks', 'SharedFiles', 'Websites', 'Apps', 'Domains', 'Integrations', 'About', 'Help'].includes(activeTab)) && (
-                <WorkspacePanel tab={activeTab} onAction={runSettingsAction} />
+                <WorkspacePanel tab={activeTab} onAction={runSettingsAction} setNotice={setSettingsNotice} />
               )}
             </div>
           </div>

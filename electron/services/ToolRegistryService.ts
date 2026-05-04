@@ -1,0 +1,128 @@
+import Store from 'electron-store';
+
+// ═══════════════════════════════════════════════════════════════════
+// ToolRegistryService — HermesDesk ME 1.8
+//
+// Manages tools and connectors. Provides agent-specific tool access
+// and LLM-compatible tool definitions for the agentic runtime.
+// ═══════════════════════════════════════════════════════════════════
+
+export interface Tool {
+  id: string;
+  name: string;
+  category: 'llm' | 'storage' | 'email' | 'os' | 'custom_api' | 'research';
+  description: string;
+  configSchema?: any;
+}
+
+export interface Connector {
+  id: string;
+  name: string;
+  enabled: boolean;
+  status: 'connected' | 'needs-auth' | 'disabled' | 'available';
+  type: 'local-engine' | 'cloud-api' | 'oauth' | 'url' | 'mcp';
+}
+
+// Which tools each agent is allowed to use
+const AGENT_TOOL_MAP: Record<string, string[]> = {
+  'hermes-full':      ['file-system', 'os-control', 'ollama', 'github', 'terminal'],
+  'paperclip-full':   ['file-system', 'gmail', 'google-drive'],
+  'solicitor-agent':  ['file-system', 'google-search'],
+  'accountant-agent': ['file-system', 'stripe', 'xero'],
+  'space-agent-full': ['os-control', 'google-search', 'terminal'],
+  'openclaw-full':    ['os-control', 'terminal', 'file-system']
+};
+
+export class ToolRegistryService {
+  private store: any;
+  private tools: Tool[] = [
+    { id: 'ollama', name: 'Ollama', category: 'llm', description: 'Optional external LLM engine (port 11434)' },
+    { id: 'lm-studio', name: 'LM Studio', category: 'llm', description: 'Optional external model server (port 1234)' },
+    { id: 'jan-turboquant', name: 'Jan + TurboQuant', category: 'llm', description: 'Built-in primary engine (port 1337)' },
+    { id: 'gmail', name: 'Gmail', category: 'email', description: 'Email access and drafts' },
+    { id: 'github', name: 'GitHub', category: 'custom_api', description: 'Repo and code management' },
+    { id: 'file-system', name: 'File System', category: 'storage', description: 'Local file operations (read, write, list)' },
+    { id: 'os-control', name: 'OS Control', category: 'os', description: 'Open apps, URLs, and system commands' },
+    { id: 'terminal', name: 'Terminal', category: 'os', description: 'PowerShell command execution' },
+    { id: 'google-search', name: 'Web Search', category: 'research', description: 'Web research tool' }
+  ];
+
+  constructor(sharedStore?: any) {
+    this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
+  }
+
+  getTools() {
+    return this.tools;
+  }
+
+  /** Get only the tools a specific agent is allowed to use */
+  getToolsForAgent(agentId: string): Tool[] {
+    const allowedIds = AGENT_TOOL_MAP[agentId] || [];
+    return this.tools.filter(t => allowedIds.includes(t.id));
+  }
+
+  /** Get tool definitions in a format suitable for LLM system prompts */
+  getToolDefinitionsForLLM(agentId?: string): string {
+    const tools = agentId ? this.getToolsForAgent(agentId) : this.tools;
+    return tools.map(t => `- ${t.name}: ${t.description}`).join('\n');
+  }
+
+  async getConnectors(): Promise<Record<string, boolean>> {
+    const connectors = this.store.get('connectors', {}) as Record<string, boolean>;
+    const defaults: Record<string, boolean> = {
+      'my-browser': true, 'ollama': true, 'lm-studio': true, 'jan-turboquant': true,
+      'google-gemini': true, 'openrouter': true, 'instagram': true,
+      'meta-ads': true, 'gmail': true, 'google-calendar': true, 'google-drive': true,
+      'outlook-mail': true, 'outlook-calendar': true, 'github': true, 'slack': true,
+      'notion': true, 'zapier': true, 'asana': true, 'monday': true, 'make': true,
+      'linear': true, 'atlassian': true, 'clickup': true, 'supabase': true,
+      'vercel': true, 'neon': true, 'prisma': true, 'sentry': true, 'huggingface': true,
+      'hubspot': true, 'stripe': true, 'mcp-filesystem': true, 'mcp-windows-shell': true,
+      'intercom': true, 'paypal-business': true, 'revenuecat': true, 'close': true,
+      'xero': true, 'airtable': true, 'dify': true, 'cloudflare': true, 'posthog': true,
+      'playwright': true, 'jam': true, 'canva': true, 'webflow': true, 'wix': true,
+      'granola': true, 'fireflies': true, 'tldv': true, 'firecrawl': true,
+      'todoist': true, 'zoominfo': true, 'metabase': true, 'explorium': true,
+      'serena': true, 'heygen': true, 'context7': true, 'hume': true, 'line': true,
+      'jotform': true, 'pophive': true, 'minimax': true
+    };
+    return { ...defaults, ...connectors };
+  }
+
+  /** Get connector status with real-world awareness */
+  async getConnectorStatuses(): Promise<Connector[]> {
+    const enabled = await this.getConnectors();
+    
+    return [
+      { id: 'jan-turboquant', name: 'Jan + TurboQuant', enabled: enabled['jan-turboquant'] ?? true, status: 'available', type: 'local-engine' },
+      { id: 'ollama', name: 'Ollama', enabled: enabled['ollama'] ?? true, status: 'available', type: 'local-engine' },
+      { id: 'lm-studio', name: 'LM Studio', enabled: enabled['lm-studio'] ?? true, status: 'available', type: 'local-engine' },
+      { id: 'openrouter', name: 'OpenRouter', enabled: enabled['openrouter'] ?? true, status: 'needs-auth', type: 'cloud-api' },
+      { id: 'google-gemini', name: 'Google Gemini', enabled: enabled['google-gemini'] ?? true, status: 'available', type: 'cloud-api' },
+      { id: 'github', name: 'GitHub', enabled: enabled['github'] ?? true, status: 'needs-auth', type: 'oauth' },
+      { id: 'gmail', name: 'Gmail', enabled: enabled['gmail'] ?? true, status: 'needs-auth', type: 'oauth' },
+      { id: 'google-drive', name: 'Google Drive', enabled: enabled['google-drive'] ?? true, status: 'needs-auth', type: 'oauth' },
+      { id: 'notion', name: 'Notion', enabled: enabled['notion'] ?? true, status: 'needs-auth', type: 'oauth' },
+      { id: 'slack', name: 'Slack', enabled: enabled['slack'] ?? true, status: 'needs-auth', type: 'oauth' },
+      { id: 'stripe', name: 'Stripe', enabled: enabled['stripe'] ?? true, status: 'needs-auth', type: 'cloud-api' },
+      { id: 'xero', name: 'Xero', enabled: enabled['xero'] ?? true, status: 'needs-auth', type: 'cloud-api' },
+      { id: 'mcp-filesystem', name: 'MCP Filesystem', enabled: enabled['mcp-filesystem'] ?? true, status: 'available', type: 'mcp' },
+      { id: 'mcp-windows-shell', name: 'MCP Windows Shell', enabled: enabled['mcp-windows-shell'] ?? true, status: 'available', type: 'mcp' },
+    ];
+  }
+
+  async saveConnector(id: string, enabled: boolean) {
+    if (!id) {
+      throw new Error('Connector id is required');
+    }
+    const connectors = this.store.get('connectors', {});
+    connectors[id] = enabled;
+    this.store.set('connectors', connectors);
+    console.log(`ME 1.8: Connector ${id} is now ${enabled ? 'ACTIVE' : 'DISABLED'}`);
+    return connectors;
+  }
+
+  async toggleConnector(id: string, enabled: boolean) {
+    return this.saveConnector(id, enabled);
+  }
+}

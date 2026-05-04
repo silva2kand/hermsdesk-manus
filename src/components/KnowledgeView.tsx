@@ -8,39 +8,20 @@ import {
 export const KnowledgeView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  
-  const [knowledgeData, setKnowledgeData] = useState([
-    {
-      id: 'presentation-style',
-      title: 'Presentation, Video, and Content Production Style Guide',
-      desc: 'Global rules for smooth, minimal slides (max 6 lines), consistent fonts, brand colors, and step-by-step training flow.',
-      rules: '1. Max 6 lines per slide\n2. Use brand font (Inter)\n3. Primary color: #2563eb\n4. Always include a summary at the end.',
-      created: 'Mar 17, 2026',
-      type: 'Official',
-      color: 'bg-purple-500'
-    },
-    {
-      id: 'ai-architecture',
-      title: 'AI System Architecture & Model Routing Preferences',
-      desc: 'Local-first execution (LM Studio/Ollama). Cloud routing for advanced reasoning (Grok, Gemini, OpenRouter).',
-      rules: '1. Default to Ollama for coding\n2. Use Gemini for multimodal\n3. Route to Grok for complex reasoning.',
-      created: 'Mar 17, 2026',
-      type: 'Personal',
-      color: 'bg-blue-600'
-    },
-    {
-      id: 'video-engagement',
-      title: 'Short-Form Video & Social Strategy',
-      desc: 'TikTok (≤60s vertical), Instagram (≤90s vertical/square). High-contrast thumbnails and 4K default resolution.',
-      rules: '1. Hook in first 3 seconds\n2. Captions mandatory\n3. Use trending audio (low volume).',
-      created: 'Mar 17, 2026',
-      type: 'Marketing',
-      color: 'bg-red-500'
-    }
-  ]);
+  const [knowledgeData, setKnowledgeData] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    const fetchKnowledge = async () => {
+      if (window.ipcRenderer) {
+        const data = await window.ipcRenderer.getKnowledge();
+        setKnowledgeData(data);
+      }
+    };
+    fetchKnowledge();
+  }, []);
 
   const filteredKnowledge = useMemo(() => {
-    return knowledgeData.filter(k => 
+    return (knowledgeData || []).filter(k => 
       k.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
       k.desc.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -51,8 +32,12 @@ export const KnowledgeView = () => {
     [editingId, knowledgeData]
   );
 
-  const handleUpdateRules = (id: string, newRules: string) => {
-    setKnowledgeData(prev => prev.map(k => k.id === id ? { ...k, rules: newRules } : k));
+  const handleUpdateRules = async (id: string, newRules: string) => {
+    const newData = knowledgeData.map(k => k.id === id ? { ...k, rules: newRules } : k);
+    setKnowledgeData(newData);
+    if (window.ipcRenderer) {
+      await window.ipcRenderer.saveKnowledge(newData);
+    }
   };
 
   if (editingId && editingItem) {

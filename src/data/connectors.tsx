@@ -2,24 +2,12 @@ import {
   Globe, Mail, Calendar, Github, Layout, MessageSquare, 
   Database, Briefcase, BarChart3, Video, Music, Smile, 
   Cpu, Zap, Cloud, HardDrive, Monitor, Palette, Search, 
-  Lock, ShoppingBag, Terminal, Layers, Activity, Bug, 
-  Play, Smartphone, Type, Settings, Plus, Send, Mic, Check,
-  CreditCard, PieChart, Bell, Target, Clock, Filter, 
-  Share2, Link, Book, Headphones, Users, Star, Award, 
-  Camera, Map, Compass, Coffee, Heart, Zap as Bolt
+  Terminal, Layers, Activity, Bug, 
+  Play, Mic, Check,
+  CreditCard, PieChart, Target, Filter, 
+  Book, Headphones, Users, 
+  Camera, Shield, Table, Zap as Bolt
 } from 'lucide-react';
-
-const Shield = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-  </svg>
-);
-
-const Table = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18" />
-  </svg>
-);
 
 export interface Connector {
   id: string;

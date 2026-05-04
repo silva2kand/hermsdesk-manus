@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Video, Music, Globe, BarChart3, 
   Cpu, Wrench, ChevronRight, Star, Clock, Info,
@@ -8,6 +8,25 @@ import {
 export const SkillsRegistry = () => {
   const [activeTab, setActiveTab] = useState('Official');
   const [searchQuery, setSearchQuery] = useState('');
+  const [installedSkills, setInstalledSkills] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchInstalled = async () => {
+      if (window.ipcRenderer) {
+        const installed = await (window.ipcRenderer as any).getInstalledSkills();
+        setInstalledSkills(installed);
+      }
+    };
+    fetchInstalled();
+  }, []);
+
+  const handleToggleSkill = async (skillId: string) => {
+    if (window.ipcRenderer) {
+      const isInstalled = installedSkills.includes(skillId);
+      const updated = await (window.ipcRenderer as any).toggleSkill(skillId, !isInstalled);
+      setInstalledSkills(updated);
+    }
+  };
 
   const skills = [
     {
@@ -137,9 +156,28 @@ export const SkillsRegistry = () => {
                       <Clock className="w-3 h-3 mr-1" />
                       Updated {skill.updated}
                     </span>
-                    <button className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">
-                      Install
-                      <Plus className="w-3 h-3 ml-1" />
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleSkill(skill.id);
+                      }}
+                      className={`flex items-center text-[10px] font-black uppercase tracking-widest transition-all ${
+                        installedSkills.includes(skill.id) 
+                        ? 'text-green-600 bg-green-50 px-2 py-1 rounded-lg' 
+                        : 'text-blue-600 hover:underline'
+                      }`}
+                    >
+                      {installedSkills.includes(skill.id) ? (
+                        <>
+                          <Check className="w-3 h-3 mr-1" />
+                          Installed
+                        </>
+                      ) : (
+                        <>
+                          Install
+                          <Plus className="w-3 h-3 ml-1" />
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

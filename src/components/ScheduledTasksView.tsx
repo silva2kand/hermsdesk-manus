@@ -1,28 +1,55 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Clock, Plus, Play, Trash2, Calendar, 
   Settings, ChevronRight, AlertCircle, RefreshCw
 } from 'lucide-react';
 
 export const ScheduledTasksView = () => {
-  const schedules = [
-    {
-      id: 'daily-briefing',
-      name: 'Daily Research Briefing',
-      trigger: 'Every day at 8:00 AM',
-      task: 'Summarize top news from TechCrunch and Hacker News',
-      status: 'Active',
-      color: 'bg-blue-500'
-    },
-    {
-      id: 'weekly-report',
-      name: 'Weekly Sales Analysis',
-      trigger: 'Every Monday at 9:00 AM',
-      task: 'Generate revenue report from Stripe and email to SILVA',
-      status: 'Active',
-      color: 'bg-purple-500'
+  const [schedules, setSchedules] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      if (window.ipcRenderer) {
+        const tasks = await (window.ipcRenderer as any).getScheduledTasks();
+        setSchedules(tasks);
+      }
+    };
+    fetchTasks();
+  }, []);
+
+  const saveTasks = async (newTasks: any[]) => {
+    if (window.ipcRenderer) {
+      await (window.ipcRenderer as any).saveScheduledTasks(newTasks);
     }
-  ];
+  };
+
+  const handleAddTask = () => {
+    const name = window.prompt('Task name');
+    if (!name) return;
+    const newTask = {
+      id: Math.random().toString(36).substring(7),
+      name,
+      trigger: 'Every day at 9:00 AM',
+      task: 'New automated task',
+      status: 'Active',
+      color: 'bg-green-500'
+    };
+    const next = [...schedules, newTask];
+    setSchedules(next);
+    saveTasks(next);
+  };
+
+  const handleDeleteTask = (id: string) => {
+    const next = schedules.filter(t => t.id !== id);
+    setSchedules(next);
+    saveTasks(next);
+  };
+
+  const handleToggleStatus = (id: string) => {
+    const next = schedules.map(t => t.id === id ? { ...t, status: t.status === 'Active' ? 'Paused' : 'Active' } : t);
+    setSchedules(next);
+    saveTasks(next);
+  };
 
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
@@ -31,7 +58,10 @@ export const ScheduledTasksView = () => {
           <h2 className="text-xl font-bold text-gray-900">Scheduled Tasks</h2>
           <p className="text-sm text-gray-500 mt-1">Automate recurring workflows and time-based triggers.</p>
         </div>
-        <button className="flex items-center px-6 py-2.5 bg-gray-900 text-white rounded-2xl text-xs font-black hover:bg-gray-800 transition-all shadow-lg shadow-gray-200">
+        <button 
+          onClick={handleAddTask}
+          className="flex items-center px-6 py-2.5 bg-gray-900 text-white rounded-2xl text-xs font-black hover:bg-gray-800 transition-all shadow-lg shadow-gray-200"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Schedule Task
         </button>
@@ -46,14 +76,21 @@ export const ScheduledTasksView = () => {
           {schedules.map((item) => (
             <div key={item.id} className="group p-6 bg-white border border-gray-100 rounded-[32px] hover:border-blue-100 hover:shadow-xl hover:shadow-gray-100 transition-all">
               <div className="flex items-start justify-between">
-                <div className="flex items-start space-x-4">
+                <div className="flex items-start x-4">
                   <div className={`w-12 h-12 ${item.color} rounded-2xl flex items-center justify-center text-white shadow-lg`}>
                     <RefreshCw className="w-6 h-6" />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 ml-4">
                     <div className="flex items-center space-x-3">
                       <h3 className="text-sm font-black text-gray-900">{item.name}</h3>
-                      <span className="px-2 py-0.5 bg-green-50 text-green-600 text-[9px] font-black uppercase rounded-full">{item.status}</span>
+                      <button 
+                        onClick={() => handleToggleStatus(item.id)}
+                        className={`px-2 py-0.5 text-[9px] font-black uppercase rounded-full transition-all ${
+                          item.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {item.status}
+                      </button>
                     </div>
                     <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">{item.trigger}</p>
                     <p className="text-[11px] text-gray-500 max-w-md">{item.task}</p>
@@ -66,7 +103,10 @@ export const ScheduledTasksView = () => {
                   <button className="p-2.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all">
                     <Settings className="w-4 h-4" />
                   </button>
-                  <button className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                  <button 
+                    onClick={() => handleDeleteTask(item.id)}
+                    className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>

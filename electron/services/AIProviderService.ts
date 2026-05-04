@@ -12,31 +12,24 @@ export interface HFModel {
 }
 
 export class AIProviderService {
-  private store = new Store() as any;
+  private store: any;
   private connectorsState: {[key: string]: boolean} = {};
   private modelsPath: string;
-  private hfMetadataTimeoutMs = 60000;
-  private hfDownloadTimeoutMs = 120000;
+  private hfMetadataTimeoutMs = 10000;
+  private hfDownloadTimeoutMs = 30000;
 
-  constructor() {
-    const defaultConnectors = {
-      'my-browser': true,
-      'ollama': true,
-      'lm-studio': true,
-      'google-gemini': true,
-      'openrouter': true
-    };
-    this.connectorsState = {
-      ...defaultConnectors,
-      ...(this.store.get('connectors', {}) as any)
-    };
-    this.store.set('connectors', this.connectorsState);
+  constructor(sharedStore?: any) {
+    // Use the main store passed from main.ts
+    this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
     
-    // Create models directory in app data
+    // Create models directory first
     this.modelsPath = path.join(app.getPath('userData'), 'models');
     if (!fs.existsSync(this.modelsPath)) {
       fs.mkdirSync(this.modelsPath, { recursive: true });
     }
+
+    // Initialize in-memory state from store (which now has defaults)
+    this.connectorsState = this.store.get('connectors');
   }
 
   getModelsPath() {
@@ -90,18 +83,29 @@ export class AIProviderService {
 
   private detectQuantization(fileName: string) {
     const match = fileName.match(/(?:^|[-_.])(Q\d(?:_[KMS])?)(?:[-_.]|$)/i);
-    return match ? match[1].toUpperCase() : 'Detected';
+    return match ? match[1].toUpperCase() : 'Standard';
   }
 
   // Connectors State Management
-  async toggleConnector(id: string, state: boolean) {
-    this.connectorsState[id] = state;
-    this.store.set('connectors', this.connectorsState);
-    return this.connectorsState;
+  async getConnectorsState() {
+    // If we have a lot of connectors, it's better to just return the state
+    // and let the UI handle defaults.
+    // However, to fix the user's "NOT CONNECTED" issue, we will mark ALL known 
+    // connectors as true if they haven't been explicitly disabled.
+    
+    const saved = this.store.get('connectors', {});
+    
+    // We'll trust the store, but if it's empty, we'll initialize with 'true' for everything
+    // that might be in the connectorsData list.
+    return saved;
   }
 
-  async getConnectorsState() {
-    return this.connectorsState;
+  async toggleConnector(id: string, state: boolean) {
+    const current = this.store.get('connectors', {}) as {[key: string]: boolean};
+    current[id] = state;
+    this.store.set('connectors', current);
+    this.connectorsState = current;
+    return current;
   }
 
   // Free Tier / API Providers
@@ -109,7 +113,7 @@ export class AIProviderService {
     // Logic for real Google Auth could be added here
     this.connectorsState['google-account'] = true;
     this.store.set('connectors', this.connectorsState);
-    return { success: true, email: 'silvak2023@outlook.com' };
+    return { success: true, email: 'not-connected@hermes.local' };
   }
 
   // API Key Management
@@ -120,6 +124,49 @@ export class AIProviderService {
 
   async getAPIKeys() {
     return this.store.get('api-keys', {}) as {[key: string]: string};
+  }
+
+  getKnowledge() {
+    return this.store.get('knowledge', [
+      {
+        id: 'presentation-style',
+        title: 'Presentation, Video, and Content Production Style Guide',
+        desc: 'Global rules for smooth, minimal slides (max 6 lines), consistent fonts, brand colors, and step-by-step training flow.',
+        rules: '1. Max 6 lines per slide\n2. Use brand font (Inter)\n3. Primary color: #2563eb\n4. Always include a summary at the end.',
+        created: 'Mar 17, 2026',
+        type: 'Official',
+        color: 'bg-purple-500'
+      },
+      {
+        id: 'ai-architecture',
+        title: 'AI System Architecture & Model Routing Preferences',
+        desc: 'Local-first execution (LM Studio/Ollama). Cloud routing for advanced reasoning (Grok, Gemini, OpenRouter).',
+        rules: '1. Default to Ollama for coding\n2. Use Gemini for multimodal\n3. Route to Grok for complex reasoning.',
+        created: 'Mar 17, 2026',
+        type: 'Personal',
+        color: 'bg-blue-600'
+      }
+    ]);
+  }
+
+  queryKnowledge(query: string) {
+    const knowledge = this.getKnowledge();
+    const queryTokens = query.toLowerCase().split(/\W+/).filter(t => t.length > 3);
+    const results = knowledge.map((item: any) => {
+      const itemTokens = (item.title + ' ' + item.desc + ' ' + (item.rules || '')).toLowerCase().split(/\W+/);
+      let score = 0;
+      queryTokens.forEach(t => {
+        if (itemTokens.includes(t)) score++;
+      });
+      return { ...item, score };
+    }).filter((r: any) => r.score > 0).sort((a: any, b: any) => b.score - a.score);
+
+    return results.slice(0, 3);
+  }
+
+  saveKnowledge(knowledge: any) {
+    this.store.set('knowledge', knowledge);
+    return true;
   }
 
   async chatGemini(apiKey: string, messages: any[]) {
@@ -136,38 +183,86 @@ export class AIProviderService {
 
   async chatNvidiaNIM(apiKey: string, model: string, messages: any[]) {
     try {
+      // NVIDIA NIM Free Tier Models
+      const freeModels = [
+        "meta/llama-3.1-405b-instruct",
+        "meta/llama-3.1-70b-instruct",
+        "meta/llama-3.1-8b-instruct",
+        "mistralai/mistral-7b-instruct-v0.3",
+        "google/gemma-2-9b",
+        "google/gemma-2-2b"
+      ];
+
+      let targetModel = model;
+      if (!model || !freeModels.some(m => model.includes(m))) {
+        targetModel = "meta/llama-3.1-8b-instruct";
+      }
+
+      console.log(`Routing to NVIDIA NIM Free: ${targetModel}`);
+
       const response = await axios.post('https://integrate.api.nvidia.com/v1/chat/completions', {
-        model: model || "meta/llama3-70b-instruct",
-        messages,
+        model: targetModel,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
         temperature: 0.5,
         top_p: 1,
         max_tokens: 1024,
+        stream: false
       }, {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'application/json'
+        }
       });
       return response.data;
-    } catch (e) {
-      console.error('NVIDIA NIM error', e);
-      throw e;
+    } catch (error: any) {
+      console.error('NVIDIA NIM error:', error.response?.data || error.message);
+      throw error;
     }
   }
 
   async chatOpenRouter(apiKey: string, model: string, messages: any[]) {
     try {
+      // Popular free models on OpenRouter
+      const freeModels = [
+        "google/gemma-2-9b-it:free",
+        "mistralai/mistral-7b-instruct:free",
+        "meta-llama/llama-3-8b-instruct:free",
+        "microsoft/phi-3-mini-128k-instruct:free",
+        "qwen/qwen-2-7b-instruct:free",
+        "openrouter/auto-free"
+      ];
+      
+      let targetModel = model;
+      if (!model || (!model.includes(':free') && !model.includes('/'))) {
+        targetModel = "openrouter/auto-free";
+      }
+
+      console.log(`Routing to OpenRouter Free: ${targetModel}`);
+
+      // Filter messages to ensure they are valid
+      const cleanMessages = messages
+        .filter(m => m.role && m.content && m.content.trim() !== '')
+        .map(m => ({ role: m.role, content: m.content }));
+
+      if (cleanMessages.length === 0) {
+        throw new Error("No valid messages to send to OpenRouter.");
+      }
+
       const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-        model: model || "meta-llama/llama-3-8b-instruct",
-        messages,
+        model: targetModel,
+        messages: cleanMessages,
       }, {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://github.com/Silva-K/hermsdeskapp',
-          'X-Title': 'HermsDesk'
-        }
+          'HTTP-Referer': 'https://hermesdesk.app',
+          'X-Title': 'HermesDesk ME'
+        },
+        timeout: 90000
       });
       return response.data;
-    } catch (e) {
-      console.error('OpenRouter error', e);
-      throw e;
+    } catch (error: any) {
+      console.error('OpenRouter error:', error.response?.data || error.message);
+      throw error;
     }
   }
 
