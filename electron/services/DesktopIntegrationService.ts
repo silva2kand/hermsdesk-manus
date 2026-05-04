@@ -203,6 +203,7 @@ export class DesktopIntegrationService {
         return shell.openExternal('msteams://');
       case 'voice stack':
       case 'silva voice stack':
+        await this.startVoiceStackServer();
         return shell.openExternal('http://localhost:7100/');
       case 'outlook':
       case 'new outlook':
@@ -235,6 +236,20 @@ export class DesktopIntegrationService {
     return this.openExternalApp(appName);
   }
 
+  private async startVoiceStackServer() {
+    try {
+      await axios.get('http://localhost:7100/', { timeout: 1500 });
+      return { ok: true, alreadyRunning: true };
+    } catch {
+      const scriptPath = 'C:\\Users\\Silva\\WorkSpace\\voicelcl\\silva-voice\\run_server.bat';
+      const workingDirectory = path.dirname(scriptPath);
+      if (!fs.existsSync(scriptPath)) return { ok: false, error: 'Silva Voice Stack launcher was not found.' };
+      const child = spawn(scriptPath, [], { cwd: workingDirectory, detached: true, stdio: 'ignore', windowsHide: true });
+      child.unref();
+      return { ok: true, started: true };
+    }
+  }
+
   async composeWhatsAppMessage(message: string, phone?: string) {
     const text = encodeURIComponent(message || '');
     const cleanedPhone = (phone || '').replace(/[^\d]/g, '');
@@ -256,11 +271,13 @@ export class DesktopIntegrationService {
 
   async getVoiceStackStatus() {
     try {
-      const [home, voices] = await Promise.all([
+      await this.startVoiceStackServer();
+      const [home, profiles, accents] = await Promise.all([
         axios.get('http://localhost:7100/', { timeout: 2000 }),
-        axios.get('http://localhost:7100/voices', { timeout: 2000 }).catch(() => null)
+        axios.get('http://localhost:7100/tts/profiles', { timeout: 2000 }).catch(() => null),
+        axios.get('http://localhost:7100/tts/accents', { timeout: 2000 }).catch(() => null)
       ]);
-      return { ok: true, url: 'http://localhost:7100/', status: home.status, voices: voices?.data || null };
+      return { ok: true, url: 'http://localhost:7100/', status: home.status, profiles: profiles?.data || null, accents: accents?.data || null };
     } catch (error: any) {
       return { ok: false, url: 'http://localhost:7100/', error: error.message };
     }
@@ -278,19 +295,20 @@ export class DesktopIntegrationService {
       language,
       locale: language,
       accent: options.accent || 'jaffna',
+      accent_id: options.accent_id || options.accentId || voice,
       style: options.style || 'professional',
       rate: options.rate || 1,
       pitch: options.pitch || 1,
       format: options.format || 'mp3'
     };
 
-    const endpoints = ['/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
+    const endpoints = ['/tts/synthesize', '/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
     let lastError = '';
 
     for (const endpoint of endpoints) {
       try {
         const response = await axios.post(`http://localhost:7100${endpoint}`, payload, {
-          timeout: 30000,
+          timeout: 300000,
           responseType: 'arraybuffer',
           validateStatus: status => status >= 200 && status < 300
         });

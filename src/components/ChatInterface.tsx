@@ -226,10 +226,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   };
 
   const voiceOptions: Record<string, any> = {
-    'tamil-jaffna': { voice: 'tamil-jaffna', language: 'ta-LK', accent: 'jaffna', style: 'professional' },
-    'tamil-india': { voice: 'tamil-india', language: 'ta-IN', accent: 'india', style: 'professional' },
-    'english-uk': { voice: 'english-uk', language: 'en-GB', accent: 'uk', style: 'professional' },
-    'english-us': { voice: 'english-us', language: 'en-US', accent: 'us', style: 'professional' }
+    'tamil-jaffna': { voice: 'ta-m1', accent_id: 'ta-m1', language: 'ta-LK', accent: 'jaffna', style: 'professional' },
+    'tamil-india': { voice: 'ta-default', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional' },
+    'english-uk': { voice: 'en-gb-default', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional' },
+    'english-us': { voice: 'en-us-default', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional' }
   };
 
   const speakMessage = async (content: string) => {
@@ -246,16 +246,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       return;
     }
 
-    if (!window.speechSynthesis) {
-      addNotice(voiceResult?.error || 'Speech is not available in this environment');
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(`ME says. ${spoken}`);
-    utterance.lang = voiceOptions[voicePreset]?.language || 'en-GB';
-    utterance.rate = 1;
-    window.speechSynthesis.speak(utterance);
-    addNotice(`Voice Stack offline; using Windows/browser fallback. ${voiceResult?.error || ''}`.trim());
+    addNotice(`Silva Voice Stack could not speak. ${voiceResult?.error || 'Start or repair the local voice server.'}`.trim());
   };
 
   const editMessage = (content: string) => {
