@@ -97,6 +97,24 @@ export class WorkspaceService {
     return true;
   }
 
+  getModelPreset() {
+    const settings = this.getGeneralSettings() || {};
+    return settings.modelPreset || { provider: 'Jan', model: 'Auto local model' };
+  }
+
+  saveModelPreset(preset: { provider: string; model: string }) {
+    const settings = this.getGeneralSettings() || {};
+    const next = {
+      ...settings,
+      modelPreset: {
+        provider: preset.provider || 'Jan',
+        model: preset.model || 'Auto local model'
+      }
+    };
+    this.store.set('generalSettings', next);
+    return next.modelPreset;
+  }
+
   getSilvaMemory() {
     return this.store.get('silvaMasterMemory', SILVA_MASTER_MEMORY);
   }

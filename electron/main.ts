@@ -57,7 +57,8 @@ function initializeStoreAndServices() {
         language: 'English',
         theme: 'Quantum Blue',
         appearance: 'Dark',
-        notifications: { productUpdates: true, earlyAccess: false, taskEmail: true }
+        notifications: { productUpdates: true, earlyAccess: false, taskEmail: true },
+        modelPreset: { provider: 'Jan', model: 'Auto local model' }
       },
       knowledge: []
     }
@@ -414,6 +415,8 @@ function createWindow() {
   ipcMain.handle('workspace:get-scheduled-runs', () => schedulerService.getRuns())
   ipcMain.handle('workspace:get-settings', () => workspaceService.getGeneralSettings())
   ipcMain.handle('workspace:save-settings', (_, settings) => workspaceService.saveGeneralSettings(settings))
+  ipcMain.handle('workspace:get-model-preset', () => workspaceService.getModelPreset())
+  ipcMain.handle('workspace:save-model-preset', (_, preset) => workspaceService.saveModelPreset(preset))
   ipcMain.handle('workspace:get-silva-memory', () => workspaceService.getSilvaMemory())
   ipcMain.handle('workspace:save-silva-memory', (_, memory) => workspaceService.saveSilvaMemory(memory))
   ipcMain.handle('workspace:get-email-intelligence', () => workspaceService.getEmailIntelligence())

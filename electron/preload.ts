@@ -88,6 +88,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getScheduledRuns: () => ipcRenderer.invoke('workspace:get-scheduled-runs'),
   getGeneralSettings: () => ipcRenderer.invoke('workspace:get-settings'),
   saveGeneralSettings: (settings: any) => ipcRenderer.invoke('workspace:save-settings', settings),
+  getModelPreset: () => ipcRenderer.invoke('workspace:get-model-preset'),
+  saveModelPreset: (preset: { provider: string, model: string }) => ipcRenderer.invoke('workspace:save-model-preset', preset),
   createShortcut: () => ipcRenderer.invoke('desktop:create-shortcut'),
   getComputerOverview: () => ipcRenderer.invoke('desktop:computer-overview'),
   listDirectory: (folderPath?: string) => ipcRenderer.invoke('desktop:list-directory', folderPath),

@@ -39,7 +39,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
   const [isTyping, setIsTyping] = useState(false);
   const [researchSteps, setResearchSteps] = useState<string[]>([]);
   const [provider, setProvider] = useState(initialModel?.provider || 'Jan');
-  const [model, setModel] = useState(initialModel?.model || '');
+  const [model, setModel] = useState(initialModel?.model || 'Auto local model');
   const [showConnectorPanel, setShowConnectorPanel] = useState(false);
   const [chatConnectors, setChatConnectors] = useState<{[key: string]: boolean}>({});
   const handledInitialPrompt = useRef('');
@@ -65,6 +65,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
             setProvider(initialModel.provider);
             setModel(initialModel.model);
           } else {
+            const preset = await window.ipcRenderer.getModelPreset?.().catch(() => ({ provider: 'Jan', model: 'Auto local model' }));
+            if (preset?.provider) {
+              setProvider(preset.provider);
+              setModel(preset.model || 'Auto local model');
+            }
             // Auto-detect best local engine
             const [ollama, jan, lmstudio] = await Promise.all([
               window.ipcRenderer.listModels().catch(() => []),
@@ -74,7 +79,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
 
             if (!isMounted) return;
 
-            if (jan && jan.apiOnline) {
+            if (preset?.provider === 'Jan') {
+              setProvider('Jan');
+              if (preset.model) setModel(preset.model);
+              setEngineStatus(prev => ({ ...prev, 'Jan + TurboQuant': jan?.apiOnline ? 'online' : 'offline' }));
+            } else if (jan && jan.apiOnline) {
               setProvider('Jan');
               const janModels = jan.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
               if (janModels.length) setModel(janModels[0]);
@@ -96,6 +105,18 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
     fetchData();
     return () => { isMounted = false; };
   }, [initialModel]);
+
+  React.useEffect(() => {
+    if (!window.ipcRenderer?.saveModelPreset) return;
+    if (initialModel?.provider && initialModel?.model) return;
+    const timeout = window.setTimeout(() => {
+      window.ipcRenderer.saveModelPreset({
+        provider,
+        model: model || 'Auto local model'
+      }).catch(() => {});
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [provider, model, initialModel]);
 
   const [providerModels, setProviderModels] = useState<{[key: string]: string[]}>({
     'Ollama': [],
@@ -310,7 +331,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
         ...prev,
         Ollama: ollamaModels?.length ? ollamaModels.map((m: any) => m.name) : prev.Ollama,
         'LM Studio': lmStudioStatus?.data?.length ? lmStudioStatus.data.map((m: any) => m.id) : prev['LM Studio'],
-        Jan: janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan
+        Jan: ['Auto local model', ...(janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan.filter(m => m !== 'Auto local model'))]
       }));
 
       const ollamaNames = ollamaModels?.map((m: any) => m.name) || [];

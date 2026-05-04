@@ -309,8 +309,9 @@ export const Sidebar = ({
         </SidebarSection>
 
         <SidebarSection title="INTEGRATIONS" isCollapsed={isSidebarCollapsed}>
-          <SidebarItem icon={Share2} label="Connectors" active={currentView === 'connectors'} isCollapsed={isSidebarCollapsed} onClick={() => onOpenSettings()} />
-          <SidebarItem icon={Wrench} label="API Keys" active={currentView === 'api-keys'} isCollapsed={isSidebarCollapsed} onClick={() => onOpenSettings()} />
+          <SidebarItem icon={Share2} label="Connectors" active={currentView === 'connectors'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('connectors')} />
+          <SidebarItem icon={Puzzle} label="Plugin Channels" active={currentView === 'plugins'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('plugins')} />
+          <SidebarItem icon={Wrench} label="API Keys" active={currentView === 'api-keys'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('api-keys')} />
           <SidebarItem icon={Database} label="Integrations" active={currentView === 'integrations'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('integrations')} />
         </SidebarSection>
 

@@ -54,6 +54,8 @@ interface Window {
     saveScheduledTasks: (tasks: any[]) => Promise<boolean>;
     runScheduledTask: (id: string) => Promise<any>;
     getScheduledRuns: () => Promise<any[]>;
+    getModelPreset: () => Promise<{ provider: string, model: string }>;
+    saveModelPreset: (preset: { provider: string, model: string }) => Promise<{ provider: string, model: string }>;
     getProjects: () => Promise<any[]>;
     saveProject: (project: any) => Promise<any>;
     deleteProject: (id: string) => Promise<any[]>;
