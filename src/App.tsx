@@ -31,6 +31,8 @@ import {
   Calculator, 
   Brain, 
   Shield, 
+  Landmark,
+  Receipt,
   Terminal, 
   Share2, 
   Users, 
@@ -52,7 +54,9 @@ const iconMap: Record<string, any> = {
   'solicitor-agent': Scale,
   'accountant-agent': Calculator,
   'space-agent-full': Brain,
-  'openclaw-full': Shield
+  'openclaw-full': Shield,
+  'justice-case-agent': Landmark,
+  'purchase-guardian-agent': Receipt
 };
 
 const SettingsSurface = ({ children }: { children: React.ReactNode }) => (
@@ -250,15 +254,26 @@ function App() {
           const orchestratorAgents = await window.ipcRenderer.getAgents();
           if (orchestratorAgents && orchestratorAgents.length > 0 && isMounted) {
             // Sync full agent list from backend and merge with local metadata
-            setAgents(prev => orchestratorAgents.map((oa: any) => {
-              const localMeta = prev.find(a => a.id === oa.id) || {} as Partial<Agent>;
+            setAgents(prev => {
+              const merged = orchestratorAgents.map((oa: any) => {
+              const localMeta = hermesAgents.find(a => a.id === oa.id) || prev.find(a => a.id === oa.id) || {} as Partial<Agent>;
               return {
                 ...oa,
                 icon: iconMap[oa.id] || Rocket,
                 color: localMeta.color || (oa.id === 'hermes-full' ? 'bg-black' : 'bg-gray-900'),
                 role: localMeta.role || oa.role
               };
-            }));
+              });
+              const missingLocalAgents = hermesAgents
+                .filter(local => !merged.some((agent: any) => agent.id === local.id))
+                .map(local => ({
+                  ...local,
+                  status: prev.find(agent => agent.id === local.id)?.status || 'idle',
+                  version: '1.8.0',
+                  type: local.id === 'solicitor-agent' || local.id === 'justice-case-agent' ? 'legal' : local.id === 'purchase-guardian-agent' ? 'research' : 'accounting'
+                }));
+              return [...merged, ...missingLocalAgents] as any;
+            });
           }
         } catch (error) {
           console.error('Failed to fetch real agents:', error);

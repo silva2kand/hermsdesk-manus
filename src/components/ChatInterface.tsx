@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Smile, Monitor, Mic, ArrowUp, Search, ChevronDown, Info, ExternalLink, ChevronRight, File, Folder, Globe,
   MessageSquare as MsgIcon, Mail, Briefcase, Cpu, Zap, Github, Layout, Calculator, Palette, HardDrive, Wrench, Brain,
-  RefreshCw, Copy, Volume2, Edit3, StepForward, RotateCcw, X, Rocket, LayoutGrid, FileText, MessageSquare, Video
+  RefreshCw, Copy, Volume2, Edit3, StepForward, RotateCcw, X, Rocket, LayoutGrid, FileText, MessageSquare, Video,
+  Scale, CreditCard
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -460,6 +461,20 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     addNotice('Opened Knowledge rules.');
   };
 
+  const createJusticePack = async () => {
+    const brief = input.trim() || getLastUserPrompt();
+    const result = await window.ipcRenderer?.createJusticeCasePack?.('Justice Case Pack', brief);
+    await window.ipcRenderer?.openBrowserOperator?.('GOV.UK legal appeal complaint ombudsman court tribunal guidance');
+    addNotice(result?.ok ? 'Justice Case Pack created and official route research opened.' : 'Could not create Justice Case Pack.');
+  };
+
+  const createPurchasePack = async () => {
+    const brief = input.trim() || getLastUserPrompt();
+    const result = await window.ipcRenderer?.createPurchaseProtectionPack?.('Purchase Protection Pack', brief);
+    await window.ipcRenderer?.openBrowserOperator?.(brief || 'seller product reviews scam check refund chargeback');
+    addNotice(result?.ok ? 'Purchase Protection Pack created and seller/product research opened.' : 'Could not create Purchase Protection Pack.');
+  };
+
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
@@ -802,6 +817,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             <ChatQuickAction icon={Volume2} label="Voice Stack" onClick={openVoiceStack} className="hover:text-cyan-700 hover:bg-cyan-50" />
             <ChatQuickAction icon={Brain} label="Brain" onClick={openMemoryView} className="hover:text-purple-700 hover:bg-purple-50" />
             <ChatQuickAction icon={Wrench} label="Mythos Skills" onClick={openSkillsView} className="hover:text-orange-700 hover:bg-orange-50" />
+            <ChatQuickAction icon={Scale} label="Justice" onClick={createJusticePack} className="hover:text-red-800 hover:bg-red-50" />
+            <ChatQuickAction icon={CreditCard} label="Purchase Guard" onClick={createPurchasePack} className="hover:text-emerald-800 hover:bg-emerald-50" />
             <ChatQuickAction icon={FileText} label="Knowledge" onClick={openKnowledgeView} className="hover:text-emerald-700 hover:bg-emerald-50" />
             <ChatQuickAction icon={Globe} label="Research" onClick={() => openWebResearch()} className="hover:text-blue-700 hover:bg-blue-50" />
           </div>

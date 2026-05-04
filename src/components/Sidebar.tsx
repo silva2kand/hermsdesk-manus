@@ -31,6 +31,8 @@ import {
   Users,
   Folder,
   Mail
+  , Landmark
+  , Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -101,6 +103,8 @@ const iconMap: Record<string, any> = {
   'hermes-full': Rocket,
   'paperclip-full': Paperclip,
   'solicitor-agent': Scale,
+  'justice-case-agent': Landmark,
+  'purchase-guardian-agent': Receipt,
   'accountant-agent': Calculator,
   'space-agent-full': Globe,
   'openclaw-full': Shield
@@ -135,6 +139,8 @@ const AgentSidebarItem = ({
             agent.id === 'hermes-full' ? 'bg-black' :
             agent.id === 'paperclip-full' ? 'bg-blue-900' :
             agent.id === 'solicitor-agent' ? 'bg-slate-700' :
+            agent.id === 'justice-case-agent' ? 'bg-red-950' :
+            agent.id === 'purchase-guardian-agent' ? 'bg-emerald-950' :
             agent.id === 'accountant-agent' ? 'bg-emerald-600' :
             agent.id === 'space-agent-full' ? 'bg-indigo-900' : 'bg-red-900',
             agent.status === 'running' && "ring-2 ring-offset-2 ring-gray-100"
