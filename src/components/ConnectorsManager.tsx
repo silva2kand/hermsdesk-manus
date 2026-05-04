@@ -31,17 +31,24 @@ const CategoryTab = ({ label, active, onClick, count }: any) => (
   </button>
 );
 
-const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connector, isConnected: boolean, onToggle: () => void }) => {
+const StatusPill = ({ label, ok }: { label: string; ok: boolean }) => (
+  <span className={`px-1.5 py-0.5 rounded-full border text-[8px] font-black uppercase ${ok ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-400 border-gray-100'}`}>
+    {label}
+  </span>
+);
+
+const ConnectorItem = ({ connector, isConnected, status, onToggle }: { connector: Connector, isConnected: boolean, status?: any, onToggle: () => void }) => {
   const enabled = isConnected !== false;
   const authRequired = ['gmail', 'google-calendar', 'google-drive', 'outlook-mail', 'outlook-calendar', 'github', 'slack', 'notion', 'stripe', 'xero', 'whatsapp'].includes(connector.id);
   const localReal = ['my-browser', 'ollama', 'lm-studio', 'jan-turboquant', 'mcp-filesystem', 'mcp-windows-shell'].includes(connector.id);
-  const statusLabel = !enabled
+  const statusLabel = status?.detail || (!enabled
     ? 'Disabled'
     : authRequired
       ? 'Route enabled - login/API required for real data'
       : localReal
         ? 'Real local route enabled'
-        : 'Route enabled - configure credentials if needed';
+        : 'Route enabled - configure credentials if needed');
+  const live = Boolean(status?.liveVerified);
   
   return (
     <div className="group p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between hover:border-blue-100 hover:shadow-sm transition-all">
@@ -57,9 +64,17 @@ const ConnectorItem = ({ connector, isConnected, onToggle }: { connector: Connec
             )}
           </div>
           <p className="text-[11px] text-gray-500 leading-tight mt-1 max-w-[240px]">{connector.desc}</p>
-          <p className={`text-[9px] font-black uppercase mt-1 ${enabled ? (authRequired ? 'text-orange-600' : 'text-green-600') : 'text-gray-400'}`}>
+          <p className={`text-[9px] font-black uppercase mt-1 ${!enabled ? 'text-gray-400' : live ? 'text-green-600' : status?.apiKeySaved || status?.oauthConnected ? 'text-blue-600' : 'text-orange-600'}`}>
             {statusLabel}
           </p>
+          {enabled && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              <StatusPill label="route" ok={status?.routeEnabled ?? enabled} />
+              <StatusPill label="api key" ok={Boolean(status?.apiKeySaved)} />
+              <StatusPill label="oauth" ok={Boolean(status?.oauthConnected)} />
+              <StatusPill label="live" ok={Boolean(status?.liveVerified)} />
+            </div>
+          )}
         </div>
       </div>
       <div className="flex items-center space-x-2">
@@ -81,6 +96,7 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<'Apps' | 'Custom API' | 'Custom MCP'>('Apps');
   const [connectorsState, setConnectorsState] = useState<{[key: string]: boolean}>({});
+  const [connectorStatuses, setConnectorStatuses] = useState<Record<string, any>>({});
   const [notice, setNotice] = useState('');
   const [customMcpServers, setCustomMcpServers] = useState<{ name: string, command: string, status: 'configured' | 'error' }[]>([]);
   const [mcpName, setMcpName] = useState('');
@@ -92,7 +108,9 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
         const state = await window.ipcRenderer.getConnectors();
         // If state is empty or an array (old version), convert to object
         const normalizedState = Array.isArray(state) ? {} : state;
-        setConnectorsState(normalizedState);
+          setConnectorsState(normalizedState);
+          const statuses = await window.ipcRenderer.getConnectorStatuses?.().catch(() => ({}));
+          setConnectorStatuses(statuses || {});
       }
       const savedMcp = window.localStorage.getItem('hermsdesk.customMcpServers');
       if (savedMcp) {
@@ -112,6 +130,8 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
       const newState = !currentState;
       const updatedState = await window.ipcRenderer.toggleConnector(id, newState);
       setConnectorsState(updatedState);
+      const statuses = await window.ipcRenderer.getConnectorStatuses?.().catch(() => ({}));
+      setConnectorStatuses(statuses || {});
       setNotice(`${newState ? 'Enabled route for' : 'Disabled route for'} ${id}. Authentication is still shown separately where required.`);
       setTimeout(() => setNotice(''), 2500);
     }
@@ -138,6 +158,9 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
       if (result.success) {
         const state = await window.ipcRenderer.getConnectors();
         setConnectorsState(state);
+      } else {
+        setNotice((result as any).error || 'Google OAuth is not configured. Add API/OAuth credentials first.');
+        setTimeout(() => setNotice(''), 3500);
       }
     }
   };
@@ -225,6 +248,7 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
                   key={c.id} 
                   connector={c} 
                   isConnected={connectorsState[c.id]} 
+                  status={connectorStatuses[c.id]}
                   onToggle={() => toggleConnector(c.id)}
                 />
               ))}
@@ -335,6 +359,7 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
                 key={c.id} 
                 connector={c} 
                 isConnected={connectorsState[c.id]} 
+                status={connectorStatuses[c.id]}
                 onToggle={() => toggleConnector(c.id)}
               />
             ))}

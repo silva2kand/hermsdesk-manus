@@ -18,6 +18,8 @@ let microsoftGraph: any;
 let schedulerService: any;
 let wideResearchService: any;
 let automationService: any;
+let browserOperator: any;
+let artifactService: any;
 
 function initializeStoreAndServices() {
    try {
@@ -78,6 +80,8 @@ function initializeStoreAndServices() {
   schedulerService = new SchedulerService(store, workspaceService, orchestrator)
   wideResearchService = new WideResearchService(store, aiService)
   automationService = new AutomationService(store)
+  browserOperator = new BrowserOperatorService(store)
+  artifactService = new ArtifactService()
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      // Fallback to a non-persistent object if store fails completely
@@ -97,6 +101,8 @@ function initializeStoreAndServices() {
      schedulerService = new SchedulerService(store, workspaceService, orchestrator)
      wideResearchService = new WideResearchService(store, aiService)
      automationService = new AutomationService(store)
+     browserOperator = new BrowserOperatorService(store)
+     artifactService = new ArtifactService()
    }
  }
 
@@ -111,6 +117,8 @@ import { MicrosoftGraphService } from './services/MicrosoftGraphService'
 import { SchedulerService } from './services/SchedulerService'
 import { WideResearchService } from './services/WideResearchService'
 import { AutomationService } from './services/AutomationService'
+import { BrowserOperatorService } from './services/BrowserOperatorService'
+import { ArtifactService } from './services/ArtifactService'
 
 // The built directory structure
 //
@@ -214,6 +222,7 @@ function createWindow() {
   schedulerService?.start()
   wideResearchService?.setWindow(win)
   automationService?.setWindow(win)
+  browserOperator?.setWindow(win)
 
   // IPC Handlers for AI
   ipcMain.handle('ai:list-models', async () => {
@@ -355,6 +364,13 @@ function createWindow() {
   ipcMain.handle('automation:get-events', () => automationService.getEvents())
   ipcMain.handle('automation:open-browser', (_, target) => automationService.openBrowser(target))
   ipcMain.handle('automation:research-web', (_, query) => automationService.researchWeb(query))
+  ipcMain.handle('browser-operator:get-state', () => browserOperator.getState())
+  ipcMain.handle('browser-operator:open', (_, target) => browserOperator.open(target))
+  ipcMain.handle('browser-operator:navigate', (_, target) => browserOperator.navigate(target))
+  ipcMain.handle('browser-operator:read', () => browserOperator.readPage())
+  ipcMain.handle('browser-operator:click', (_, selector) => browserOperator.click(selector))
+  ipcMain.handle('browser-operator:type', (_, { selector, text }) => browserOperator.type(selector, text))
+  ipcMain.handle('browser-operator:screenshot', () => browserOperator.screenshot())
   ipcMain.handle('outlook:classic-status', () => integrationService.getClassicOutlookStatus())
   ipcMain.handle('outlook:classic-messages', (_, limit) => integrationService.listClassicOutlookMessages(limit))
   ipcMain.handle('microsoft:graph-start-login', () => microsoftGraph.startDeviceLogin())
@@ -386,6 +402,57 @@ function createWindow() {
   ipcMain.handle('ai:connect-google', () => providerService.connectWithGoogle())
   ipcMain.handle('ai:save-api-key', (_, { provider, key }) => providerService.saveAPIKey(provider, key))
   ipcMain.handle('ai:get-api-keys', () => providerService.getAPIKeys())
+  ipcMain.handle('ai:get-connector-statuses', async () => {
+    const routes = await toolRegistry.getConnectors()
+    const keys = await providerService.getAPIKeys()
+    const graph = await microsoftGraph.getStatus().catch(() => ({ connected: false }))
+    const classicOutlook = await integrationService.getClassicOutlookStatus().catch((error: any) => ({ ok: false, error: error?.message }))
+    const jan = await aiService.getJanEngineStatus().catch(() => ({ apiOnline: false }))
+    const ollama = await aiService.listOllamaModels().then((models: any[]) => ({ ok: Array.isArray(models) && models.length > 0 })).catch(() => ({ ok: false }))
+    const lm = await aiService.checkLMStudio().catch(() => null)
+    const browser = browserOperator.getState()
+    const makeStatus = (id: string) => {
+      const routeEnabled = routes?.[id] !== false
+      const apiKeyProvider: Record<string, string> = {
+        'google-gemini': 'gemini',
+        openrouter: 'openrouter',
+        nvidia: 'nvidia',
+        huggingface: 'huggingface'
+      }
+      const oauthConnected = (
+        (['outlook-mail', 'outlook-calendar'].includes(id) && Boolean(graph.connected)) ||
+        (id === 'classic-outlook' && Boolean(classicOutlook.ok))
+      )
+      const apiKeySaved = Boolean(apiKeyProvider[id] && keys?.[apiKeyProvider[id]])
+      const liveVerified = (
+        (id === 'jan-turboquant' && Boolean(jan.apiOnline)) ||
+        (id === 'ollama' && Boolean(ollama.ok)) ||
+        (id === 'lm-studio' && Boolean(lm?.online || lm?.data)) ||
+        (id === 'my-browser' && Boolean(browser.online)) ||
+        oauthConnected ||
+        apiKeySaved
+      )
+      return {
+        id,
+        routeEnabled,
+        apiKeySaved,
+        oauthConnected,
+        liveVerified,
+        status: !routeEnabled ? 'disabled' : liveVerified ? 'live verified' : apiKeySaved ? 'api key saved' : oauthConnected ? 'oauth connected' : 'route only',
+        detail: id === 'my-browser'
+          ? (browser.online ? `Operator open: ${browser.url}` : 'Browser operator not opened yet')
+          : id === 'jan-turboquant'
+            ? (jan.apiOnline ? 'Jan + TurboQuant API verified on port 1337' : 'Jan route enabled, engine offline')
+            : ['outlook-mail', 'outlook-calendar'].includes(id)
+              ? (graph.connected ? 'Microsoft Graph OAuth connected' : 'Microsoft Graph OAuth not connected')
+              : apiKeyProvider[id]
+                ? (apiKeySaved ? `${apiKeyProvider[id]} API key saved locally` : `${apiKeyProvider[id]} API key missing`)
+                : 'Route enabled only. Add OAuth/API/MCP server before private data access works.'
+      }
+    }
+    const knownIds = Array.from(new Set([...Object.keys(routes || {}), 'jan-turboquant', 'ollama', 'lm-studio', 'my-browser', 'outlook-mail', 'outlook-calendar', 'google-gemini', 'openrouter', 'nvidia', 'huggingface']))
+    return Object.fromEntries(knownIds.map(id => [id, makeStatus(id)]))
+  })
 
 
   // IPC Handlers for Integrations (extended)
@@ -456,6 +523,11 @@ function createWindow() {
   })
   ipcMain.handle('wide-research:get-runs', () => wideResearchService.getRuns())
   ipcMain.handle('wide-research:start', (_, { brief, items }) => wideResearchService.startRun(brief, items))
+  ipcMain.handle('artifacts:create-slides', (_, { title, brief }) => artifactService.createSlides(title, brief))
+  ipcMain.handle('artifacts:create-website', (_, { title, brief }) => artifactService.createWebsite(title, brief))
+  ipcMain.handle('artifacts:create-design', (_, { title, brief }) => artifactService.createDesign(title, brief))
+  ipcMain.handle('artifacts:analyze-data', (_, filePath) => artifactService.analyzeData(filePath))
+  ipcMain.handle('artifacts:reveal-root', () => artifactService.revealRoot())
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {

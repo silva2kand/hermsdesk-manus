@@ -56,7 +56,7 @@ const ConnectorCard = ({ icon: Icon, title, desc, connected, color }: any) => (
     <button className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
       connected ? 'bg-gray-100 text-gray-400' : 'bg-gray-900 text-white hover:bg-gray-800'
     }`}>
-      {connected ? 'Connected' : 'Add'}
+      {connected ? 'Route On' : 'Enable Route'}
     </button>
   </div>
 );
@@ -102,8 +102,8 @@ const WorkspacePanel = ({ tab, onAction, setNotice }: any) => {
           <Icon className="w-8 h-8" />
         </div>
         <div>
-          <p className="text-sm font-bold text-gray-900">No active {item.title.toLowerCase()} found</p>
-          <p className="text-[11px] text-gray-400 max-w-xs mt-1">This workspace section is currently empty. Data and history will appear here once you begin working with specialized agents.</p>
+          <p className="text-sm font-bold text-gray-900">Real local {item.title.toLowerCase()} actions</p>
+          <p className="text-[11px] text-gray-400 max-w-xs mt-1">This panel only shows actions that run locally or open a real workspace route. Connector/private-data access is shown separately as route, API key, OAuth, and live verification.</p>
         </div>
         <button 
           onClick={() => onAction(item.primary, tab)}
@@ -114,9 +114,9 @@ const WorkspacePanel = ({ tab, onAction, setNotice }: any) => {
       </div>
 
       <div className="space-y-3">
-        <SettingToggle title="Enable module" desc={`Show ${item.title.toLowerCase()} actions across chat and task workflows.`} defaultChecked />
-        <SettingToggle title="Use local storage" desc="Keep files, notes, and state on this computer unless a connector is explicitly used." defaultChecked />
-        <SettingToggle title="Allow web research" desc="When a task needs current information, open browser research from the thinking panel." defaultChecked />
+        <SettingToggle title="Show module shortcuts" desc={`Session control for showing ${item.title.toLowerCase()} actions across chat and task workflows. Persistent settings live in the dedicated module page.`} defaultChecked />
+        <SettingToggle title="Prefer local storage" desc="Policy reminder: files, notes, and state stay on this computer unless a connector is explicitly authenticated." defaultChecked />
+        <SettingToggle title="Open browser for research" desc="Current web automation opens/controls the Browser Operator window; authenticated site access still depends on your browser login." defaultChecked />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -365,7 +365,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                       </div>
                       <textarea 
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm h-64 resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed"
-                        defaultValue={`You have access to multiple AI providers including Grok, OpenRouter, HuggingFace, Gemini, MiniMax, LM Studio, and Ollama. Treat each provider as a tool with different strengths. Choose the provider based on the task: \n\nÔÇó Prefer local models (LM Studio, Ollama) for general chat, drafting, brainstorming, coding, and any task that does not require cloud-level reasoning or multimodal capabilities. \nÔÇó Use cloud models only when the task requires advanced reasoning, multimodal input, or high factual accuracy. \nÔÇó Use Grok for reasoning-heavy, analytical, or creative tasks. \nÔÇó Use Gemini for structured, factual, or multimodal tasks. \nÔÇó Use OpenRouter when a specific model is requested or when a frontier model is needed. \nÔÇó Use HuggingFace for specialized hosted models. \nÔÇó Use MiniMax for Chinese-language or multimodal tasks. \n\nGeneral behavior: \nÔÇó Be direct, technical, and solution-focused. \nÔÇó Provide clear steps, practical examples, and code when relevant. \nÔÇó Avoid unnecessary explanations or filler. \nÔÇó When multiple tools could solve the task, choose the most efficient one. \nÔÇó When local models are sufficient, prefer them to preserve privacy and reduce latency. \nÔÇó When a task requires external APIs, follow the instructions provided for each custom API. \nÔÇó Maintain consistency across tasks and remember my preferences for local-first, open-source, and automated workflows.`}
+                        defaultValue={`You have access to multiple AI providers including OpenRouter, HuggingFace, Gemini, NVIDIA NIM, LM Studio, Ollama, and Jan + TurboQuant. Treat each provider as a tool with different strengths. Choose the provider based on the task:\n\n- Prefer Jan + TurboQuant for local-first chat, drafting, coding, and private tasks.\n- Use Ollama or LM Studio only when those optional local routes are online.\n- Use cloud models only when the task requires advanced reasoning, multimodal input, or high factual accuracy and the API key is present.\n- Use Gemini for structured, factual, or multimodal tasks when configured.\n- Use OpenRouter free-tier models when a cloud fallback is needed.\n- Use HuggingFace for model discovery and downloads.\n\nGeneral behavior:\n- Be direct, technical, and solution-focused.\n- Provide clear steps, practical examples, and code when relevant.\n- Avoid unnecessary explanations or filler.\n- When multiple tools could solve the task, choose the most efficient real one.\n- When local models are sufficient, prefer them to preserve privacy and reduce latency.\n- Never claim private connector data access unless OAuth/API key/live verification is present.\n- Maintain consistency across tasks and remember my preferences for local-first, open-source, and automated workflows.`}
                       />
                     </div>
                   </div>

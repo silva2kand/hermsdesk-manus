@@ -170,7 +170,7 @@ export class DesktopIntegrationService {
         desktopPath = oneDriveDesktop;
       }
       
-      const shortcutPath = path.join(desktopPath, 'HermesDesk ME (Updated).lnk');
+      const shortcutPath = path.join(desktopPath, 'HermsDesk ME 1.7.lnk');
       const projectPath = process.cwd();
       const targetPath = path.join(projectPath, 'start-aion.bat');
       

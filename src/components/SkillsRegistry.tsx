@@ -28,6 +28,18 @@ export const SkillsRegistry = () => {
     }
   };
 
+  const handleAddCustomSkill = async () => {
+    const folder = await window.ipcRenderer?.selectFolder?.();
+    if (!folder) return;
+    const name = window.prompt('Custom skill name', folder.split(/[\\/]/).pop() || 'custom-skill');
+    if (!name) return;
+    const id = `custom-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
+    const updated = await (window.ipcRenderer as any).toggleSkill(id, true);
+    setInstalledSkills(updated);
+    const imports = JSON.parse(window.localStorage.getItem('hermsdesk.customSkillImports') || '[]');
+    window.localStorage.setItem('hermsdesk.customSkillImports', JSON.stringify([{ id, name, folder, importedAt: new Date().toISOString() }, ...imports]));
+  };
+
   const skills = [
     {
       id: 'mythos-execution',
@@ -137,7 +149,7 @@ export const SkillsRegistry = () => {
           <h2 className="text-xl font-bold text-gray-900">Skills</h2>
           <p className="text-sm text-gray-500 mt-1">Prepackaged and repeatable best practices for specialized tasks.</p>
         </div>
-        <button className="flex items-center px-6 py-2.5 bg-blue-600 text-white rounded-2xl text-xs font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">
+        <button onClick={handleAddCustomSkill} className="flex items-center px-6 py-2.5 bg-blue-600 text-white rounded-2xl text-xs font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100">
           <Plus className="w-4 h-4 mr-2" />
           Add Custom Skill
         </button>

@@ -110,10 +110,12 @@ export class AIProviderService {
 
   // Free Tier / API Providers
   async connectWithGoogle() {
-    // Logic for real Google Auth could be added here
-    this.connectorsState['google-account'] = true;
-    this.store.set('connectors', this.connectorsState);
-    return { success: true, email: 'not-connected@hermes.local' };
+    return {
+      success: false,
+      provider: 'google',
+      error: 'Google OAuth is not configured in this build. Save a Gemini API key for Gemini, or add a Google OAuth client before Gmail/Drive/Calendar can read private data.',
+      authRequired: true
+    };
   }
 
   // API Key Management

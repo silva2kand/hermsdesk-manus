@@ -435,8 +435,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const openWebResearch = async (query?: string) => {
     const target = (query || input || getLastUserPrompt()).trim();
-    const result = await window.ipcRenderer?.researchWebAutomation?.(target);
-    addNotice(result?.ok ? 'Opened live web research in your browser and ME Computer.' : (result?.error || 'Could not open browser research.'));
+    const result = await window.ipcRenderer?.openBrowserOperator?.(target);
+    addNotice(result?.ok ? 'Opened live Browser Operator research window.' : (result?.error || 'Could not open browser research.'));
   };
 
   const openComputerView = () => {

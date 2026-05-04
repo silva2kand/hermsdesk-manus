@@ -163,6 +163,19 @@ export const Skills = () => {
     showNotice(`${skillId} ${installed ? 'removed' : 'installed'} in the real Skills Engine.`);
   };
 
+  const addCustomSkill = async () => {
+    const folder = await window.ipcRenderer?.selectFolder?.();
+    if (!folder) return;
+    const name = window.prompt('Custom skill name', folder.split(/[\\/]/).pop() || 'custom-skill');
+    if (!name) return;
+    const id = `custom-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
+    const next = await window.ipcRenderer?.toggleSkill?.(id, true).catch(() => null);
+    setInstalledSkills(next || Array.from(new Set([...installedSkills, id])));
+    const imports = JSON.parse(window.localStorage.getItem('hermsdesk.customSkillImports') || '[]');
+    window.localStorage.setItem('hermsdesk.customSkillImports', JSON.stringify([{ id, name, folder, importedAt: new Date().toISOString() }, ...imports]));
+    showNotice(`${name} imported from folder and installed in the local Skills Engine.`);
+  };
+
   return (
     <div className="min-h-full bg-[#fafafa] p-8">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -172,7 +185,7 @@ export const Skills = () => {
             <p className="text-sm text-gray-500 mt-1">Prepackaged and repeatable best practices for specialized tasks.</p>
           </div>
           <button
-            onClick={() => showNotice('Custom Skill packaging is routed through the local Skills Engine registry.')}
+            onClick={addCustomSkill}
             className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-black transition-all flex items-center"
           >
             <Plus className="w-3.5 h-3.5 mr-2" />

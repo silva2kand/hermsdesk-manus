@@ -77,8 +77,8 @@ export const MyComputer = () => {
   const openBrowser = async () => {
     const target = window.prompt('Open URL or search the web', 'https://www.google.com');
     if (target === null) return;
-    const result = await window.ipcRenderer?.openBrowserAutomation?.(target);
-    showNotice(result?.ok ? 'Browser opened and logged in ME Computer.' : (result?.error || 'Could not open browser.'));
+    const result = await window.ipcRenderer?.openBrowserOperator?.(target);
+    showNotice(result?.ok ? 'Browser Operator opened and logged in ME Computer.' : (result?.error || 'Could not open browser operator.'));
   };
 
   const researchWeb = async () => {

@@ -525,9 +525,9 @@ function App() {
               <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 border border-gray-100 shadow-sm">
                 <Settings className="w-6 h-6 text-gray-400" />
               </div>
-              <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-2">Feature in Development</h2>
+              <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mb-2">No Real Module Mapped Yet</h2>
               <p className="text-sm text-gray-500 max-w-md">
-                The <strong className="text-gray-900 uppercase">{view}</strong> module is part of the ME 1.8 Premium roadmap and is currently being implemented.
+                The <strong className="text-gray-900 uppercase">{view}</strong> route has no production module wired yet. ME will not pretend this is connected.
               </p>
               <button 
                 onClick={() => setView('landing')}

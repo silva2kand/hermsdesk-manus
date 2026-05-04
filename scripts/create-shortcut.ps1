@@ -5,7 +5,7 @@ $projectPath = Split-Path -Parent $scriptRoot
 $launcherPath = Join-Path $projectPath "start-aion.bat"
 $oneDriveDesktop = Join-Path $env:USERPROFILE "OneDrive\Desktop"
 $desktopTarget = if (Test-Path $oneDriveDesktop) { $oneDriveDesktop } else { $desktop }
-$shortcutPath = Join-Path $desktopTarget "HermsDesk.lnk"
+$shortcutPath = Join-Path $desktopTarget "HermsDesk ME 1.7.lnk"
 $shortcut = $wshell.CreateShortcut($shortcutPath)
 
 $shortcut.TargetPath = $launcherPath

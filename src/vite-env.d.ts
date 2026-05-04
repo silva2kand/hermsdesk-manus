@@ -39,6 +39,13 @@ interface Window {
     getAutomationEvents: () => Promise<any[]>;
     openBrowserAutomation: (target?: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any }>;
     researchWebAutomation: (query: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any, query?: string }>;
+    getBrowserOperatorState: () => Promise<any>;
+    openBrowserOperator: (target?: string) => Promise<any>;
+    navigateBrowserOperator: (target: string) => Promise<any>;
+    readBrowserOperator: () => Promise<any>;
+    clickBrowserOperator: (selector: string) => Promise<any>;
+    typeBrowserOperator: (selector: string, text: string) => Promise<any>;
+    screenshotBrowserOperator: () => Promise<any>;
     getClassicOutlookStatus: () => Promise<any>;
     listClassicOutlookMessages: (limit?: number) => Promise<any[] | { ok: false, error: string }>;
     startMicrosoftGraphLogin: () => Promise<any>;
@@ -69,6 +76,12 @@ interface Window {
     startProjectTask: (id: string, prompt: string, agentId?: string) => Promise<any>;
     getWideResearchRuns: () => Promise<any[]>;
     startWideResearch: (brief: string, items?: string[]) => Promise<any>;
+    getConnectorStatuses: () => Promise<Record<string, any>>;
+    createSlidesArtifact: (title: string, brief: string) => Promise<any>;
+    createWebsiteArtifact: (title: string, brief: string) => Promise<any>;
+    createDesignArtifact: (title: string, brief: string) => Promise<any>;
+    analyzeDataArtifact: (filePath: string) => Promise<any>;
+    revealArtifactsRoot: () => Promise<any>;
 
     // Tool Registry
     getTools: () => Promise<any[]>;

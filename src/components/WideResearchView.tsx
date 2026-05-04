@@ -37,10 +37,11 @@ export const WideResearchView = () => {
     if (!brief.trim()) return;
     const targets = items.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
     const run = await window.ipcRenderer.startWideResearch?.(brief.trim(), targets);
+    await window.ipcRenderer.researchWebAutomation?.(brief.trim()).catch(() => null);
     setSelectedId(run.id);
     setBrief('');
     setItems('');
-    setNotice('Wide Research run started.');
+    setNotice('Wide Research run started and a live browser verification search was opened.');
     window.setTimeout(() => setNotice(''), 3000);
   };
 

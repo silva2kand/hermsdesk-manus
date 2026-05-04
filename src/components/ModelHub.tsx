@@ -734,7 +734,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                   <h3 className="text-sm font-black text-gray-900">{m.name}</h3>
                   <div className="flex items-center space-x-3 mt-1 text-[10px] font-bold text-gray-400 uppercase">
                     <span>{m.size}</span>
-                    <span>ÔÇó</span>
+                    <span>/</span>
                     <span className="text-purple-500">{m.vram} VRAM</span>
                   </div>
                 </div>

@@ -109,6 +109,14 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
   const openVideoCall = () => window.ipcRenderer?.openApp?.('video call');
   const openVoiceStack = () => window.ipcRenderer?.openApp?.('voice stack');
   const openResearch = () => window.ipcRenderer?.researchWebAutomation?.(prompt || 'HermesDesk ME research');
+  const createSlides = async () => window.ipcRenderer?.createSlidesArtifact?.('HermesDesk ME Deck', prompt || 'Create a researched presentation.').then(() => onNavigate?.('projects'));
+  const createWebsite = async () => window.ipcRenderer?.createWebsiteArtifact?.('HermesDesk ME Website', prompt || 'Build a production website starter.').then(() => onNavigate?.('websites'));
+  const createDesign = async () => window.ipcRenderer?.createDesignArtifact?.('HermesDesk ME Design', prompt || 'Create an editable design mockup.').then(() => onNavigate?.('apps'));
+  const analyzeData = async () => {
+    const files = await window.ipcRenderer?.selectFiles?.();
+    const file = files?.[0];
+    if (file) await window.ipcRenderer?.analyzeDataArtifact?.(file);
+  };
 
   const [activeConnectorsCount, setActiveConnectorsCount] = useState(0);
 
@@ -252,10 +260,10 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
 
           {/* Tool Shortcuts */}
           <div className="flex items-center justify-center space-x-3 pt-4 relative">
-            <ToolButton label="Create slides" icon={Layout} onClick={() => startTask('Create a slide deck outline with titles, speaker notes, and image ideas.', true)} />
-            <ToolButton label="Build website" icon={Globe} onClick={() => startTask('Build a polished website with responsive sections and real content.', true)} />
+            <ToolButton label="Create slides" icon={Layout} onClick={createSlides} />
+            <ToolButton label="Build website" icon={Globe} onClick={createWebsite} />
             <ToolButton label="Develop desktop apps" icon={Monitor} onClick={() => startTask('Plan and build a Windows desktop app feature with Electron.', true)} />
-            <ToolButton label="Design" icon={Palette} onClick={() => startTask('Design a clean interface and explain the layout choices.', true)} />
+            <ToolButton label="Design" icon={Palette} onClick={createDesign} />
             
             <div className="relative">
               <button 
@@ -272,8 +280,8 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
                   <ToolItem icon={Monitor} label="Develop apps" onClick={() => startTask('Develop a new application feature', true)} />
                   <ToolItem icon={Calendar} label="Schedule task" onClick={() => startTask('Schedule a new automated task', true)} />
                   <ToolItem icon={SearchIcon} label="Wide Research" onClick={() => startTask('Perform extensive web and local research', true)} />
-                  <ToolItem icon={Table} label="Spreadsheet" onClick={() => startTask('Analyze data in a spreadsheet', true)} />
-                  <ToolItem icon={BarChart3} label="Visualization" onClick={() => startTask('Create data visualizations', true)} />
+                  <ToolItem icon={Table} label="Spreadsheet" onClick={analyzeData} />
+                  <ToolItem icon={BarChart3} label="Visualization" onClick={analyzeData} />
                   <ToolItem icon={Video} label="Video" onClick={() => startTask('Generate a video production plan', true)} />
                   <ToolItem icon={Music} label="Audio" onClick={() => startTask('Create an audio/music workflow', true)} />
                   <div className="h-px bg-gray-50 my-1" />

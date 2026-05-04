@@ -60,6 +60,7 @@ export const Settings = () => {
       taskEmail: true
     }
   });
+  const [engineStatuses, setEngineStatuses] = useState<any>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -68,6 +69,8 @@ export const Settings = () => {
         setSettings(savedSettings);
         const keys = await (window.ipcRenderer as any).getAPIKeys();
         setApiKeys(keys);
+        const statuses = await (window.ipcRenderer as any).getConnectorStatuses?.();
+        setEngineStatuses(statuses || {});
       }
     };
     fetchData();
@@ -173,9 +176,12 @@ export const Settings = () => {
                </div>
 
                {[
-                 { name: 'Ollama', status: 'Running', port: '11434' },
-                 { name: 'LM Studio', status: 'Disconnected', port: '1234' },
-               ].map((l) => (
+                 { id: 'jan-turboquant', name: 'Jan + TurboQuant', port: '1337' },
+                 { id: 'ollama', name: 'Ollama', port: '11434' },
+                 { id: 'lm-studio', name: 'LM Studio', port: '1234' },
+               ].map((l) => {
+                 const status = engineStatuses[l.id];
+                 return (
                  <div key={l.name} className="p-4 rounded-xl border border-gray-100 bg-white flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
@@ -187,15 +193,15 @@ export const Settings = () => {
                       </div>
                     </div>
                     <div className="flex items-center space-x-3">
-                      <span className={`text-[10px] font-bold uppercase ${l.status === 'Running' ? 'text-green-500' : 'text-gray-400'}`}>
-                        {l.status}
+                      <span className={`text-[10px] font-bold uppercase ${status?.liveVerified ? 'text-green-500' : 'text-orange-500'}`}>
+                        {status?.liveVerified ? 'Live verified' : 'Offline / route only'}
                       </span>
-                      <button className="px-4 py-1.5 bg-gray-100 text-gray-900 rounded-lg text-xs font-bold hover:bg-gray-200">
+                      <button onClick={async () => setEngineStatuses(await (window.ipcRenderer as any).getConnectorStatuses?.())} className="px-4 py-1.5 bg-gray-100 text-gray-900 rounded-lg text-xs font-bold hover:bg-gray-200">
                         Refresh
                       </button>
                     </div>
                  </div>
-               ))}
+               )})}
             </div>
           )}
 

@@ -161,6 +161,16 @@ export class LocalAIService {
     console.log(`ME 1.8: Loading model ${model.name} into Jan+TurboQuant engine`);
     
     try {
+      const status = await this.getJanEngineStatus();
+      if (!status.apiOnline) {
+        return {
+          ok: false,
+          engine: 'Jan + TurboQuant',
+          error: 'Jan + TurboQuant is not online on port 1337. Start the built-in engine first, then load the model.',
+          status
+        };
+      }
+
       // 1. Check if model exists in library
       const library = await providerService.listLibraryModels();
       const target = library.find((m: any) => m.name === model.name || m.id === model.name);
@@ -181,14 +191,11 @@ export class LocalAIService {
       }
     } catch (e: any) {
       console.error('ME 1.8: Model load failed:', e.message);
-      // Fallback: Set active model in state so user can try chat
-      this.activeJanModel = model.name;
-      this.store.set('activeJanModel', model.name);
       return {
-        ok: true,
+        ok: false,
         engine: 'Jan + TurboQuant',
         model: model.name,
-        warning: `Selected ${model.name}. If the built-in engine is not responding, try starting it first.`,
+        error: e?.response?.data?.error || e?.message || `Jan + TurboQuant could not load ${model.name}.`,
         status: await this.getJanEngineStatus()
       };
     }
