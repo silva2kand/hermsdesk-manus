@@ -56,6 +56,10 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     const onBrowser = (_: any, event: any) => push({ type: 'browser', title: event?.title || event?.action || 'Browser Operator', message: event?.text || event?.url || event?.message || 'Browser event' });
     const onWideResearch = (_: any, event: any) => push({ type: 'research', title: event?.title || 'Wide Research', message: event?.brief || event?.status || event?.message || 'Research lane updated' });
     const onScheduler = (_: any, event: any) => push({ type: 'scheduler', title: event?.title || 'Scheduled Task', message: event?.task || event?.message || 'Scheduled task updated' });
+    const onMailUpdated = (_: any, event: any) => {
+      push({ type: 'automation', title: `Mail ME ${event?.source || ''}`, message: `${event?.messageCount || 0} emails analyzed, ${event?.newTasks || 0} new agent tasks queued.` });
+      refresh();
+    };
     const onSyncMail = () => syncMail();
 
     window.ipcRenderer?.on?.('app:log', onAppLog);
@@ -64,6 +68,7 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     window.ipcRenderer?.on?.('browser-operator:event', onBrowser);
     window.ipcRenderer?.on?.('wide-research:run', onWideResearch);
     window.ipcRenderer?.on?.('scheduler:run', onScheduler);
+    window.ipcRenderer?.on?.('mail:intelligence-updated', onMailUpdated);
     window.ipcRenderer?.on?.('mail:sync-intelligence', onSyncMail);
     return () => {
       window.ipcRenderer?.off?.('app:log', onAppLog);
@@ -72,6 +77,7 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
       window.ipcRenderer?.off?.('browser-operator:event', onBrowser);
       window.ipcRenderer?.off?.('wide-research:run', onWideResearch);
       window.ipcRenderer?.off?.('scheduler:run', onScheduler);
+      window.ipcRenderer?.off?.('mail:intelligence-updated', onMailUpdated);
       window.ipcRenderer?.off?.('mail:sync-intelligence', onSyncMail);
     };
   }, []);

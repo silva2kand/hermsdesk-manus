@@ -218,6 +218,95 @@ function createWindow() {
   const appLog = (type: 'info' | 'error' | 'bug', content: string) => {
     win?.webContents.send('app:log', { type, content });
   };
+
+  const processEmailIntelligence = async (data: any, source = 'mailbox') => {
+    const current = workspaceService.getEmailIntelligence?.() || { messages: [], folders: [], summary: {} }
+    const statusById = new Map((current.messages || []).map((m: any) => [m.id, m.approvalStatus]))
+    const processed = new Set(store.get('mailProcessedTaskIds', []) as string[])
+    const merged = {
+      ...data,
+      messages: (data.messages || []).map((message: any) => ({
+        ...message,
+        approvalStatus: statusById.get(message.id) || message.approvalStatus || 'pending-review',
+        actionPolicy: 'approval-required-for-send-delete-move-pay-file-submit-contact'
+      }))
+    }
+    workspaceService.saveEmailIntelligence(merged)
+
+    const taskCandidates = merged.messages
+      .filter((message: any) => message.id && !processed.has(message.id))
+      .slice(0, 75)
+
+    for (const message of taskCandidates) {
+      processed.add(message.id)
+      await orchestrator.createTask(
+        `Auto Mail ME analysis item.
+Source: ${source}
+Folder: ${message.folderName || 'Inbox'}
+Category: ${message.categoryLabel || 'General'}
+From: ${message.sender || ''} <${message.senderEmail || ''}>
+Subject: ${message.subject || '(No subject)'}
+Received: ${message.receivedAt || ''}
+Unread: ${message.unread ? 'yes' : 'no'}
+Attachments: ${message.hasAttachments ? 'yes' : 'no'}
+Preview:
+${message.bodyPreview || ''}
+
+Do end-to-end analysis: classify, summarize, extract dates/deadlines/money/risk, identify required documents, suggest next actions, and draft reply text if useful.
+Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or change mailbox state. Create recommendations and wait for Silva's approval.`,
+        message.agentId || 'paperclip-full',
+        win
+      )
+    }
+
+    store.set('mailProcessedTaskIds', Array.from(processed).slice(-5000))
+    win?.webContents.send('mail:intelligence-updated', {
+      source,
+      messageCount: merged.messages.length,
+      newTasks: taskCandidates.length,
+      syncedAt: merged.syncedAt
+    })
+    appLog('info', `Mail ME auto-analyzed ${merged.messages.length} emails from ${source}; ${taskCandidates.length} new agent tasks queued.`)
+    return merged
+  }
+
+  const syncAllMailAutomatically = async () => {
+    try {
+      const graph = await microsoftGraph.getStatus().catch(() => ({ connected: false }))
+      if (graph?.connected) {
+        const data = await microsoftGraph.syncEmailIntelligence(25)
+        await processEmailIntelligence(data, 'Microsoft Graph')
+      }
+    } catch (error: any) {
+      appLog('error', `Mail ME Graph auto-sync failed: ${error?.message || error}`)
+    }
+
+    try {
+      const status = await integrationService.getClassicOutlookStatus().catch(() => null)
+      if (status?.ok) {
+        const messages = await integrationService.listClassicOutlookMessages(50)
+        if (Array.isArray(messages)) {
+          await processEmailIntelligence({
+            syncedAt: new Date().toISOString(),
+            folders: [{ id: 'classic-outlook-inbox', displayName: 'Classic Outlook Inbox', syncedCount: messages.length }],
+            messages: messages.map((message: any) => ({
+              ...message,
+              id: `classic:${message.id}`,
+              folderId: 'classic-outlook-inbox',
+              folderName: 'Classic Outlook Inbox',
+              categoryId: 'classic-outlook',
+              categoryLabel: 'Classic Outlook',
+              agentId: 'paperclip-full',
+              approvalStatus: 'pending-review'
+            })),
+            summary: { 'classic-outlook': messages.length }
+          }, 'Classic Outlook')
+        }
+      }
+    } catch (error: any) {
+      appLog('error', `Mail ME Classic Outlook auto-sync failed: ${error?.message || error}`)
+    }
+  }
   schedulerService?.setWindow(win)
   schedulerService?.start()
   wideResearchService?.setWindow(win)
@@ -372,7 +461,27 @@ function createWindow() {
   ipcMain.handle('browser-operator:type', (_, { selector, text }) => browserOperator.type(selector, text))
   ipcMain.handle('browser-operator:screenshot', () => browserOperator.screenshot())
   ipcMain.handle('outlook:classic-status', () => integrationService.getClassicOutlookStatus())
-  ipcMain.handle('outlook:classic-messages', (_, limit) => integrationService.listClassicOutlookMessages(limit))
+  ipcMain.handle('outlook:classic-messages', async (_, limit) => {
+    const messages = await integrationService.listClassicOutlookMessages(limit)
+    if (Array.isArray(messages)) {
+      await processEmailIntelligence({
+        syncedAt: new Date().toISOString(),
+        folders: [{ id: 'classic-outlook-inbox', displayName: 'Classic Outlook Inbox', syncedCount: messages.length }],
+        messages: messages.map((message: any) => ({
+          ...message,
+          id: `classic:${message.id}`,
+          folderId: 'classic-outlook-inbox',
+          folderName: 'Classic Outlook Inbox',
+          categoryId: 'classic-outlook',
+          categoryLabel: 'Classic Outlook',
+          agentId: 'paperclip-full',
+          approvalStatus: 'pending-review'
+        })),
+        summary: { 'classic-outlook': messages.length }
+      }, 'Classic Outlook')
+    }
+    return messages
+  })
   ipcMain.handle('microsoft:graph-start-login', () => microsoftGraph.startDeviceLogin())
   ipcMain.handle('microsoft:graph-complete-login', () => microsoftGraph.completeDeviceLogin())
   ipcMain.handle('microsoft:graph-status', () => microsoftGraph.getStatus())
@@ -381,8 +490,7 @@ function createWindow() {
   ipcMain.handle('microsoft:graph-folders', () => microsoftGraph.listMailFolders())
   ipcMain.handle('microsoft:graph-sync-email-intelligence', async (_, limitPerFolder) => {
     const data = await microsoftGraph.syncEmailIntelligence(limitPerFolder)
-    workspaceService.saveEmailIntelligence(data)
-    return data
+    return processEmailIntelligence(data, 'Microsoft Graph')
   })
   ipcMain.handle('microsoft:graph-disconnect', () => microsoftGraph.disconnect())
   
@@ -530,6 +638,9 @@ function createWindow() {
   ipcMain.handle('artifacts:create-justice-case', (_, { title, brief }) => artifactService.createJusticeCasePack(title, brief))
   ipcMain.handle('artifacts:create-purchase-protection', (_, { title, brief }) => artifactService.createPurchaseProtectionPack(title, brief))
   ipcMain.handle('artifacts:reveal-root', () => artifactService.revealRoot())
+
+  setTimeout(syncAllMailAutomatically, 5000)
+  setInterval(syncAllMailAutomatically, 10 * 60 * 1000)
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
