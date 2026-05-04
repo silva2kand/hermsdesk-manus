@@ -57,6 +57,30 @@ export const hermesAgents: HermesAgent[] = [
     color: 'bg-slate-700'
   },
   {
+    id: 'justice-case-agent',
+    name: 'Justice Case Builder',
+    group: 'Hermes',
+    role: 'Legal Fight, Evidence, Appeal & Complaint Pack',
+    capability: 'Builds a real case pack: chronology, evidence index, legal issues, loophole/risk analysis, UK appeal/review route map, complaint drafts, and hearing prep. It researches current official routes before action.',
+    connector: 'My Computer, Browser Operator, Mail ME, File System',
+    approval: 'Draft/research only. You approve filing, sending, court submissions, public claims, money, and external messages.',
+    status: 'ready',
+    icon: Landmark,
+    color: 'bg-red-950'
+  },
+  {
+    id: 'purchase-guardian-agent',
+    name: 'Purchase Guardian',
+    group: 'Hermes',
+    role: 'Online Buying, Scam Check & Refund Strategy',
+    capability: 'Researches sellers/products, compares prices, checks scam signals, records evidence, and builds refund/chargeback/complaint routes.',
+    connector: 'Browser Operator, My Computer, WhatsApp ME, Mail ME',
+    approval: 'Draft only; you approve purchases, payments, disputes, reviews, and messages.',
+    status: 'ready',
+    icon: Receipt,
+    color: 'bg-emerald-950'
+  },
+  {
     id: 'accountant-agent',
     name: 'Accountant Agent',
     group: 'Hermes',

@@ -28,7 +28,9 @@ export class SkillsEngineService {
     'mythos-recovery',
     'mythos-pc-operator',
     'mythos-whatsapp-reply',
-    'mythos-truthful-connectors'
+    'mythos-truthful-connectors',
+    'mythos-justice-casework',
+    'mythos-purchase-protection'
   ];
 
   constructor(sharedStore?: any) {
@@ -58,6 +60,12 @@ export class SkillsEngineService {
     }
     if (installed.includes('mythos-truthful-connectors')) {
       rules.push('Mythos Connector Truth: distinguish enabled routes from authenticated connections. Say login/API key required when real private data access is not connected.');
+    }
+    if (installed.includes('mythos-justice-casework')) {
+      rules.push('Mythos Justice Casework: for legal/public-interest issues, build evidence-first case packs, chronology, issue lists, appeal/review route maps, complaint drafts, and deadline checks. Do not claim to be a solicitor or file/send without approval. Verify current official procedure before action.');
+    }
+    if (installed.includes('mythos-purchase-protection')) {
+      rules.push('Mythos Purchase Protection: for online buying, research seller/product, compare independent sources, check scam signals, preserve evidence, and prepare refund/chargeback/complaint routes. Never approve payment or send disputes without user approval.');
     }
 
     return {

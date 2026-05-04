@@ -53,6 +53,22 @@ export const AgentsMonitor = ({
     setActivity(prev => [next, ...prev].slice(0, 8));
 
     if (onAgentAction) {
+      if (agent.id === 'justice-case-agent') {
+        const brief = window.prompt('Describe the legal issue, decision, evidence, deadlines, and outcome wanted.');
+        if (!brief) return;
+        await window.ipcRenderer?.createJusticeCasePack?.('Justice Case Pack', brief);
+        await window.ipcRenderer?.openBrowserOperator?.('GOV.UK legal appeal complaint ombudsman court tribunal guidance');
+        showNotice('Justice Case Pack created and official route research opened in Browser Operator.');
+        return;
+      }
+      if (agent.id === 'purchase-guardian-agent') {
+        const brief = window.prompt('Describe the product, seller, website, payment method, and concern.');
+        if (!brief) return;
+        await window.ipcRenderer?.createPurchaseProtectionPack?.('Purchase Protection Pack', brief);
+        await window.ipcRenderer?.openBrowserOperator?.(brief);
+        showNotice('Purchase Protection Pack created and seller/product research opened in Browser Operator.');
+        return;
+      }
       onAgentAction(agent.id, 'open');
       showNotice(`${agent.name} is now active and monitoring the system. Check the Console for live logs.`);
       return;

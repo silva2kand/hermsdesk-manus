@@ -2,7 +2,7 @@ import { app, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-type ArtifactKind = 'slides' | 'website' | 'design' | 'data-analysis';
+type ArtifactKind = 'slides' | 'website' | 'design' | 'data-analysis' | 'justice-case' | 'purchase-protection';
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -118,5 +118,42 @@ export class ArtifactService {
     fs.writeFileSync(path.join(folder, 'chart.html'), html);
     await shell.openPath(path.join(folder, 'chart.html'));
     return { ok: true, kind: 'data-analysis', folder, files: ['report.md', 'chart.html'], summary: { rows: data.length, columns: headers.length, numeric } };
+  }
+
+  async createJusticeCasePack(title: string, brief: string) {
+    const cleanTitle = title?.trim() || 'Justice Case Pack';
+    const cleanBrief = brief?.trim() || 'Describe the legal issue, decision, evidence, deadlines, parties, and what outcome you want.';
+    const folder = this.createFolder('justice-case', cleanTitle);
+    const files: Record<string, string> = {
+      '00-readme.md': `# ${cleanTitle}\n\nThis is an AI-assisted case preparation pack, not legal advice and not a substitute for a regulated solicitor/barrister. Use it to organize evidence, questions, draft arguments, and approval-gated next actions.\n\n## Issue\n${cleanBrief}\n\n## Immediate rule\nDo not miss deadlines. Verify current procedure on GOV.UK, judiciary/tribunal guidance, regulator/ombudsman pages, and any court order you already received.\n`,
+      '01-case-summary.md': `# Case Summary\n\n## Parties\n- Claimant/applicant:\n- Defendant/respondent:\n- Court/tribunal/ombudsman/regulator:\n\n## What happened\n\n## What decision or conduct is wrong\n\n## What outcome is wanted\n\n## Urgent deadlines\n\n`,
+      '02-chronology.md': `# Chronology\n\n| Date | Event | Evidence | Why it matters |\n|---|---|---|---|\n| YYYY-MM-DD |  |  |  |\n`,
+      '03-evidence-index.md': `# Evidence Index\n\n| Ref | File / source | Fact proved | Weakness / objection | Action |\n|---|---|---|---|---|\n| E1 |  |  |  |  |\n`,
+      '04-legal-issues-and-loopholes.md': `# Legal Issues, Loopholes, and Pressure Points\n\n## Jurisdiction and deadline checks\n- Which body has power to decide this?\n- Is there an appeal/review/reconsideration route?\n- Is permission required?\n- Was the decision irrational, procedurally unfair, biased, unsupported by evidence, or legally wrong?\n\n## Arguments to test\n- Procedural unfairness\n- Error of law\n- Failure to consider relevant evidence\n- Taking irrelevant matters into account\n- Reasons inadequate or contradictory\n- Discrimination / human rights angle where genuinely supported\n- Consumer/professional misconduct angle where supported\n\n## Weaknesses to fix before action\n\n`,
+      '05-route-map-uk-appeal-review.md': `# Route Map: UK Review / Appeal / Escalation\n\nUse this as a checklist, then verify current rules before filing.\n\n1. Ask for written reasons / decision notice if missing.\n2. Check internal review, complaint, reconsideration, set aside, or permission-to-appeal route.\n3. Check court/tribunal appeal route and deadline.\n4. If public body conduct is involved, check judicial review time limits urgently.\n5. If consumer/professional misconduct is involved, check regulator or ombudsman route.\n6. Human rights escalation normally requires exhausting effective domestic remedies first. Do not assume EU/International court jurisdiction.\n\n`,
+      '06-draft-letter-before-action.md': `# Draft Letter Before Action / Formal Complaint\n\n[Your name]\n[Address]\n[Date]\n\nTo: [Recipient]\n\nSubject: Formal complaint / proposed action - ${cleanTitle}\n\nI write regarding: ${cleanBrief}\n\nFacts:\n1. \n\nWhy this is wrong:\n1. \n\nEvidence enclosed:\n1. \n\nRemedy requested:\n1. \n\nPlease respond by [date].\n\nThis draft must be reviewed before sending.\n`,
+      '07-hearing-prep.md': `# Hearing / Meeting Prep\n\n## One-page case theory\n\n## Top 10 points to make\n\n## Questions for the other side\n\n## Questions for the judge/tribunal/regulator if appropriate\n\n## Bundle checklist\n\n`,
+      '08-public-interest-and-scam-patterns.md': `# Public Interest / Scam Pattern Analysis\n\n## Pattern\n\n## Who else may be affected\n\n## Evidence of systemic issue\n\n## Regulator / ombudsman / press / MP routes\n\n## Risks of defamation or contempt\nOnly make public claims backed by evidence and legal review.\n`
+    };
+    Object.entries(files).forEach(([name, content]) => fs.writeFileSync(path.join(folder, name), content));
+    await shell.openPath(path.join(folder, '00-readme.md'));
+    return { ok: true, kind: 'justice-case', folder, files: Object.keys(files) };
+  }
+
+  async createPurchaseProtectionPack(title: string, brief: string) {
+    const cleanTitle = title?.trim() || 'Purchase Protection Pack';
+    const cleanBrief = brief?.trim() || 'Describe the product, seller, price, website, payment method, and concern.';
+    const folder = this.createFolder('purchase-protection', cleanTitle);
+    const files: Record<string, string> = {
+      '00-readme.md': `# ${cleanTitle}\n\nReal online-buying research and protection pack.\n\n## Purchase / issue\n${cleanBrief}\n`,
+      '01-seller-research.md': `# Seller Research\n\n| Check | Finding | Evidence URL / screenshot | Risk |\n|---|---|---|---|\n| Company identity |  |  |  |\n| Domain age / ownership |  |  |  |\n| Reviews outside seller site |  |  |  |\n| Address / phone / email |  |  |  |\n| Return policy |  |  |  |\n| Payment protection |  |  |  |\n`,
+      '02-product-comparison.md': `# Product Comparison\n\n| Seller | Product | Price | Delivery | Warranty | Return | Notes |\n|---|---|---:|---|---|---|---|\n`,
+      '03-scam-risk-checklist.md': `# Scam Risk Checklist\n\n- Price too good to be true\n- New or hidden domain identity\n- No real address or mismatched company details\n- Pressure countdowns or fake stock urgency\n- Bank transfer / crypto / friends-and-family payment requested\n- Reviews look copied or only on seller site\n- Return policy vague or impossible\n- Product photos copied from another listing\n\n`,
+      '04-complaint-chargeback-route.md': `# Complaint / Refund / Chargeback Route\n\n1. Screenshot product page, checkout, confirmation, tracking, messages.\n2. Ask seller for remedy in writing.\n3. Check card chargeback / Section 75 if credit card and eligible.\n4. Check PayPal/eBay/Amazon/platform dispute route if used.\n5. Report fraud/scam where appropriate.\n6. Save all evidence before public accusations.\n`,
+      '05-draft-seller-message.md': `# Draft Seller Message\n\nSubject: Order issue / refund request - ${cleanTitle}\n\nHello,\n\nI am contacting you about: ${cleanBrief}\n\nPlease confirm:\n1. \n2. \n\nRequested remedy:\n\nPlease respond by [date].\n`
+    };
+    Object.entries(files).forEach(([name, content]) => fs.writeFileSync(path.join(folder, name), content));
+    await shell.openPath(path.join(folder, '00-readme.md'));
+    return { ok: true, kind: 'purchase-protection', folder, files: Object.keys(files) };
   }
 }

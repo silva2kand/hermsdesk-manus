@@ -31,7 +31,8 @@ import {
   Brain,
   Wrench,
   FileText,
-  Volume2
+  Volume2,
+  CreditCard
 } from 'lucide-react';
 
 const ToolButton = ({ label, icon: Icon, onClick }: any) => (
@@ -116,6 +117,14 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
     const files = await window.ipcRenderer?.selectFiles?.();
     const file = files?.[0];
     if (file) await window.ipcRenderer?.analyzeDataArtifact?.(file);
+  };
+  const createJusticePack = async () => {
+    await window.ipcRenderer?.createJusticeCasePack?.('Justice Case Pack', prompt || 'Describe the legal issue, evidence, decision, deadlines, and outcome wanted.');
+    await window.ipcRenderer?.openBrowserOperator?.('GOV.UK legal appeal complaint ombudsman court tribunal guidance');
+  };
+  const createPurchasePack = async () => {
+    await window.ipcRenderer?.createPurchaseProtectionPack?.('Purchase Protection Pack', prompt || 'Describe the product, seller, website, payment method, and concern.');
+    await window.ipcRenderer?.openBrowserOperator?.(prompt || 'seller product reviews scam check refund chargeback');
   };
 
   const [activeConnectorsCount, setActiveConnectorsCount] = useState(0);
@@ -280,6 +289,8 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
                   <ToolItem icon={Monitor} label="Develop apps" onClick={() => startTask('Develop a new application feature', true)} />
                   <ToolItem icon={Calendar} label="Schedule task" onClick={() => startTask('Schedule a new automated task', true)} />
                   <ToolItem icon={SearchIcon} label="Wide Research" onClick={() => startTask('Perform extensive web and local research', true)} />
+                  <ToolItem icon={Briefcase} label="Justice Case Pack" onClick={createJusticePack} />
+                  <ToolItem icon={CreditCard} label="Purchase Protection" onClick={createPurchasePack} />
                   <ToolItem icon={Table} label="Spreadsheet" onClick={analyzeData} />
                   <ToolItem icon={BarChart3} label="Visualization" onClick={analyzeData} />
                   <ToolItem icon={Video} label="Video" onClick={() => startTask('Generate a video production plan', true)} />

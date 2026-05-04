@@ -138,5 +138,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   createWebsiteArtifact: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-website', { title, brief }),
   createDesignArtifact: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-design', { title, brief }),
   analyzeDataArtifact: (filePath: string) => ipcRenderer.invoke('artifacts:analyze-data', filePath),
+  createJusticeCasePack: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-justice-case', { title, brief }),
+  createPurchaseProtectionPack: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-purchase-protection', { title, brief }),
   revealArtifactsRoot: () => ipcRenderer.invoke('artifacts:reveal-root'),
 })

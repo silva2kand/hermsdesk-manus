@@ -87,6 +87,24 @@ export const SkillsRegistry = () => {
       updated: 'Built-in'
     },
     {
+      id: 'mythos-justice-casework',
+      name: 'mythos-justice-casework',
+      desc: 'Build evidence packs, chronology, appeal/review route maps, complaint drafts, loophole/risk analysis, and hearing prep for UK legal/public-interest issues.',
+      icon: Shield,
+      color: 'bg-red-900',
+      category: 'Mythos',
+      updated: 'Built-in'
+    },
+    {
+      id: 'mythos-purchase-protection',
+      name: 'mythos-purchase-protection',
+      desc: 'Research sellers/products, check scam signals, compare offers, preserve evidence, and prepare refund/chargeback/complaint routes.',
+      icon: BarChart3,
+      color: 'bg-emerald-700',
+      category: 'Mythos',
+      updated: 'Built-in'
+    },
+    {
       id: 'video-generator',
       name: 'video-generator',
       desc: 'Professional AI video production workflow. MUST read this skill BEFORE entering generation for short films or commercials.',

@@ -81,6 +81,8 @@ interface Window {
     createWebsiteArtifact: (title: string, brief: string) => Promise<any>;
     createDesignArtifact: (title: string, brief: string) => Promise<any>;
     analyzeDataArtifact: (filePath: string) => Promise<any>;
+    createJusticeCasePack: (title: string, brief: string) => Promise<any>;
+    createPurchaseProtectionPack: (title: string, brief: string) => Promise<any>;
     revealArtifactsRoot: () => Promise<any>;
 
     // Tool Registry

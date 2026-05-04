@@ -527,6 +527,8 @@ function createWindow() {
   ipcMain.handle('artifacts:create-website', (_, { title, brief }) => artifactService.createWebsite(title, brief))
   ipcMain.handle('artifacts:create-design', (_, { title, brief }) => artifactService.createDesign(title, brief))
   ipcMain.handle('artifacts:analyze-data', (_, filePath) => artifactService.analyzeData(filePath))
+  ipcMain.handle('artifacts:create-justice-case', (_, { title, brief }) => artifactService.createJusticeCasePack(title, brief))
+  ipcMain.handle('artifacts:create-purchase-protection', (_, { title, brief }) => artifactService.createPurchaseProtectionPack(title, brief))
   ipcMain.handle('artifacts:reveal-root', () => artifactService.revealRoot())
 
   // Test active push message to Renderer-process.

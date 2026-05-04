@@ -48,6 +48,22 @@ const skillCatalog = [
     updated: 'BUILT-IN REAL'
   },
   {
+    id: 'mythos-justice-casework',
+    name: 'mythos-justice-casework',
+    category: 'MYTHOS' as SkillCategory,
+    icon: Shield,
+    description: 'Legal/public-interest casework: build evidence, chronology, appeal/review route maps, loophole analysis, complaint drafts, and deadline-first action packs without pretending to be a solicitor.',
+    updated: 'BUILT-IN REAL'
+  },
+  {
+    id: 'mythos-purchase-protection',
+    name: 'mythos-purchase-protection',
+    category: 'MYTHOS' as SkillCategory,
+    icon: TrendingUp,
+    description: 'Online buying protection: research sellers, compare offers, detect scam signals, preserve evidence, and prepare refund/chargeback/escalation routes.',
+    updated: 'BUILT-IN REAL'
+  },
+  {
     id: 'video-generator',
     name: 'video-generator',
     category: 'OFFICIAL' as SkillCategory,
