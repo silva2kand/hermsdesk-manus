@@ -398,8 +398,8 @@ function App() {
           <MainErrorBoundary>
           {view === 'landing' && (
             <LandingPage 
-              onOpenConnectors={() => openSettings('Connectors')} 
-              onOpenComputer={() => openSettings('Computer')} 
+              onOpenConnectors={() => setView('connectors')} 
+              onOpenComputer={() => setView('computer')} 
               onStartTask={startTask} 
             />
           )}
@@ -408,6 +408,7 @@ function App() {
               initialModel={selectedModel} 
               initialPrompt={taskPrompt} 
               isAgentic={isAgenticTask}
+              onNavigate={(nextView) => setView(nextView as any)}
             />
           )}
           {view === 'models' && (

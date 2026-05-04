@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   HardDrive, Folder, File, Terminal, Monitor, Clock, Shield, Database,
-  RefreshCw, ExternalLink, ChevronLeft, ChevronRight
+  RefreshCw, ExternalLink, ChevronLeft, ChevronRight, Globe, Search, Radio
 } from 'lucide-react';
 
 const formatBytes = (bytes = 0) => {
@@ -14,6 +14,7 @@ const formatBytes = (bytes = 0) => {
 export const MyComputer = () => {
   const [overview, setOverview] = useState<any>(null);
   const [directory, setDirectory] = useState<{ path: string, entries: any[] } | null>(null);
+  const [automationEvents, setAutomationEvents] = useState<any[]>([]);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -41,6 +42,14 @@ export const MyComputer = () => {
 
   useEffect(() => {
     refresh();
+    window.ipcRenderer?.getAutomationEvents?.().then(events => setAutomationEvents(events || [])).catch(() => {});
+    const handleAutomation = (_: any, event: any) => {
+      setAutomationEvents(prev => [event, ...prev].slice(0, 20));
+    };
+    window.ipcRenderer?.on?.('automation:event', handleAutomation);
+    return () => {
+      window.ipcRenderer?.off?.('automation:event', handleAutomation);
+    };
   }, []);
 
   const usedPercent = overview?.systemDrive?.percent || 0;
@@ -65,6 +74,20 @@ export const MyComputer = () => {
     showNotice(result?.ok ? `Revealed ${path}` : (result?.error || 'Could not reveal path'));
   };
 
+  const openBrowser = async () => {
+    const target = window.prompt('Open URL or search the web', 'https://www.google.com');
+    if (target === null) return;
+    const result = await window.ipcRenderer?.openBrowserAutomation?.(target);
+    showNotice(result?.ok ? 'Browser opened and logged in ME Computer.' : (result?.error || 'Could not open browser.'));
+  };
+
+  const researchWeb = async () => {
+    const query = window.prompt('Research topic', '');
+    if (!query) return;
+    const result = await window.ipcRenderer?.researchWebAutomation?.(query);
+    showNotice(result?.ok ? 'Web research opened and logged.' : (result?.error || 'Could not start web research.'));
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#fafafa] p-8 animate-in fade-in duration-300">
       <div className="max-w-5xl mx-auto w-full space-y-8">
@@ -82,6 +105,13 @@ export const MyComputer = () => {
             >
               <Terminal className="w-3.5 h-3.5 mr-2" />
               Open Terminal
+            </button>
+            <button
+              onClick={openBrowser}
+              className="px-4 py-2 bg-white border border-gray-100 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 shadow-sm transition-all flex items-center"
+            >
+              <Globe className="w-3.5 h-3.5 mr-2" />
+              Open Browser
             </button>
             <button
               onClick={() => refresh(directory?.path)}
@@ -173,6 +203,76 @@ export const MyComputer = () => {
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
+          <div className="p-6 bg-white border border-gray-100 rounded-3xl shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">ME Computer Live Automation</h2>
+                <p className="text-xs text-gray-500 mt-2">Real PC and browser actions from the chat bar, tray, and this workspace appear here as they happen.</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={researchWeb}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all flex items-center"
+                >
+                  <Search className="w-3.5 h-3.5 mr-2" />
+                  Research
+                </button>
+                <button
+                  onClick={() => window.ipcRenderer?.openTerminal(directory?.path)}
+                  className="px-3 py-2 bg-gray-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all flex items-center"
+                >
+                  <Terminal className="w-3.5 h-3.5 mr-2" />
+                  Terminal
+                </button>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button onClick={() => window.ipcRenderer?.openApp?.('whatsapp web')} className="p-3 rounded-2xl border border-gray-100 text-left hover:bg-green-50 hover:border-green-100 transition-all">
+                <p className="text-xs font-black text-gray-900">WhatsApp Web</p>
+                <p className="text-[10px] text-gray-500 mt-1">Open real web compose surface.</p>
+              </button>
+              <button onClick={() => window.ipcRenderer?.openApp?.('video call')} className="p-3 rounded-2xl border border-gray-100 text-left hover:bg-blue-50 hover:border-blue-100 transition-all">
+                <p className="text-xs font-black text-gray-900">Video Call</p>
+                <p className="text-[10px] text-gray-500 mt-1">Create a Google Meet room.</p>
+              </button>
+              <button onClick={() => window.ipcRenderer?.openApp?.('voice stack')} className="p-3 rounded-2xl border border-gray-100 text-left hover:bg-cyan-50 hover:border-cyan-100 transition-all">
+                <p className="text-xs font-black text-gray-900">Voice Stack</p>
+                <p className="text-[10px] text-gray-500 mt-1">Open local port 7100.</p>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 bg-gray-950 text-white rounded-3xl shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Radio className="w-4 h-4 text-green-400 mr-2" />
+                <h2 className="text-xs font-black uppercase tracking-widest">Live Activity</h2>
+              </div>
+              <span className="text-[9px] font-black text-green-400 uppercase tracking-widest">Realtime</span>
+            </div>
+            <div className="mt-4 space-y-3 max-h-52 overflow-y-auto pr-1">
+              {automationEvents.length ? automationEvents.map(event => (
+                <div key={event.id} className="p-3 bg-white/5 border border-white/10 rounded-2xl">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-black truncate">{event.title}</p>
+                    <span className={`text-[8px] font-black uppercase tracking-widest ${event.status === 'error' ? 'text-red-300' : event.status === 'running' ? 'text-blue-300' : 'text-green-300'}`}>
+                      {event.status}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1 truncate">{event.detail}</p>
+                </div>
+              )) : (
+                <div className="h-36 flex flex-col items-center justify-center text-center border border-dashed border-white/10 rounded-2xl">
+                  <Globe className="w-8 h-8 text-gray-700 mb-3" />
+                  <p className="text-xs font-black text-gray-300">No automation events yet</p>
+                  <p className="text-[10px] text-gray-500 mt-1">Open browser research from the chat bar or this panel.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

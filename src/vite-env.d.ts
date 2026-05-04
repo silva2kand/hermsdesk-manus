@@ -36,6 +36,9 @@ interface Window {
     openTerminal: (folderPath?: string) => Promise<{ ok: boolean, path?: string }>;
     composeWhatsApp: (message: string, phone?: string) => Promise<{ ok: boolean, url: string, mode: string }>;
     getVoiceStackStatus: () => Promise<{ ok: boolean, url: string, status?: number, error?: string }>;
+    getAutomationEvents: () => Promise<any[]>;
+    openBrowserAutomation: (target?: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any }>;
+    researchWebAutomation: (query: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any, query?: string }>;
     getClassicOutlookStatus: () => Promise<any>;
     listClassicOutlookMessages: (limit?: number) => Promise<any[] | { ok: false, error: string }>;
     startMicrosoftGraphLogin: () => Promise<any>;

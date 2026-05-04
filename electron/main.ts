@@ -17,6 +17,7 @@ let workspaceService: any;
 let microsoftGraph: any;
 let schedulerService: any;
 let wideResearchService: any;
+let automationService: any;
 
 function initializeStoreAndServices() {
    try {
@@ -53,6 +54,7 @@ function initializeStoreAndServices() {
       scheduledTasks: [],
       projects: [],
       wideResearchRuns: [],
+      automationEvents: [],
       generalSettings: {
         language: 'English',
         theme: 'Quantum Blue',
@@ -74,6 +76,7 @@ function initializeStoreAndServices() {
   microsoftGraph = new MicrosoftGraphService(store)
   schedulerService = new SchedulerService(store, workspaceService, orchestrator)
   wideResearchService = new WideResearchService(store, aiService)
+  automationService = new AutomationService(store)
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      // Fallback to a non-persistent object if store fails completely
@@ -92,6 +95,7 @@ function initializeStoreAndServices() {
      microsoftGraph = new MicrosoftGraphService(store)
      schedulerService = new SchedulerService(store, workspaceService, orchestrator)
      wideResearchService = new WideResearchService(store, aiService)
+     automationService = new AutomationService(store)
    }
  }
 
@@ -105,6 +109,7 @@ import { WorkspaceService } from './services/WorkspaceService'
 import { MicrosoftGraphService } from './services/MicrosoftGraphService'
 import { SchedulerService } from './services/SchedulerService'
 import { WideResearchService } from './services/WideResearchService'
+import { AutomationService } from './services/AutomationService'
 
 // The built directory structure
 //
@@ -149,6 +154,7 @@ function createTray() {
     { label: 'Open WhatsApp', click: () => integrationService?.openApp('whatsapp') },
     { label: 'Open Classic Outlook', click: () => integrationService?.openApp('classic outlook') },
     { label: 'Open Voice Stack', click: () => integrationService?.openApp('voice stack') },
+    { label: 'Open Browser', click: () => automationService?.openBrowser() },
     { label: 'Open Workspace Terminal', click: () => integrationService?.openTerminal() },
     { type: 'separator' },
     { label: 'Quit', click: () => { isQuitting = true; tray = null; app.quit() } }
@@ -205,6 +211,7 @@ function createWindow() {
   schedulerService?.setWindow(win)
   schedulerService?.start()
   wideResearchService?.setWindow(win)
+  automationService?.setWindow(win)
 
   // IPC Handlers for AI
   ipcMain.handle('ai:list-models', async () => {
@@ -343,6 +350,9 @@ function createWindow() {
   ipcMain.handle('desktop:open-terminal', (_, folderPath) => integrationService.openTerminal(folderPath))
   ipcMain.handle('desktop:whatsapp-compose', (_, { message, phone }) => integrationService.composeWhatsAppMessage(message, phone))
   ipcMain.handle('desktop:voice-stack-status', () => integrationService.getVoiceStackStatus())
+  ipcMain.handle('automation:get-events', () => automationService.getEvents())
+  ipcMain.handle('automation:open-browser', (_, target) => automationService.openBrowser(target))
+  ipcMain.handle('automation:research-web', (_, query) => automationService.researchWeb(query))
   ipcMain.handle('outlook:classic-status', () => integrationService.getClassicOutlookStatus())
   ipcMain.handle('outlook:classic-messages', (_, limit) => integrationService.listClassicOutlookMessages(limit))
   ipcMain.handle('microsoft:graph-start-login', () => microsoftGraph.startDeviceLogin())
@@ -457,6 +467,7 @@ function createWindow() {
       { label: 'Open WhatsApp', click: () => integrationService.openApp('whatsapp') },
       { label: 'Open Video Call', click: () => integrationService.openApp('video call') },
       { label: 'Open Voice Stack', click: () => integrationService.openApp('voice stack') },
+      { label: 'Open Browser', click: () => automationService.openBrowser() },
       { type: 'separator' },
       { label: 'Copy', role: 'copy', enabled: params.selectionText.length > 0 },
       { label: 'Paste', role: 'paste' }

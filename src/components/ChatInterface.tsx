@@ -30,7 +30,14 @@ const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string,
   </div>
 );
 
-export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { initialModel?: { provider: string, model: string } | null, initialPrompt?: string, isAgentic?: boolean }) => {
+type ChatInterfaceProps = {
+  initialModel?: { provider: string, model: string } | null;
+  initialPrompt?: string;
+  isAgentic?: boolean;
+  onNavigate?: (view: string) => void;
+};
+
+export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNavigate }: ChatInterfaceProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [input, setInput] = useState('');
@@ -229,9 +236,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
     const prompt = getLastUserPrompt(idx);
     
     if (label.toLowerCase().includes('research web')) {
-      const url = `https://www.google.com/search?q=${encodeURIComponent(prompt)}`;
-      window.open(url, '_blank');
-      addNotice('Opened web research in your browser');
+      await openWebResearch(prompt);
       return;
     }
 
@@ -402,6 +407,23 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
     const status = await window.ipcRenderer?.getVoiceStackStatus?.();
     await window.ipcRenderer?.openApp?.('voice stack');
     addNotice(status?.ok ? 'Silva Voice Stack is online at port 7100.' : 'Opening Voice Stack page. Start the voice server if it is offline.');
+  };
+
+  const openWebResearch = async (query?: string) => {
+    const target = (query || input || getLastUserPrompt()).trim();
+    const result = await window.ipcRenderer?.researchWebAutomation?.(target);
+    addNotice(result?.ok ? 'Opened live web research in your browser and ME Computer.' : (result?.error || 'Could not open browser research.'));
+  };
+
+  const openComputerView = () => {
+    onNavigate?.('computer');
+    addNotice('Opened ME Computer live workspace.');
+  };
+
+  const openSkillsView = async () => {
+    const skills = await window.ipcRenderer?.getInstalledSkills?.();
+    onNavigate?.('skills');
+    addNotice(`Skills Engine: ${skills?.length || 0} installed local skills`);
   };
 
   const handleSend = async (overrideInput?: string) => {
@@ -823,7 +845,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
                 </div>
 
                 <div className="relative group/icon">
-                  <button onClick={() => handleFolderUpload()} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
+                  <button onClick={openComputerView} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
                     <Monitor className="w-4 h-4" />
                   </button>
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
@@ -833,16 +855,37 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
 
                 <div className="relative group/icon">
                   <button 
-                    onClick={async () => {
-                      const skills = await window.ipcRenderer?.getInstalledSkills?.();
-                      addNotice(`Skills Engine: ${skills?.length || 0} installed local skills`);
-                    }} 
+                    onClick={openSkillsView} 
                     className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
                   >
                     <Wrench className="w-4 h-4" />
                   </button>
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
                     Skills Engine
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button 
+                    onClick={() => onNavigate?.('connectors')} 
+                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Connectors
+                  </div>
+                </div>
+
+                <div className="relative group/icon">
+                  <button 
+                    onClick={() => openWebResearch()} 
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                  >
+                    <Globe className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
+                    Browser Research
                   </div>
                 </div>
 
