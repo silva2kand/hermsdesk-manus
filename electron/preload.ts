@@ -84,6 +84,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   saveMailSettings: (settings: any) => ipcRenderer.invoke('workspace:save-mail', settings),
   getScheduledTasks: () => ipcRenderer.invoke('workspace:get-tasks'),
   saveScheduledTasks: (tasks: any[]) => ipcRenderer.invoke('workspace:save-tasks', tasks),
+  runScheduledTask: (id: string) => ipcRenderer.invoke('workspace:run-scheduled-task', id),
+  getScheduledRuns: () => ipcRenderer.invoke('workspace:get-scheduled-runs'),
   getGeneralSettings: () => ipcRenderer.invoke('workspace:get-settings'),
   saveGeneralSettings: (settings: any) => ipcRenderer.invoke('workspace:save-settings', settings),
   createShortcut: () => ipcRenderer.invoke('desktop:create-shortcut'),

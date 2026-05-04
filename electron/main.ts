@@ -15,6 +15,7 @@ let skillsEngine: any;
 let orchestrator: any;
 let workspaceService: any;
 let microsoftGraph: any;
+let schedulerService: any;
 
 function initializeStoreAndServices() {
    try {
@@ -67,6 +68,7 @@ function initializeStoreAndServices() {
   orchestrator = new MultiAgentOrchestrator(store, aiService, skillsEngine)
   workspaceService = new WorkspaceService(store)
   microsoftGraph = new MicrosoftGraphService(store)
+  schedulerService = new SchedulerService(store, workspaceService, orchestrator)
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      // Fallback to a non-persistent object if store fails completely
@@ -83,6 +85,7 @@ function initializeStoreAndServices() {
      orchestrator = new MultiAgentOrchestrator(store, aiService, skillsEngine)
      workspaceService = new WorkspaceService(store)
      microsoftGraph = new MicrosoftGraphService(store)
+     schedulerService = new SchedulerService(store, workspaceService, orchestrator)
    }
  }
 
@@ -94,6 +97,7 @@ import { SkillsEngineService } from './services/SkillsEngineService'
 import { MultiAgentOrchestrator } from './services/MultiAgentOrchestrator'
 import { WorkspaceService } from './services/WorkspaceService'
 import { MicrosoftGraphService } from './services/MicrosoftGraphService'
+import { SchedulerService } from './services/SchedulerService'
 
 // The built directory structure
 //
@@ -191,6 +195,8 @@ function createWindow() {
   const appLog = (type: 'info' | 'error' | 'bug', content: string) => {
     win?.webContents.send('app:log', { type, content });
   };
+  schedulerService?.setWindow(win)
+  schedulerService?.start()
 
   // IPC Handlers for AI
   ipcMain.handle('ai:list-models', async () => {
@@ -397,6 +403,8 @@ function createWindow() {
   ipcMain.handle('workspace:save-mail', (_, settings) => workspaceService.saveMailSettings(settings))
   ipcMain.handle('workspace:get-tasks', () => workspaceService.getScheduledTasks())
   ipcMain.handle('workspace:save-tasks', (_, tasks) => workspaceService.saveScheduledTasks(tasks))
+  ipcMain.handle('workspace:run-scheduled-task', (_, id) => schedulerService.runNow(id))
+  ipcMain.handle('workspace:get-scheduled-runs', () => schedulerService.getRuns())
   ipcMain.handle('workspace:get-settings', () => workspaceService.getGeneralSettings())
   ipcMain.handle('workspace:save-settings', (_, settings) => workspaceService.saveGeneralSettings(settings))
   ipcMain.handle('workspace:get-silva-memory', () => workspaceService.getSilvaMemory())

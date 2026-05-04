@@ -6,33 +6,60 @@ import {
 
 export const ScheduledTasksView = () => {
   const [schedules, setSchedules] = useState<any[]>([]);
+  const [runs, setRuns] = useState<any[]>([]);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     const fetchTasks = async () => {
       if (window.ipcRenderer) {
-        const tasks = await (window.ipcRenderer as any).getScheduledTasks();
+        const [tasks, taskRuns] = await Promise.all([
+          window.ipcRenderer.getScheduledTasks(),
+          window.ipcRenderer.getScheduledRuns?.().catch(() => [])
+        ]);
         setSchedules(tasks);
+        setRuns(taskRuns || []);
       }
     };
     fetchTasks();
+
+    const onTasksUpdated = (_: any, tasks: any[]) => setSchedules(tasks || []);
+    const onRun = (_: any, run: any) => {
+      setRuns(prev => [run, ...prev].slice(0, 20));
+      showNotice(`Queued scheduled task: ${run.scheduleName}`);
+    };
+
+    window.ipcRenderer?.on?.('scheduler:tasks-updated', onTasksUpdated);
+    window.ipcRenderer?.on?.('scheduler:run', onRun);
+    return () => {
+      window.ipcRenderer?.off?.('scheduler:tasks-updated', onTasksUpdated);
+      window.ipcRenderer?.off?.('scheduler:run', onRun);
+    };
   }, []);
+
+  const showNotice = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 3500);
+  };
 
   const saveTasks = async (newTasks: any[]) => {
     if (window.ipcRenderer) {
-      await (window.ipcRenderer as any).saveScheduledTasks(newTasks);
+      await window.ipcRenderer.saveScheduledTasks(newTasks);
     }
   };
 
   const handleAddTask = () => {
     const name = window.prompt('Task name');
     if (!name) return;
+    const trigger = window.prompt('Trigger, for example: Every day at 9:00 AM, Every Monday at 8am, Every 30 minutes', 'Every day at 9:00 AM') || 'Every day at 9:00 AM';
+    const task = window.prompt('What should ME do when this runs?', `Run this recurring workflow: ${name}`) || `Run this recurring workflow: ${name}`;
     const newTask = {
       id: Math.random().toString(36).substring(7),
       name,
-      trigger: 'Every day at 9:00 AM',
-      task: 'New automated task',
+      trigger,
+      task,
       status: 'Active',
-      color: 'bg-green-500'
+      color: 'bg-green-500',
+      agentId: 'hermes-full'
     };
     const next = [...schedules, newTask];
     setSchedules(next);
@@ -47,6 +74,27 @@ export const ScheduledTasksView = () => {
 
   const handleToggleStatus = (id: string) => {
     const next = schedules.map(t => t.id === id ? { ...t, status: t.status === 'Active' ? 'Paused' : 'Active' } : t);
+    setSchedules(next);
+    saveTasks(next);
+  };
+
+  const handleRunNow = async (id: string) => {
+    const result = await window.ipcRenderer.runScheduledTask?.(id);
+    if (result?.ok) {
+      showNotice(`Queued ${result.run?.scheduleName || 'scheduled task'} for agent execution.`);
+      const tasks = await window.ipcRenderer.getScheduledTasks();
+      setSchedules(tasks);
+    } else {
+      showNotice(result?.error || 'Could not run scheduled task.');
+    }
+  };
+
+  const handleEditTask = (item: any) => {
+    const name = window.prompt('Task name', item.name);
+    if (!name) return;
+    const trigger = window.prompt('Trigger', item.trigger) || item.trigger;
+    const task = window.prompt('Task instructions', item.task) || item.task;
+    const next = schedules.map(schedule => schedule.id === item.id ? { ...schedule, name, trigger, task } : schedule);
     setSchedules(next);
     saveTasks(next);
   };
@@ -68,6 +116,11 @@ export const ScheduledTasksView = () => {
       </div>
 
       <div className="space-y-4">
+        {notice && (
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">
+            {notice}
+          </div>
+        )}
         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center">
           <Clock className="w-3.5 h-3.5 mr-2" />
           Recurring Automations
@@ -94,13 +147,26 @@ export const ScheduledTasksView = () => {
                     </div>
                     <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">{item.trigger}</p>
                     <p className="text-[11px] text-gray-500 max-w-md">{item.task}</p>
+                    {item.lastRunSummary && (
+                      <p className={`text-[10px] font-bold ${item.lastRunStatus === 'failed' ? 'text-red-500' : 'text-green-600'}`}>
+                        {item.lastRunSummary}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <button className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
+                  <button
+                    onClick={() => handleRunNow(item.id)}
+                    className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                    title="Run now"
+                  >
                     <Play className="w-4 h-4" />
                   </button>
-                  <button className="p-2.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all">
+                  <button
+                    onClick={() => handleEditTask(item)}
+                    className="p-2.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all"
+                    title="Edit schedule"
+                  >
                     <Settings className="w-4 h-4" />
                   </button>
                   <button 
@@ -115,6 +181,28 @@ export const ScheduledTasksView = () => {
           ))}
         </div>
       </div>
+
+      {runs.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center">
+            <Calendar className="w-3.5 h-3.5 mr-2" />
+            Recent Runs
+          </h3>
+          <div className="bg-white border border-gray-100 rounded-3xl divide-y divide-gray-50 overflow-hidden">
+            {runs.slice(0, 6).map(run => (
+              <div key={run.id} className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black text-gray-900">{run.scheduleName}</p>
+                  <p className="text-[10px] text-gray-500 mt-1">{new Date(run.startedAt).toLocaleString()} · {run.agentId}</p>
+                </div>
+                <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full ${run.status === 'failed' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                  {run.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="p-6 bg-blue-50/50 rounded-[32px] border border-blue-100 flex items-start space-x-4">
         <AlertCircle className="w-6 h-6 text-blue-500 shrink-0 mt-0.5" />

@@ -50,6 +50,10 @@ interface Window {
     saveSilvaMemory: (memory: string) => Promise<boolean>;
     getEmailIntelligence: () => Promise<any>;
     approveEmailRoute: (messageId: string, status: string) => Promise<any>;
+    getScheduledTasks: () => Promise<any[]>;
+    saveScheduledTasks: (tasks: any[]) => Promise<boolean>;
+    runScheduledTask: (id: string) => Promise<any>;
+    getScheduledRuns: () => Promise<any[]>;
 
     // Tool Registry
     getTools: () => Promise<any[]>;
