@@ -357,6 +357,9 @@ export class MultiAgentOrchestrator {
 
     let iterations = 0;
     const maxIterations = 8;
+    let recoveryAttempts = 0;
+    const maxRecoveryAttempts = 3;
+    let completed = false;
 
     while (iterations < maxIterations) {
       // Check cancel flag
@@ -380,7 +383,16 @@ export class MultiAgentOrchestrator {
         const engine = response?.engine || 'Unknown';
 
         if (!content) {
-          sendUpdate(`No response from ${engine}. Check if the built-in Jan+TurboQuant engine is running.`, 'error');
+          recoveryAttempts++;
+          const recoveryMessage = `No response from ${engine}. Recovery ${recoveryAttempts}/${maxRecoveryAttempts}: retrying with a smaller continuation prompt.`;
+          sendUpdate(recoveryMessage, 'error');
+          task.history.push({ role: 'system', content: recoveryMessage, engine, iteration: iterations, recoveryAttempts });
+          messages.push({
+            role: 'user',
+            content: `The previous engine response was empty. Continue the task from the last reliable state. If a tool failed, choose another approach. Task: ${task.input}`
+          });
+          if (recoveryAttempts < maxRecoveryAttempts) continue;
+          task.status = 'failed';
           break;
         }
 
@@ -423,13 +435,25 @@ export class MultiAgentOrchestrator {
           // No tool calls — this is the agent's final response
           sendUpdate(content, 'info');
           task.history.push({ role: 'assistant', content, engine, iteration: iterations });
+          completed = true;
           break;
         }
       } catch (err: any) {
-        sendUpdate(`Engine error: ${err.message}`, 'error');
-        // If the primary engine failed, the error message from chatWithBestAvailable
-        // will already explain the situation
-        break;
+        recoveryAttempts++;
+        const message = err?.message || 'Unknown engine error';
+        sendUpdate(`Engine error: ${message}`, 'error');
+        task.history.push({ role: 'system', content: `Engine error: ${message}`, iteration: iterations, recoveryAttempts });
+        if (recoveryAttempts >= maxRecoveryAttempts) {
+          task.status = 'failed';
+          sendUpdate(`Recovery exhausted after ${maxRecoveryAttempts} attempts. Task needs review.`, 'error');
+          break;
+        }
+        messages.push({
+          role: 'user',
+          content: `The engine/tool route failed with: ${message}\nRecover and continue. Try a smaller answer, another local route, or produce the safest partial result with next actions. Do not abandon the task unless impossible.`
+        });
+        sendUpdate(`Recovery pass ${recoveryAttempts}/${maxRecoveryAttempts}: continuing instead of stopping.`, 'info');
+        continue;
       }
     }
 
@@ -437,8 +461,8 @@ export class MultiAgentOrchestrator {
       sendUpdate(`Reached maximum iterations (${maxIterations}). Task paused.`, 'info');
     }
 
-    sendUpdate('Agent loop complete.', 'info');
-    task.status = task.status === 'cancelled' ? 'cancelled' : 'done';
+    sendUpdate(task.status === 'failed' ? 'Agent loop stopped after recovery attempts.' : 'Agent loop complete.', task.status === 'failed' ? 'error' : 'info');
+    task.status = task.status === 'cancelled' ? 'cancelled' : task.status === 'failed' ? 'failed' : completed || task.history.length > 0 ? 'done' : 'failed';
     task.steps = task.steps.map(s => ({ ...s, status: 'done' as const }));
     agent.currentTask = undefined;
 

@@ -17,6 +17,7 @@ import { RunningAgentsDock } from './components/RunningAgentsDock';
 import { RightApprovalSidebar } from './components/RightApprovalSidebar';
 import { MyComputer } from './components/MyComputer';
 import { MailMEView } from './components/MailMEView';
+import { WhatsAppMEView } from './components/WhatsAppMEView';
 import { DataControlsView } from './components/DataControlsView';
 import { ScheduledTasksView } from './components/ScheduledTasksView';
 import { ConnectorsManager } from './components/ConnectorsManager';
@@ -150,7 +151,7 @@ interface Agent {
 }
 
 function App() {
-  const [view, setView] = useState<'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins' | 'agents' | 'computer' | 'profile' | 'settings' | 'usage' | 'tasks' | 'mail' | 'data' | 'browser' | 'personalization' | 'projects' | 'wide-research' | 'shared-tasks' | 'shared-files' | 'websites' | 'apps' | 'domains' | 'connectors' | 'api-keys' | 'integrations'>('landing');
+  const [view, setView] = useState<'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins' | 'agents' | 'computer' | 'profile' | 'settings' | 'usage' | 'tasks' | 'mail' | 'whatsapp' | 'data' | 'browser' | 'personalization' | 'projects' | 'wide-research' | 'shared-tasks' | 'shared-files' | 'websites' | 'apps' | 'domains' | 'connectors' | 'api-keys' | 'integrations'>('landing');
   const [selectedModel, setSelectedModel] = useState<{provider: string, model: string} | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
@@ -433,6 +434,7 @@ function App() {
           {view === 'usage' && <SettingsShell title="Usage" desc="Local usage, engine activity, and workspace metrics." />}
           {view === 'tasks' && <SettingsSurface><ScheduledTasksView /></SettingsSurface>}
           {view === 'mail' && <SettingsSurface><MailMEView /></SettingsSurface>}
+          {view === 'whatsapp' && <WhatsAppMEView />}
           {view === 'data' && <SettingsSurface><DataControlsView /></SettingsSurface>}
           {view === 'browser' && <SettingsSurface><DataControlsView mode="cloud" /></SettingsSurface>}
           {view === 'personalization' && <SettingsPage />}
@@ -449,7 +451,7 @@ function App() {
           {view === 'knowledge' && <Knowledge />}
           
           {/* Fallback for unmapped views to prevent blank screen */}
-          {!['landing', 'chat', 'models', 'skills', 'knowledge', 'memory', 'plugins', 'agents', 'computer', 'settings', 'profile', 'usage', 'tasks', 'mail', 'data', 'browser', 'personalization', 'projects', 'wide-research', 'shared-tasks', 'shared-files', 'websites', 'apps', 'domains', 'connectors', 'api-keys', 'integrations'].includes(view) && (
+          {!['landing', 'chat', 'models', 'skills', 'knowledge', 'memory', 'plugins', 'agents', 'computer', 'settings', 'profile', 'usage', 'tasks', 'mail', 'whatsapp', 'data', 'browser', 'personalization', 'projects', 'wide-research', 'shared-tasks', 'shared-files', 'websites', 'apps', 'domains', 'connectors', 'api-keys', 'integrations'].includes(view) && (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in fade-in zoom-in duration-500">
               <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 border border-gray-100 shadow-sm">
                 <Settings className="w-6 h-6 text-gray-400" />

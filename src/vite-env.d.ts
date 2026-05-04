@@ -53,6 +53,9 @@ interface Window {
     saveSilvaMemory: (memory: string) => Promise<boolean>;
     getEmailIntelligence: () => Promise<any>;
     approveEmailRoute: (messageId: string, status: string) => Promise<any>;
+    getWhatsAppDrafts: () => Promise<any[]>;
+    saveWhatsAppDraft: (draft: any) => Promise<any>;
+    markWhatsAppOpened: (id: string) => Promise<any>;
     getScheduledTasks: () => Promise<any[]>;
     saveScheduledTasks: (tasks: any[]) => Promise<boolean>;
     runScheduledTask: (id: string) => Promise<any>;

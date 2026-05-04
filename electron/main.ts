@@ -51,6 +51,7 @@ function initializeStoreAndServices() {
         approvedSenders: [],
         enabledCategories: {}
       },
+      whatsAppDrafts: [],
       scheduledTasks: [],
       projects: [],
       wideResearchRuns: [],
@@ -148,6 +149,7 @@ function createTray() {
     { label: 'Open HermesDesk', click: showMainWindow },
     { label: 'Chat Lab', click: () => { showMainWindow(); win?.webContents.send('app:navigate', 'chat') } },
     { label: 'Model Hub', click: () => { showMainWindow(); win?.webContents.send('app:navigate', 'models') } },
+    { label: 'WhatsApp ME', click: () => { showMainWindow(); win?.webContents.send('app:navigate', 'whatsapp') } },
     { label: 'Approvals', click: () => { showMainWindow(); win?.webContents.send('app:navigate', 'agents') } },
     { type: 'separator' },
     { label: 'Sync Mail Intelligence', click: () => { showMainWindow(); win?.webContents.send('mail:sync-intelligence') } },
@@ -419,6 +421,9 @@ function createWindow() {
   // Workspace Handlers
   ipcMain.handle('workspace:get-mail', () => workspaceService.getMailSettings())
   ipcMain.handle('workspace:save-mail', (_, settings) => workspaceService.saveMailSettings(settings))
+  ipcMain.handle('workspace:get-whatsapp-drafts', () => workspaceService.getWhatsAppDrafts())
+  ipcMain.handle('workspace:save-whatsapp-draft', (_, draft) => workspaceService.saveWhatsAppDraft(draft))
+  ipcMain.handle('workspace:mark-whatsapp-opened', (_, id) => workspaceService.updateWhatsAppDraftStatus(id, 'opened'))
   ipcMain.handle('workspace:get-tasks', () => workspaceService.getScheduledTasks())
   ipcMain.handle('workspace:save-tasks', (_, tasks) => workspaceService.saveScheduledTasks(tasks))
   ipcMain.handle('workspace:run-scheduled-task', (_, id) => schedulerService.runNow(id))
@@ -461,6 +466,7 @@ function createWindow() {
       { label: 'Chat Lab', click: () => win?.webContents.send('app:navigate', 'chat') },
       { label: 'Model Hub', click: () => win?.webContents.send('app:navigate', 'models') },
       { label: 'Mail ME', click: () => win?.webContents.send('app:navigate', 'mail') },
+      { label: 'WhatsApp ME', click: () => win?.webContents.send('app:navigate', 'whatsapp') },
       { label: 'My Computer', click: () => win?.webContents.send('app:navigate', 'computer') },
       { type: 'separator' },
       { label: 'Sync Mail Intelligence', click: () => win?.webContents.send('mail:sync-intelligence') },

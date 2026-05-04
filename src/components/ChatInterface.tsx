@@ -394,7 +394,20 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const composeWhatsApp = async () => {
     const message = input.trim() || getLastUserPrompt();
+    if (!input.trim() && !messages.length) {
+      onNavigate?.('whatsapp');
+      addNotice('Opened WhatsApp ME communication workspace.');
+      return;
+    }
+    const draft = await window.ipcRenderer?.saveWhatsAppDraft?.({
+      label: 'Chat bar compose',
+      message,
+      status: 'drafted'
+    }).catch(() => null);
     const result = await window.ipcRenderer?.composeWhatsApp?.(message);
+    if (result?.ok && draft?.id) {
+      await window.ipcRenderer?.markWhatsAppOpened?.(draft.id).catch(() => null);
+    }
     addNotice(result?.ok ? 'Opened WhatsApp composer. Review and press Send manually.' : 'Could not open WhatsApp.');
   };
 

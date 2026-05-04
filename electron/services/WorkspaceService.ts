@@ -60,6 +60,16 @@ export interface WorkspaceProject {
   updatedAt: number;
 }
 
+export interface WhatsAppDraft {
+  id: string;
+  phone: string;
+  message: string;
+  label: string;
+  status: 'drafted' | 'opened' | 'archived';
+  createdAt: number;
+  updatedAt: number;
+}
+
 export class WorkspaceService {
   private store: any;
 
@@ -75,6 +85,37 @@ export class WorkspaceService {
   saveMailSettings(settings: any) {
     this.store.set('mail', settings);
     return true;
+  }
+
+  getWhatsAppDrafts(): WhatsAppDraft[] {
+    return this.store.get('whatsAppDrafts', []) as WhatsAppDraft[];
+  }
+
+  saveWhatsAppDraft(draft: Partial<WhatsAppDraft>) {
+    const now = Date.now();
+    const drafts = this.getWhatsAppDrafts();
+    const existing = draft.id ? drafts.find(item => item.id === draft.id) : null;
+    const nextDraft: WhatsAppDraft = {
+      id: draft.id || Math.random().toString(36).slice(2),
+      phone: draft.phone ?? existing?.phone ?? '',
+      message: draft.message ?? existing?.message ?? '',
+      label: draft.label ?? existing?.label ?? 'WhatsApp draft',
+      status: draft.status ?? existing?.status ?? 'drafted',
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    };
+    const next = existing
+      ? drafts.map(item => item.id === nextDraft.id ? nextDraft : item)
+      : [nextDraft, ...drafts];
+    this.store.set('whatsAppDrafts', next.slice(0, 100));
+    return nextDraft;
+  }
+
+  updateWhatsAppDraftStatus(id: string, status: WhatsAppDraft['status']) {
+    const drafts = this.getWhatsAppDrafts();
+    const next = drafts.map(item => item.id === id ? { ...item, status, updatedAt: Date.now() } : item);
+    this.store.set('whatsAppDrafts', next);
+    return next.find(item => item.id === id) || null;
   }
 
   // Scheduled Tasks

@@ -82,6 +82,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   // Workspace
   getMailSettings: () => ipcRenderer.invoke('workspace:get-mail'),
   saveMailSettings: (settings: any) => ipcRenderer.invoke('workspace:save-mail', settings),
+  getWhatsAppDrafts: () => ipcRenderer.invoke('workspace:get-whatsapp-drafts'),
+  saveWhatsAppDraft: (draft: any) => ipcRenderer.invoke('workspace:save-whatsapp-draft', draft),
+  markWhatsAppOpened: (id: string) => ipcRenderer.invoke('workspace:mark-whatsapp-opened', id),
   getScheduledTasks: () => ipcRenderer.invoke('workspace:get-tasks'),
   saveScheduledTasks: (tasks: any[]) => ipcRenderer.invoke('workspace:save-tasks', tasks),
   runScheduledTask: (id: string) => ipcRenderer.invoke('workspace:run-scheduled-task', id),

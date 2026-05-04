@@ -284,6 +284,7 @@ export const Sidebar = ({
           <SidebarItem icon={Activity} label="Usage & Billing" active={currentView === 'usage'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('usage')} />
           <SidebarItem icon={FileText} label="Scheduled Tasks" active={currentView === 'tasks'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('tasks')} />
           <SidebarItem icon={Mail} label="Mail ME" active={currentView === 'mail'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('mail')} />
+          <SidebarItem icon={MessageSquare} label="WhatsApp ME" active={currentView === 'whatsapp'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('whatsapp')} />
         </SidebarSection>
 
         <SidebarSection title="SYSTEM" isCollapsed={isSidebarCollapsed} defaultExpanded>
