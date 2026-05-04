@@ -32,7 +32,7 @@ const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string,
 );
 
 const ComposerIconButton = ({ icon: Icon, label, onClick, className = '' }: { icon: any; label: string; onClick: () => void; className?: string }) => (
-  <div className="relative group/icon shrink-0">
+  <div className="relative shrink-0">
     <button
       onClick={onClick}
       className={`p-1 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all ${className}`}
@@ -41,9 +41,6 @@ const ComposerIconButton = ({ icon: Icon, label, onClick, className = '' }: { ic
     >
       <Icon className="w-3.5 h-3.5" />
     </button>
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-      {label}
-    </div>
   </div>
 );
 
@@ -914,98 +911,15 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
                   )}
                 </div>
 
-                <div className="relative group/icon">
-                  <button onClick={composeWhatsApp} className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all">
-                    <MessageSquare className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    WhatsApp
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button onClick={openVideoCall} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
-                    <Video className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Video call
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button onClick={openVoiceStack} className="p-1.5 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-all">
-                    <Volume2 className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Voice stack
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button onClick={() => setInput(prev => `${prev}${prev ? ' ' : ''}:)`)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
-                    <Smile className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Emoji
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button onClick={openComputerView} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all">
-                    <Monitor className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    My Computer
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button 
-                    onClick={openSkillsView} 
-                    className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
-                  >
-                    <Wrench className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Skills Engine
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button 
-                    onClick={() => onNavigate?.('connectors')} 
-                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Connectors
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button 
-                    onClick={() => openWebResearch()} 
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                  >
-                    <Globe className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Browser Research
-                  </div>
-                </div>
-
-                <div className="relative group/icon">
-                  <button 
-                    onClick={openMemoryView} 
-                    className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
-                  >
-                    <Brain className="w-4 h-4" />
-                  </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Memory Base
-                  </div>
-                </div>
+                <ComposerIconButton icon={MessageSquare} label="WhatsApp" onClick={composeWhatsApp} className="hover:text-green-600 hover:bg-green-50" />
+                <ComposerIconButton icon={Video} label="Video Call" onClick={openVideoCall} className="hover:text-blue-600 hover:bg-blue-50" />
+                <ComposerIconButton icon={Volume2} label="Voice Stack" onClick={openVoiceStack} className="hover:text-cyan-600 hover:bg-cyan-50" />
+                <ComposerIconButton icon={Smile} label="Emoji" onClick={() => setInput(prev => `${prev}${prev ? ' ' : ''}:)`)} />
+                <ComposerIconButton icon={Monitor} label="Computer" onClick={openComputerView} />
+                <ComposerIconButton icon={Wrench} label="Mythos Skills" onClick={openSkillsView} className="hover:text-orange-600 hover:bg-orange-50" />
+                <ComposerIconButton icon={LayoutGrid} label="Connectors" onClick={() => onNavigate?.('connectors')} className="hover:text-indigo-600 hover:bg-indigo-50" />
+                <ComposerIconButton icon={Globe} label="Research" onClick={() => openWebResearch()} className="hover:text-blue-600 hover:bg-blue-50" />
+                <ComposerIconButton icon={Brain} label="Brain" onClick={openMemoryView} className="hover:text-purple-600 hover:bg-purple-50" />
               </div>
 
               <div className="flex items-center space-x-2">
@@ -1015,7 +929,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
                 <ComposerIconButton icon={Scale} label="Justice" onClick={createJusticePack} className="hover:text-red-800 hover:bg-red-50" />
                 <ComposerIconButton icon={CreditCard} label="Purchase Guard" onClick={createPurchasePack} className="hover:text-emerald-800 hover:bg-emerald-50" />
                 <ComposerIconButton icon={FileText} label="Knowledge" onClick={openKnowledgeView} className="hover:text-emerald-700 hover:bg-emerald-50" />
-                <div className="relative group/icon">
+                <div className="relative shrink-0">
                   <button 
                     onClick={toggleMicrophone} 
                     className={cn(
@@ -1025,12 +939,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
                   >
                     <Mic className="w-4 h-4" />
                   </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Microphone
-                  </div>
                 </div>
 
-                <div className="relative group/icon">
+                <div className="relative shrink-0">
                   <button 
                     onClick={() => handleSend()}
                     disabled={!input.trim() || isTyping}
@@ -1043,9 +954,6 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
                   >
                     <ArrowUp className="w-4 h-4" />
                   </button>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
-                    Send Message
-                  </div>
                 </div>
               </div>
             </div>
