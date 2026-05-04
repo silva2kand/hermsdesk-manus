@@ -21,27 +21,11 @@ const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name;
 
 const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string, color: string }) => (
   <div className="relative group cursor-pointer">
-    <div className={`w-6 h-6 rounded-md ${color} flex items-center justify-center text-white shadow-sm transition-all group-hover:scale-110`}>
-      <Icon className="w-3 h-3" />
+    <div className={`w-5 h-5 rounded-md ${color} flex items-center justify-center text-white shadow-sm transition-all group-hover:scale-110`}>
+      <Icon className="w-2.5 h-2.5" />
     </div>
     {/* Tiny hover tooltip */}
     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none font-bold uppercase tracking-wider">
-      {label}
-    </div>
-  </div>
-);
-
-const ChatQuickAction = ({ icon: Icon, label, onClick, className = '' }: { icon: any; label: string; onClick: () => void; className?: string }) => (
-  <div className="relative group/action shrink-0">
-    <button
-      onClick={onClick}
-      className={`w-9 h-9 rounded-xl border border-gray-100 bg-white text-gray-500 hover:text-gray-950 hover:border-gray-200 hover:shadow-md transition-all flex items-center justify-center ${className}`}
-      title={label}
-      aria-label={label}
-    >
-      <Icon className="w-4 h-4 shrink-0" />
-    </button>
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-gray-950 text-white text-[9px] font-black uppercase tracking-widest opacity-0 invisible group-hover/action:opacity-100 group-hover/action:visible transition-all whitespace-nowrap z-50 pointer-events-none shadow-lg">
       {label}
     </div>
   </div>
@@ -51,11 +35,11 @@ const ComposerIconButton = ({ icon: Icon, label, onClick, className = '' }: { ic
   <div className="relative group/icon shrink-0">
     <button
       onClick={onClick}
-      className={`p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all ${className}`}
+      className={`p-1 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all ${className}`}
       title={label}
       aria-label={label}
     >
-      <Icon className="w-4 h-4" />
+      <Icon className="w-3.5 h-3.5" />
     </button>
     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded opacity-0 group-hover/icon:opacity-100 invisible group-hover/icon:visible transition-all whitespace-nowrap z-50 pointer-events-none">
       {label}
@@ -877,21 +861,6 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       {/* Message Input */}
       <div className="p-4 bg-white border-t">
         <div className="max-w-5xl mx-auto">
-          <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
-            <ChatQuickAction icon={MessageSquare} label="WhatsApp" onClick={composeWhatsApp} className="hover:text-green-700 hover:bg-green-50" />
-            <ChatQuickAction icon={Monitor} label="Computer" onClick={openComputerView} />
-            <ChatQuickAction icon={LayoutGrid} label="Connectors" onClick={() => onNavigate?.('connectors')} className="hover:text-indigo-700 hover:bg-indigo-50" />
-            <ChatQuickAction icon={Radio} label="AutoResearch" onClick={startAutoResearch} className="hover:text-rose-700 hover:bg-rose-50" />
-            <ChatQuickAction icon={Video} label="Video Call" onClick={openVideoCall} className="hover:text-blue-700 hover:bg-blue-50" />
-            <ChatQuickAction icon={MessageSquare} label="Video Chat" onClick={openVideoCall} className="hover:text-sky-700 hover:bg-sky-50" />
-            <ChatQuickAction icon={Volume2} label="Voice Stack" onClick={openVoiceStack} className="hover:text-cyan-700 hover:bg-cyan-50" />
-            <ChatQuickAction icon={Brain} label="Brain" onClick={openMemoryView} className="hover:text-purple-700 hover:bg-purple-50" />
-            <ChatQuickAction icon={Wrench} label="Mythos Skills" onClick={openSkillsView} className="hover:text-orange-700 hover:bg-orange-50" />
-            <ChatQuickAction icon={Scale} label="Justice" onClick={createJusticePack} className="hover:text-red-800 hover:bg-red-50" />
-            <ChatQuickAction icon={CreditCard} label="Purchase Guard" onClick={createPurchasePack} className="hover:text-emerald-800 hover:bg-emerald-50" />
-            <ChatQuickAction icon={FileText} label="Knowledge" onClick={openKnowledgeView} className="hover:text-emerald-700 hover:bg-emerald-50" />
-            <ChatQuickAction icon={Globe} label="Research" onClick={() => openWebResearch()} className="hover:text-blue-700 hover:bg-blue-50" />
-          </div>
           <div className="relative border rounded-2xl bg-gray-50/30 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-50 transition-all">
             <textarea 
               placeholder={`Message ${model}...`}
