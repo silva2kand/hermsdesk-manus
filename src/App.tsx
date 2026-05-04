@@ -61,45 +61,113 @@ const SettingsSurface = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-const SettingsShell = ({ title, desc }: { title: string, desc: string }) => (
-  <SettingsSurface>
-    <div className="space-y-8 animate-in slide-in-from-bottom-2 duration-300">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">{title}</h2>
-        <p className="text-sm text-gray-500 mt-1">{desc}</p>
+const SettingsShell = ({ title, desc }: { title: string, desc: string }) => {
+  const [notice, setNotice] = useState('');
+  const showNotice = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 3500);
+  };
+
+  const saveLocalRecord = (key: string, record: any) => {
+    const current = JSON.parse(window.localStorage.getItem(key) || '[]');
+    const next = [{ id: Math.random().toString(36).slice(2), createdAt: Date.now(), ...record }, ...current].slice(0, 50);
+    window.localStorage.setItem(key, JSON.stringify(next));
+    return next[0];
+  };
+
+  const commonActions = [
+    {
+      label: 'Choose Local Folder',
+      detail: 'Pick a real folder and copy the path.',
+      run: async () => {
+        const folder = await window.ipcRenderer?.selectFolder();
+        if (folder) {
+          await navigator.clipboard?.writeText(folder);
+          showNotice(`Folder copied: ${folder}`);
+        }
+      }
+    },
+    {
+      label: 'Attach Local Files',
+      detail: 'Pick real files and copy their paths.',
+      run: async () => {
+        const files = await window.ipcRenderer?.selectFiles();
+        if (files?.length) {
+          await navigator.clipboard?.writeText(files.join('\n'));
+          showNotice(`${files.length} file path${files.length === 1 ? '' : 's'} copied.`);
+        }
+      }
+    },
+    {
+      label: 'Open Workspace Terminal',
+      detail: 'Launch PowerShell in this repo.',
+      dark: true,
+      run: async () => {
+        await window.ipcRenderer?.openTerminal();
+        showNotice('Workspace terminal opened.');
+      }
+    }
+  ];
+
+  const moduleActions: Record<string, any[]> = {
+    Usage: [
+      { label: 'Open ME Computer Metrics', detail: 'View live CPU/RAM/disk and automation activity.', run: async () => window.ipcRenderer?.openBrowserAutomation?.('http://localhost:7100/') },
+      { label: 'Scan PC Resources', detail: 'Run the real hardware scan route.', run: async () => { const scan = await window.ipcRenderer?.scanPC?.(); await navigator.clipboard?.writeText(JSON.stringify(scan, null, 2)); showNotice('PC scan copied to clipboard.'); } },
+      { label: 'Engine Status', detail: 'Check Jan, Ollama, and LM Studio routes.', run: async () => { const status = await window.ipcRenderer?.engineStatus?.(); await navigator.clipboard?.writeText(JSON.stringify(status, null, 2)); showNotice('Engine status copied.'); } }
+    ],
+    'Shared Tasks': [
+      { label: 'Create Shared Task File', detail: 'Save a local handoff task record.', run: async () => { const prompt = window.prompt('Shared task brief', 'Follow up and report status'); if (!prompt) return; saveLocalRecord('hermsdesk.sharedTasks', { prompt, status: 'open' }); await window.ipcRenderer?.createAgentTask?.(`Shared task handoff:\n${prompt}`, 'paperclip-full'); showNotice('Shared task saved and queued to Paperclips.'); } },
+      { label: 'Open Approvals', detail: 'Review pending safe actions.', run: async () => showNotice('Approvals drawer is available from the bottom-right button.') },
+      { label: 'Copy Task Handoff', detail: 'Copy a reusable handoff template.', run: async () => { await navigator.clipboard?.writeText('Shared task:\nOwner:\nDeadline:\nFiles:\nAcceptance:'); showNotice('Shared task template copied.'); } }
+    ],
+    'Shared Files': [
+      { label: 'Choose Shared Folder', detail: 'Pick and save a shared local folder.', run: async () => { const folder = await window.ipcRenderer?.selectFolder(); if (!folder) return; saveLocalRecord('hermsdesk.sharedFiles', { folder }); await navigator.clipboard?.writeText(folder); showNotice('Shared folder saved and copied.'); } },
+      { label: 'Attach Files', detail: 'Pick files for sharing workflow.', run: commonActions[1].run },
+      { label: 'Open Downloads', detail: 'Open the real Downloads folder.', run: async () => window.ipcRenderer?.openApp?.('downloads') }
+    ],
+    Websites: [
+      { label: 'Open Local Browser', detail: 'Open a URL or search target.', run: async () => { const target = window.prompt('URL or search', 'localhost:5173'); if (target) await window.ipcRenderer?.openBrowserAutomation?.(target); } },
+      { label: 'Create Website Project', detail: 'Save a project record for a website build.', run: async () => { const name = window.prompt('Website project name', 'New website'); if (!name) return; await window.ipcRenderer?.saveProject?.({ name, description: 'Website build project', instructions: 'Build, test, and export a real website project.', connectors: ['my-browser', 'github', 'vercel'] }); showNotice('Website project created.'); } },
+      { label: 'Open Dist Folder', detail: 'Open built web output.', run: async () => window.ipcRenderer?.openPath?.('dist') }
+    ],
+    Apps: [
+      { label: 'Create App Project', detail: 'Save a desktop app project record.', run: async () => { const name = window.prompt('App project name', 'New desktop app'); if (!name) return; await window.ipcRenderer?.saveProject?.({ name, description: 'Desktop app project', instructions: 'Implement, verify, build, and package this app feature.', connectors: ['mcp-filesystem', 'mcp-windows-shell', 'github'] }); showNotice('App project created.'); } },
+      { label: 'Open Workspace Terminal', detail: 'Build, test, and package locally.', dark: true, run: commonActions[2].run },
+      { label: 'Open Release Folder', detail: 'Open packaged app outputs.', run: async () => window.ipcRenderer?.openPath?.('release') }
+    ],
+    'Purchased Domains': [
+      { label: 'Save Domain Record', detail: 'Store domain notes locally.', run: async () => { const domain = window.prompt('Domain name', 'example.com'); if (!domain) return; saveLocalRecord('hermsdesk.domains', { domain, status: 'saved' }); showNotice(`${domain} saved locally.`); } },
+      { label: 'Open DNS Lookup', detail: 'Research domain/DNS in browser.', run: async () => { const domain = window.prompt('Domain to check', 'example.com'); if (domain) await window.ipcRenderer?.openBrowserAutomation?.(`dns lookup ${domain}`); } },
+      { label: 'Copy Deployment Checklist', detail: 'Copy DNS/deployment checklist.', run: async () => { await navigator.clipboard?.writeText('Domain checklist:\nRegistrar:\nDNS provider:\nA/CNAME:\nSSL:\nDeployment URL:\nRenewal date:'); showNotice('Domain checklist copied.'); } }
+    ]
+  };
+
+  const actions = moduleActions[title] || commonActions;
+
+  return (
+    <SettingsSurface>
+      <div className="space-y-8 animate-in slide-in-from-bottom-2 duration-300">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+          <p className="text-sm text-gray-500 mt-1">{desc}</p>
+        </div>
+        {notice && <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">{notice}</div>}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {actions.map(action => (
+            <button
+              key={action.label}
+              onClick={action.run}
+              className={`p-5 border rounded-2xl text-left hover:shadow-sm transition-all ${action.dark ? 'bg-gray-900 border-gray-800 hover:bg-gray-800' : 'bg-white border-gray-100 hover:border-blue-100'}`}
+            >
+              <p className={`text-xs font-black ${action.dark ? 'text-white' : 'text-gray-900'}`}>{action.label}</p>
+              <p className={`text-[10px] mt-1 ${action.dark ? 'text-gray-400' : 'text-gray-500'}`}>{action.detail}</p>
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <button
-          onClick={async () => {
-            const folder = await window.ipcRenderer?.selectFolder();
-            if (folder) await navigator.clipboard?.writeText(folder);
-          }}
-          className="p-5 bg-white border border-gray-100 rounded-2xl text-left hover:border-blue-100 hover:shadow-sm transition-all"
-        >
-          <p className="text-xs font-black text-gray-900">Choose Local Folder</p>
-          <p className="text-[10px] text-gray-500 mt-1">Select a workspace path and copy it for the current workflow.</p>
-        </button>
-        <button
-          onClick={async () => {
-            const files = await window.ipcRenderer?.selectFiles();
-            if (files?.length) await navigator.clipboard?.writeText(files.join('\n'));
-          }}
-          className="p-5 bg-white border border-gray-100 rounded-2xl text-left hover:border-blue-100 hover:shadow-sm transition-all"
-        >
-          <p className="text-xs font-black text-gray-900">Attach Local Files</p>
-          <p className="text-[10px] text-gray-500 mt-1">Use the native file picker for this module.</p>
-        </button>
-        <button
-          onClick={() => window.ipcRenderer?.openTerminal()}
-          className="p-5 bg-gray-900 border border-gray-800 rounded-2xl text-left hover:bg-gray-800 transition-all"
-        >
-          <p className="text-xs font-black text-white">Open Workspace Terminal</p>
-          <p className="text-[10px] text-gray-400 mt-1">Launch PowerShell in the local app workspace.</p>
-        </button>
-      </div>
-    </div>
-  </SettingsSurface>
-);
+    </SettingsSurface>
+  );
+};
 
 class MainErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: string }> {
   state = { error: '' };
