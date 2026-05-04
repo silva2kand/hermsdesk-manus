@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, X, RefreshCw, ShieldCheck, Mail, Bot, FolderOpen } from 'lucide-react';
+import { Check, X, RefreshCw, ShieldCheck, Mail, Bot, FolderOpen, Activity, Globe, Search, CalendarClock, Monitor, Scale, CreditCard, Radio } from 'lucide-react';
 
 const agentNames: Record<string, string> = {
   'hermes-full': 'Hermes',
@@ -7,7 +7,18 @@ const agentNames: Record<string, string> = {
   'solicitor-agent': 'Solicitor',
   'accountant-agent': 'Accountant',
   'space-agent-full': 'Space',
-  'openclaw-full': 'OpenClaw'
+  'openclaw-full': 'OpenClaw',
+  'justice-case-agent': 'Justice',
+  'purchase-guardian-agent': 'Purchase Guard'
+};
+
+const notificationIcons: Record<string, any> = {
+  agent: Bot,
+  automation: Activity,
+  browser: Globe,
+  research: Search,
+  scheduler: CalendarClock,
+  system: ShieldCheck
 };
 
 export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
@@ -39,16 +50,28 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
       ...item
     }, ...prev].slice(0, 20));
 
-    const onAppLog = (_: any, log: any) => push({ type: log?.type || 'info', title: 'System', message: log?.content || 'Update' });
-    const onAgentLog = (_: any, data: any) => push({ type: data?.type || 'agent', title: data?.agentId || 'Agent', message: data?.content || 'Agent update' });
+    const onAppLog = (_: any, log: any) => push({ type: log?.type || 'system', title: 'System', message: log?.content || 'Update' });
+    const onAgentLog = (_: any, data: any) => push({ type: 'agent', title: agentNames[data?.agentId] || data?.agentId || 'Agent', message: data?.content || data?.status || 'Agent update' });
+    const onAutomation = (_: any, event: any) => push({ type: 'automation', title: event?.title || event?.name || 'Automation', message: event?.detail || event?.message || event?.url || 'Automation step ran' });
+    const onBrowser = (_: any, event: any) => push({ type: 'browser', title: event?.title || event?.action || 'Browser Operator', message: event?.text || event?.url || event?.message || 'Browser event' });
+    const onWideResearch = (_: any, event: any) => push({ type: 'research', title: event?.title || 'Wide Research', message: event?.brief || event?.status || event?.message || 'Research lane updated' });
+    const onScheduler = (_: any, event: any) => push({ type: 'scheduler', title: event?.title || 'Scheduled Task', message: event?.task || event?.message || 'Scheduled task updated' });
     const onSyncMail = () => syncMail();
 
     window.ipcRenderer?.on?.('app:log', onAppLog);
     window.ipcRenderer?.on?.('agent:update', onAgentLog);
+    window.ipcRenderer?.on?.('automation:event', onAutomation);
+    window.ipcRenderer?.on?.('browser-operator:event', onBrowser);
+    window.ipcRenderer?.on?.('wide-research:run', onWideResearch);
+    window.ipcRenderer?.on?.('scheduler:run', onScheduler);
     window.ipcRenderer?.on?.('mail:sync-intelligence', onSyncMail);
     return () => {
       window.ipcRenderer?.off?.('app:log', onAppLog);
       window.ipcRenderer?.off?.('agent:update', onAgentLog);
+      window.ipcRenderer?.off?.('automation:event', onAutomation);
+      window.ipcRenderer?.off?.('browser-operator:event', onBrowser);
+      window.ipcRenderer?.off?.('wide-research:run', onWideResearch);
+      window.ipcRenderer?.off?.('scheduler:run', onScheduler);
       window.ipcRenderer?.off?.('mail:sync-intelligence', onSyncMail);
     };
   }, []);
@@ -113,12 +136,12 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
   };
 
   return (
-    <aside className="w-80 h-screen bg-white border-l border-gray-100 flex flex-col shrink-0 z-[100]">
+    <aside className="w-80 h-full bg-white border-l border-gray-100 flex flex-col shrink-0 z-[100] shadow-[-12px_0_32px_rgba(15,23,42,0.04)]">
       <div className="p-4 border-b border-gray-100 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <ShieldCheck className="w-4 h-4 text-blue-600" />
-            <h2 className="text-xs font-black text-gray-900 uppercase tracking-widest">Approvals</h2>
+            <Radio className="w-4 h-4 text-blue-600" />
+            <h2 className="text-xs font-black text-gray-900 uppercase tracking-widest">Live Operations</h2>
           </div>
           <button onClick={refresh} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-lg">
             <RefreshCw className="w-4 h-4" />
@@ -136,21 +159,66 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        <section className="rounded-2xl bg-gray-950 text-white p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">Operations Cockpit</p>
+              <h3 className="text-sm font-black tracking-tight">Real-time tasking</h3>
+            </div>
+            <Activity className="w-5 h-5 text-blue-300" />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-white/10 p-2">
+              <p className="text-lg font-black">{agents.filter(a => a.status !== 'stopped').length}</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-gray-300">Agents</p>
+            </div>
+            <div className="rounded-xl bg-white/10 p-2">
+              <p className="text-lg font-black">{notifications.filter(n => ['browser', 'research', 'automation'].includes(n.type)).length}</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-gray-300">Events</p>
+            </div>
+            <div className="rounded-xl bg-white/10 p-2">
+              <p className="text-lg font-black">{pendingSkills.length + routeItems.length}</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-gray-300">Review</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.ipcRenderer?.openBrowserOperator?.('HermesDesk ME live research').catch(() => {})}
+              className="flex-1 h-8 rounded-xl bg-white text-gray-950 hover:bg-blue-50 flex items-center justify-center"
+              title="Open live Browser Operator"
+            >
+              <Monitor className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => window.ipcRenderer?.startWideResearch?.('HermesDesk ME active research check', ['Current facts', 'Risks', 'Evidence', 'Next actions']).catch(() => {})}
+              className="flex-1 h-8 rounded-xl bg-white/10 hover:bg-white/15 flex items-center justify-center"
+              title="Start Wide Research"
+            >
+              <Search className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </section>
+
         <section className="space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Notifications</h3>
+            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Live Stream</h3>
             <button onClick={() => setNotifications([])} className="text-[9px] font-black text-gray-400 hover:text-gray-900">Clear</button>
           </div>
-          {notifications.length === 0 && <p className="text-[10px] text-gray-400">No notifications yet.</p>}
-          {notifications.slice(0, 6).map(item => (
+          {notifications.length === 0 && <p className="text-[10px] text-gray-400">No live events yet. Start AutoResearch, Browser Operator, mail sync, or an agent task.</p>}
+          {notifications.slice(0, 12).map(item => {
+            const Icon = notificationIcons[item.type] || ShieldCheck;
+            return (
             <div key={item.id} className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-black text-gray-900 truncate">{item.title}</p>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Icon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <p className="text-[10px] font-black text-gray-900 truncate">{item.title}</p>
+                </div>
                 <span className="text-[8px] font-black text-blue-500">{item.time}</span>
               </div>
               <p className="text-[9px] text-blue-700 mt-1 line-clamp-2">{item.message}</p>
             </div>
-          ))}
+          )})}
         </section>
 
         <section className="space-y-2">
@@ -162,7 +230,7 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
             {agents.map(agent => (
               <div key={agent.id} className="p-2 bg-gray-50 border border-gray-100 rounded-xl">
                 <div className="flex items-center space-x-2">
-                  <Bot className="w-3 h-3 text-gray-400" />
+                  {agent.id === 'justice-case-agent' ? <Scale className="w-3 h-3 text-gray-400" /> : agent.id === 'purchase-guardian-agent' ? <CreditCard className="w-3 h-3 text-gray-400" /> : <Bot className="w-3 h-3 text-gray-400" />}
                   <span className="text-[10px] font-black text-gray-700 truncate">{agentNames[agent.id] || agent.name}</span>
                 </div>
                 <p className={`text-[8px] font-black uppercase mt-1 ${agent.status === 'stopped' ? 'text-gray-400' : 'text-green-600'}`}>

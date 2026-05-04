@@ -412,7 +412,7 @@ function App() {
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 flex flex-col h-full overflow-hidden 2xl:pr-80">
         {/* Header - No "Lite" or "Free Trial" headers */}
         {['landing', 'chat'].includes(view) && (
           <header 
@@ -632,6 +632,10 @@ function App() {
           setMinimizedAgents([]);
         }}
       />
+
+      <div className="hidden 2xl:block fixed right-0 top-0 bottom-0 z-[70]">
+        <RightApprovalSidebar agents={agents} />
+      </div>
 
       {isApprovalsOpen && (
         <div className="fixed inset-0 z-[90] flex justify-end bg-black/10 backdrop-blur-[1px] animate-in fade-in duration-150">

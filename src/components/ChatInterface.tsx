@@ -3,7 +3,7 @@ import {
   Plus, Smile, Monitor, Mic, ArrowUp, Search, ChevronDown, Info, ExternalLink, ChevronRight, File, Folder, Globe,
   MessageSquare as MsgIcon, Mail, Briefcase, Cpu, Zap, Github, Layout, Calculator, Palette, HardDrive, Wrench, Brain,
   RefreshCw, Copy, Volume2, Edit3, StepForward, RotateCcw, X, Rocket, LayoutGrid, FileText, MessageSquare, Video,
-  Scale, CreditCard
+  Scale, CreditCard, Radio
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -32,14 +32,19 @@ const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string,
 );
 
 const ChatQuickAction = ({ icon: Icon, label, onClick, className = '' }: { icon: any; label: string; onClick: () => void; className?: string }) => (
-  <button
-    onClick={onClick}
-    className={`h-8 px-2.5 rounded-xl border border-gray-100 bg-white text-[10px] font-black text-gray-600 hover:text-gray-950 hover:border-gray-200 hover:shadow-sm transition-all flex items-center gap-1.5 whitespace-nowrap ${className}`}
-    title={label}
-  >
-    <Icon className="w-3.5 h-3.5 shrink-0" />
-    <span>{label}</span>
-  </button>
+  <div className="relative group/action shrink-0">
+    <button
+      onClick={onClick}
+      className={`w-9 h-9 rounded-xl border border-gray-100 bg-white text-gray-500 hover:text-gray-950 hover:border-gray-200 hover:shadow-md transition-all flex items-center justify-center ${className}`}
+      title={label}
+      aria-label={label}
+    >
+      <Icon className="w-4 h-4 shrink-0" />
+    </button>
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md bg-gray-950 text-white text-[9px] font-black uppercase tracking-widest opacity-0 invisible group-hover/action:opacity-100 group-hover/action:visible transition-all whitespace-nowrap z-50 pointer-events-none shadow-lg">
+      {label}
+    </div>
+  </div>
 );
 
 type ChatInterfaceProps = {
@@ -440,6 +445,44 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     addNotice(result?.ok ? 'Opened live Browser Operator research window.' : (result?.error || 'Could not open browser research.'));
   };
 
+  const startAutoResearch = async () => {
+    const brief = (input || getLastUserPrompt()).trim();
+    if (!brief) {
+      addNotice('Type the task first, then start AutoResearch.');
+      return;
+    }
+
+    setResearchSteps([
+      'Opening live browser operator',
+      'Dispatching local wide research lanes',
+      'Starting Space agent task',
+      'Streaming progress to the right cockpit'
+    ]);
+
+    const [browser, research] = await Promise.all([
+      window.ipcRenderer?.openBrowserOperator?.(brief).catch((error: any) => ({ ok: false, error: error?.message })),
+      window.ipcRenderer?.startWideResearch?.(brief, [
+        'Find current official sources and primary evidence',
+        'Check risks, contradictions, loopholes, and missing facts',
+        'Build action route with next steps and approvals',
+        'Prepare professional reply/draft output for the user'
+      ]).catch((error: any) => ({ ok: false, error: error?.message }))
+    ]);
+
+    await window.ipcRenderer?.createAgentTask?.(
+      `AutoResearch task:\n${brief}\n\nUse local-first reasoning. Use browser/operator verification when needed. Keep outputs evidence-led, approval-safe, and practical.`,
+      'space-agent-full'
+    ).catch(() => null);
+
+    addNotice(
+      browser?.ok || research?.id
+        ? 'AutoResearch started: browser, wide research, and Space agent are visible in the right cockpit.'
+        : `AutoResearch could not start: ${browser?.error || research?.error || 'unknown error'}`
+    );
+
+    window.setTimeout(() => setResearchSteps([]), 5000);
+  };
+
   const openComputerView = () => {
     onNavigate?.('computer');
     addNotice('Opened ME Computer live workspace.');
@@ -812,6 +855,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             <ChatQuickAction icon={MessageSquare} label="WhatsApp" onClick={composeWhatsApp} className="hover:text-green-700 hover:bg-green-50" />
             <ChatQuickAction icon={Monitor} label="Computer" onClick={openComputerView} />
             <ChatQuickAction icon={LayoutGrid} label="Connectors" onClick={() => onNavigate?.('connectors')} className="hover:text-indigo-700 hover:bg-indigo-50" />
+            <ChatQuickAction icon={Radio} label="AutoResearch" onClick={startAutoResearch} className="hover:text-rose-700 hover:bg-rose-50" />
             <ChatQuickAction icon={Video} label="Video Call" onClick={openVideoCall} className="hover:text-blue-700 hover:bg-blue-50" />
             <ChatQuickAction icon={MessageSquare} label="Video Chat" onClick={openVideoCall} className="hover:text-sky-700 hover:bg-sky-50" />
             <ChatQuickAction icon={Volume2} label="Voice Stack" onClick={openVoiceStack} className="hover:text-cyan-700 hover:bg-cyan-50" />
