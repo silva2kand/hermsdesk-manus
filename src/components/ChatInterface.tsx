@@ -30,6 +30,17 @@ const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string,
   </div>
 );
 
+const ChatQuickAction = ({ icon: Icon, label, onClick, className = '' }: { icon: any; label: string; onClick: () => void; className?: string }) => (
+  <button
+    onClick={onClick}
+    className={`h-8 px-2.5 rounded-xl border border-gray-100 bg-white text-[10px] font-black text-gray-600 hover:text-gray-950 hover:border-gray-200 hover:shadow-sm transition-all flex items-center gap-1.5 whitespace-nowrap ${className}`}
+    title={label}
+  >
+    <Icon className="w-3.5 h-3.5 shrink-0" />
+    <span>{label}</span>
+  </button>
+);
+
 type ChatInterfaceProps = {
   initialModel?: { provider: string, model: string } | null;
   initialPrompt?: string;
@@ -439,6 +450,16 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     addNotice(`Skills Engine: ${skills?.length || 0} installed local skills`);
   };
 
+  const openMemoryView = () => {
+    onNavigate?.('memory');
+    addNotice('Opened Memory Base.');
+  };
+
+  const openKnowledgeView = () => {
+    onNavigate?.('knowledge');
+    addNotice('Opened Knowledge rules.');
+  };
+
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
@@ -767,7 +788,19 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
       {/* Message Input */}
       <div className="p-4 bg-white border-t">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-5xl mx-auto">
+          <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
+            <ChatQuickAction icon={MessageSquare} label="WhatsApp" onClick={composeWhatsApp} className="hover:text-green-700 hover:bg-green-50" />
+            <ChatQuickAction icon={Monitor} label="Computer" onClick={openComputerView} />
+            <ChatQuickAction icon={LayoutGrid} label="Connectors" onClick={() => onNavigate?.('connectors')} className="hover:text-indigo-700 hover:bg-indigo-50" />
+            <ChatQuickAction icon={Video} label="Video Call" onClick={openVideoCall} className="hover:text-blue-700 hover:bg-blue-50" />
+            <ChatQuickAction icon={MessageSquare} label="Video Chat" onClick={openVideoCall} className="hover:text-sky-700 hover:bg-sky-50" />
+            <ChatQuickAction icon={Volume2} label="Voice Stack" onClick={openVoiceStack} className="hover:text-cyan-700 hover:bg-cyan-50" />
+            <ChatQuickAction icon={Brain} label="Brain" onClick={openMemoryView} className="hover:text-purple-700 hover:bg-purple-50" />
+            <ChatQuickAction icon={Wrench} label="Skills" onClick={openSkillsView} className="hover:text-orange-700 hover:bg-orange-50" />
+            <ChatQuickAction icon={FileText} label="Knowledge" onClick={openKnowledgeView} className="hover:text-emerald-700 hover:bg-emerald-50" />
+            <ChatQuickAction icon={Globe} label="Research" onClick={() => openWebResearch()} className="hover:text-blue-700 hover:bg-blue-50" />
+          </div>
           <div className="relative border rounded-2xl bg-gray-50/30 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-50 transition-all">
             <textarea 
               placeholder={`Message ${model}...`}
@@ -904,7 +937,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
                 <div className="relative group/icon">
                   <button 
-                    onClick={() => addNotice('Memory Base opens from the Memory section; no cloud sync is running.')} 
+                    onClick={openMemoryView} 
                     className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
                   >
                     <Brain className="w-4 h-4" />
