@@ -19,6 +19,17 @@ const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }
 const connectorId = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
 const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name;
 
+const chooseAgentForPrompt = (prompt: string) => {
+  const text = prompt.toLowerCase();
+  if (/(court|tribunal|appeal|judg|justice|legal|solicitor|law|claim|evidence|ombudsman|complaint|hmcts|uk)/.test(text)) return 'justice-case-agent';
+  if (/(buy|seller|refund|chargeback|section 75|scam|product|purchase|return|ebay|amazon|shop|payment)/.test(text)) return 'purchase-guardian-agent';
+  if (/(tax|vat|hmrc|invoice|account|ledger|payroll|self assessment|receipt)/.test(text)) return 'accountant-agent';
+  if (/(security|virus|defender|firewall|forensic|breach|malware|audit)/.test(text)) return 'openclaw-full';
+  if (/(email|mail|document|file|organize|summarize|folder|workflow)/.test(text)) return 'paperclip-full';
+  if (/(research|browser|web|pc|computer|monitor|system|performance|cpu|ram|gpu)/.test(text)) return 'space-agent-full';
+  return 'hermes-full';
+};
+
 const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string, color: string }) => (
   <div className="relative group cursor-pointer">
     <div className={`w-5 h-5 rounded-md ${color} flex items-center justify-center text-white shadow-sm transition-all group-hover:scale-110`}>
@@ -553,8 +564,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
-    if (isAgentic && researchSteps.length === 0) {
-      setResearchSteps(['Processing agentic request', 'Routing to best model']);
+    const assignedAgentId = chooseAgentForPrompt(outgoing);
+    if (researchSteps.length === 0) {
+      setResearchSteps([
+        'Creating local agent task',
+        `Routing to ${assignedAgentId}`,
+        'Starting built-in Jan+TurboQuant first',
+        'Streaming work to Live Operations'
+      ]);
     }
 
     console.log('Sending message with knowledge-augmented prompt');
@@ -564,6 +581,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       const timeoutId = setTimeout(() => controller.abort(), 120000); // 90s UI timeout
 
       if (window.ipcRenderer) {
+        window.ipcRenderer.createAgentTask?.(
+          `User task from chat:\n${outgoing}\n\nAct as a real HermesDesk ME local agent. Think, plan, use approved local/web/tool routes where available, recover from errors, and report progress through agent updates. Do not pretend unavailable private access is connected; use drafts and approval gates for external actions.`,
+          assignedAgentId
+        ).catch((error: any) => {
+          console.error('Agent task launch failed:', error);
+          addNotice(`Agent launch failed: ${error?.message || 'unknown error'}`);
+        });
+
         let response;
         const normalizedProvider = provider.toLowerCase().replace(/\s+/g, '');
 

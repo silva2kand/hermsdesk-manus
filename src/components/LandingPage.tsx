@@ -63,7 +63,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
   const [prompt, setPrompt] = useState('');
   const [isPreparing, setIsPreparing] = useState(false);
 
-  const startTask = (text = prompt, agentic = false) => {
+  const startTask = (text = prompt, agentic = true) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     
@@ -171,7 +171,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    startTask();
+                    startTask(prompt, true);
                   }
                 }}
               />
@@ -239,7 +239,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
                   <Mic className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => startTask()}
+                  onClick={() => startTask(prompt, true)}
                   disabled={!prompt.trim()}
                   className={`p-2.5 rounded-full transition-all ${prompt.trim() ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-gray-100 text-gray-300 cursor-not-allowed'}`}
                 >
