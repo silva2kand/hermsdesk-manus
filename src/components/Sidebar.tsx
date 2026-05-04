@@ -298,7 +298,7 @@ export const Sidebar = ({
           <SidebarItem icon={Brain} label="Knowledge" active={currentView === 'knowledge'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('knowledge')} />
           <SidebarItem icon={Database} label="Memory Base" active={currentView === 'memory'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('memory')} />
           <SidebarItem icon={Search} label="Wide Research" active={currentView === 'wide-research'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('wide-research')} />
-          <SidebarItem icon={Zap} label="Skills Engine" active={currentView === 'skills'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('skills')} />
+          <SidebarItem icon={Zap} label="Mythos Skills" active={currentView === 'skills'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('skills')} />
         </SidebarSection>
 
         <SidebarSection title="WORKSPACE" isCollapsed={isSidebarCollapsed}>

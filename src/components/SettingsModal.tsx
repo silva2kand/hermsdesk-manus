@@ -220,7 +220,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                 <SidebarItem icon={Monitor} label="My Computer" active={activeTab === 'Computer'} onClick={() => setActiveTab('Computer')} />
                 <SidebarItem icon={Palette} label="Personalization" active={activeTab === 'Personalization'} onClick={() => setActiveTab('Personalization')} />
                 <SidebarItem icon={Database} label="Knowledge" active={activeTab === 'Knowledge'} onClick={() => setActiveTab('Knowledge')} />
-                <SidebarItem icon={Terminal} label="Skills" active={activeTab === 'Skills'} onClick={() => setActiveTab('Skills')} />
+                <SidebarItem icon={Terminal} label="Mythos Skills" active={activeTab === 'Skills'} onClick={() => setActiveTab('Skills')} />
               </div>
             </div>
 

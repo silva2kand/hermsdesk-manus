@@ -77,6 +77,7 @@ interface Window {
 
     // Skills Engine
     getInstalledSkills: () => Promise<string[]>;
+    getSkillGuidance: () => Promise<{ installed: string[], prompt: string }>;
     toggleSkill: (skillId: string, installed: boolean) => Promise<string[]>;
     proposeSkill: (action: any) => Promise<any>;
     getPendingSkills: () => Promise<any[]>;

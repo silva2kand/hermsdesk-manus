@@ -19,13 +19,51 @@ export interface SkillAction {
 export class SkillsEngineService {
   private store: any;
   private pendingActions: SkillAction[] = [];
+  private defaultSkills = [
+    'me-api',
+    'skill-creator',
+    'os-control',
+    'file-explorer',
+    'mythos-execution',
+    'mythos-recovery',
+    'mythos-pc-operator',
+    'mythos-whatsapp-reply',
+    'mythos-truthful-connectors'
+  ];
 
   constructor(sharedStore?: any) {
     this.store = sharedStore || new Store({ name: 'skills-engine', atomically: false, watch: false });
   }
 
   getInstalledSkills() {
-    return this.store.get('installed_skills', ['me-api', 'skill-creator', 'os-control', 'file-explorer']) as string[];
+    const saved = this.store.get('installed_skills', this.defaultSkills) as string[];
+    return Array.from(new Set([...this.defaultSkills, ...(Array.isArray(saved) ? saved : [])]));
+  }
+
+  getSkillGuidance() {
+    const installed = this.getInstalledSkills();
+    const rules: string[] = [];
+
+    if (installed.includes('mythos-execution')) {
+      rules.push('Mythos Execution: break complex work into concrete steps, execute available real tools, verify outcomes, and continue until done or blocked by missing permission.');
+    }
+    if (installed.includes('mythos-recovery')) {
+      rules.push('Mythos Recovery: when a tool/model/action fails, diagnose, retry with a smaller step, choose a fallback route, and report exactly what was recovered.');
+    }
+    if (installed.includes('mythos-pc-operator')) {
+      rules.push('Mythos PC Operator: prefer real local routes for files, terminal, browser opening, app launching, ME Computer activity, and approval-first OS actions.');
+    }
+    if (installed.includes('mythos-whatsapp-reply')) {
+      rules.push('Mythos WhatsApp Reply: draft professional, concise replies from user-provided message text; open the real WhatsApp composer; never claim background read/send access.');
+    }
+    if (installed.includes('mythos-truthful-connectors')) {
+      rules.push('Mythos Connector Truth: distinguish enabled routes from authenticated connections. Say login/API key required when real private data access is not connected.');
+    }
+
+    return {
+      installed,
+      prompt: rules.join('\n')
+    };
   }
 
   toggleSkill(skillId: string, installed: boolean) {

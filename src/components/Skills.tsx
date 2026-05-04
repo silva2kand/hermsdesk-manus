@@ -1,12 +1,52 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  BarChart3, Code, Film, Globe, Music, Plus, Search, Shield, TrendingUp,
+  BarChart3, Brain, Code, Film, Globe, MessageSquare, Monitor, Music, Plus, RefreshCw, Search, Shield, TrendingUp,
   Video, Wrench, Zap
 } from 'lucide-react';
 
-type SkillCategory = 'OFFICIAL' | 'COMMUNITY' | 'CUSTOM';
+type SkillCategory = 'MYTHOS' | 'OFFICIAL' | 'COMMUNITY' | 'CUSTOM';
 
 const skillCatalog = [
+  {
+    id: 'mythos-execution',
+    name: 'mythos-execution',
+    category: 'MYTHOS' as SkillCategory,
+    icon: Brain,
+    description: 'Real execution discipline: plan steps, use available tools, verify results, continue until finished or blocked by permission.',
+    updated: 'BUILT-IN REAL'
+  },
+  {
+    id: 'mythos-recovery',
+    name: 'mythos-recovery',
+    category: 'MYTHOS' as SkillCategory,
+    icon: RefreshCw,
+    description: 'Failure recovery behavior: diagnose errors, retry smaller, choose fallback routes, and keep going instead of stopping at the first error.',
+    updated: 'BUILT-IN REAL'
+  },
+  {
+    id: 'mythos-pc-operator',
+    name: 'mythos-pc-operator',
+    category: 'MYTHOS' as SkillCategory,
+    icon: Monitor,
+    description: 'PC and web operator rules for ME Computer, local files, terminal, browser open/research, app launch, and approval-first OS actions.',
+    updated: 'BUILT-IN REAL'
+  },
+  {
+    id: 'mythos-whatsapp-reply',
+    name: 'mythos-whatsapp-reply',
+    category: 'MYTHOS' as SkillCategory,
+    icon: MessageSquare,
+    description: 'Professional WhatsApp reply workflow: draft from pasted messages, save locally, open real WhatsApp composer, manual send only.',
+    updated: 'BUILT-IN REAL'
+  },
+  {
+    id: 'mythos-truthful-connectors',
+    name: 'mythos-truthful-connectors',
+    category: 'MYTHOS' as SkillCategory,
+    icon: Shield,
+    description: 'Connector truth policy: distinguish enabled routes from authenticated connections and never claim private data access without login/API key.',
+    updated: 'BUILT-IN REAL'
+  },
   {
     id: 'video-generator',
     name: 'video-generator',
@@ -85,7 +125,7 @@ const skillCatalog = [
 ];
 
 export const Skills = () => {
-  const [activeTab, setActiveTab] = useState<SkillCategory>('OFFICIAL');
+  const [activeTab, setActiveTab] = useState<SkillCategory>('MYTHOS');
   const [query, setQuery] = useState('');
   const [installedSkills, setInstalledSkills] = useState<string[]>([]);
   const [notice, setNotice] = useState('');
@@ -149,7 +189,7 @@ export const Skills = () => {
         <div className="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden">
           <div className="p-4 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              {(['OFFICIAL', 'COMMUNITY', 'CUSTOM'] as SkillCategory[]).map(tab => (
+              {(['MYTHOS', 'OFFICIAL', 'COMMUNITY', 'CUSTOM'] as SkillCategory[]).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}

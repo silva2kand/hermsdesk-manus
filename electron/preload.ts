@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 
   // Skills Engine
   getInstalledSkills: () => ipcRenderer.invoke('skills:get-installed'),
+  getSkillGuidance: () => ipcRenderer.invoke('skills:get-guidance'),
   toggleSkill: (skillId: string, installed: boolean) => ipcRenderer.invoke('skills:toggle', { skillId, installed }),
   proposeSkill: (action: any) => ipcRenderer.invoke('skills:propose', action),
   getPendingSkills: () => ipcRenderer.invoke('skills:get-pending'),

@@ -472,6 +472,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       if (activeRules) {
         systemPrompt += `\n\nUse the following knowledge base rules for context:\n${activeRules}`;
       }
+      const skillGuidance = await window.ipcRenderer.getSkillGuidance?.().catch(() => null);
+      if (skillGuidance?.prompt) {
+        systemPrompt += `\n\nInstalled ME/Mythos skills:\n${skillGuidance.prompt}`;
+      }
     }
 
     const userMessage = { role: 'user', content: outgoing };
@@ -797,7 +801,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             <ChatQuickAction icon={MessageSquare} label="Video Chat" onClick={openVideoCall} className="hover:text-sky-700 hover:bg-sky-50" />
             <ChatQuickAction icon={Volume2} label="Voice Stack" onClick={openVoiceStack} className="hover:text-cyan-700 hover:bg-cyan-50" />
             <ChatQuickAction icon={Brain} label="Brain" onClick={openMemoryView} className="hover:text-purple-700 hover:bg-purple-50" />
-            <ChatQuickAction icon={Wrench} label="Skills" onClick={openSkillsView} className="hover:text-orange-700 hover:bg-orange-50" />
+            <ChatQuickAction icon={Wrench} label="Mythos Skills" onClick={openSkillsView} className="hover:text-orange-700 hover:bg-orange-50" />
             <ChatQuickAction icon={FileText} label="Knowledge" onClick={openKnowledgeView} className="hover:text-emerald-700 hover:bg-emerald-50" />
             <ChatQuickAction icon={Globe} label="Research" onClick={() => openWebResearch()} className="hover:text-blue-700 hover:bg-blue-50" />
           </div>

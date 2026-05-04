@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Video, Music, Globe, BarChart3, 
   Cpu, Wrench, ChevronRight, Star, Clock, Info,
-  ExternalLink, Check, Sparkles, Layout, Zap, Database
+  ExternalLink, Check, Sparkles, Layout, Zap, Database, Brain, RefreshCw, Monitor, MessageSquare, Shield
 } from 'lucide-react';
 
 export const SkillsRegistry = () => {
-  const [activeTab, setActiveTab] = useState('Official');
+  const [activeTab, setActiveTab] = useState('Mythos');
   const [searchQuery, setSearchQuery] = useState('');
   const [installedSkills, setInstalledSkills] = useState<string[]>([]);
 
@@ -29,6 +29,51 @@ export const SkillsRegistry = () => {
   };
 
   const skills = [
+    {
+      id: 'mythos-execution',
+      name: 'mythos-execution',
+      desc: 'Real execution discipline: plan steps, use available tools, verify results, continue until finished or blocked by permission.',
+      icon: Brain,
+      color: 'bg-gray-900',
+      category: 'Mythos',
+      updated: 'Built-in'
+    },
+    {
+      id: 'mythos-recovery',
+      name: 'mythos-recovery',
+      desc: 'Diagnose errors, retry smaller, choose fallback routes, and keep going instead of stopping at the first error.',
+      icon: RefreshCw,
+      color: 'bg-blue-600',
+      category: 'Mythos',
+      updated: 'Built-in'
+    },
+    {
+      id: 'mythos-pc-operator',
+      name: 'mythos-pc-operator',
+      desc: 'Use ME Computer, local files, terminal, browser open/research, app launch, and approval-first OS actions.',
+      icon: Monitor,
+      color: 'bg-slate-700',
+      category: 'Mythos',
+      updated: 'Built-in'
+    },
+    {
+      id: 'mythos-whatsapp-reply',
+      name: 'mythos-whatsapp-reply',
+      desc: 'Draft professional WhatsApp replies from pasted messages, save drafts, and open real WhatsApp composer.',
+      icon: MessageSquare,
+      color: 'bg-green-600',
+      category: 'Mythos',
+      updated: 'Built-in'
+    },
+    {
+      id: 'mythos-truthful-connectors',
+      name: 'mythos-truthful-connectors',
+      desc: 'Never claim connected/private data access unless login or API key is actually present.',
+      icon: Shield,
+      color: 'bg-orange-600',
+      category: 'Mythos',
+      updated: 'Built-in'
+    },
     {
       id: 'video-generator',
       name: 'video-generator',
@@ -102,6 +147,14 @@ export const SkillsRegistry = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-6 border-b border-gray-100 flex-1">
             <button 
+              onClick={() => setActiveTab('Mythos')}
+              className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${
+                activeTab === 'Mythos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              Mythos
+            </button>
+            <button 
               onClick={() => setActiveTab('Official')}
               className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${
                 activeTab === 'Official' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'
@@ -139,7 +192,10 @@ export const SkillsRegistry = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {skills.map((skill) => (
+          {skills.filter(skill =>
+            skill.category === activeTab &&
+            (!searchQuery || skill.name.toLowerCase().includes(searchQuery.toLowerCase()) || skill.desc.toLowerCase().includes(searchQuery.toLowerCase()))
+          ).map((skill) => (
             <div key={skill.id} className="group p-6 bg-white border border-gray-100 rounded-[32px] hover:border-blue-100 hover:shadow-xl hover:shadow-gray-100 transition-all cursor-pointer">
               <div className="flex items-start space-x-4">
                 <div className={`w-12 h-12 ${skill.color} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-gray-200 transition-transform group-hover:scale-105`}>

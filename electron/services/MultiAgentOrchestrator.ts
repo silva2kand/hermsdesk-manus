@@ -350,8 +350,9 @@ export class MultiAgentOrchestrator {
     agent.currentTask = task.input.slice(0, 100);
     sendUpdate(`${agent.name} v${agent.version} starting...`, 'info');
 
+    const skillGuidance = this.skillsEngine?.getSkillGuidance?.();
     const messages: any[] = [
-      { role: 'system', content: agent.personality },
+      { role: 'system', content: `${agent.personality}${skillGuidance?.prompt ? `\n\nInstalled ME/Mythos skills:\n${skillGuidance.prompt}` : ''}` },
       { role: 'user', content: task.input }
     ];
 

@@ -406,6 +406,7 @@ function createWindow() {
 
   // Skills Engine Handlers
   ipcMain.handle('skills:get-installed', () => skillsEngine.getInstalledSkills())
+  ipcMain.handle('skills:get-guidance', () => skillsEngine.getSkillGuidance())
   ipcMain.handle('skills:toggle', (_, { skillId, installed }) => skillsEngine.toggleSkill(skillId, installed))
   ipcMain.handle('skills:propose', (_, action) => skillsEngine.proposeAction(action))
   ipcMain.handle('skills:get-pending', () => skillsEngine.getPendingActions())

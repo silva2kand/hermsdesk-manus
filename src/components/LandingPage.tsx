@@ -167,7 +167,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
               <ToolButton label="Video Chat" icon={MessageCircle} onClick={openVideoCall} />
               <ToolButton label="Voice Stack" icon={Volume2} onClick={openVoiceStack} />
               <ToolButton label="Brain" icon={Brain} onClick={() => onNavigate?.('memory')} />
-              <ToolButton label="Skills" icon={Wrench} onClick={() => onNavigate?.('skills')} />
+              <ToolButton label="Mythos Skills" icon={Wrench} onClick={() => onNavigate?.('skills')} />
               <ToolButton label="Knowledge" icon={FileText} onClick={() => onNavigate?.('knowledge')} />
               <ToolButton label="Research" icon={Globe} onClick={openResearch} />
             </div>
