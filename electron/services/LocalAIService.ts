@@ -57,9 +57,13 @@ export class LocalAIService {
   private getNitroSearchPaths() {
     return [
       path.join(process.cwd(), 'bin', 'nitro.exe'),
+      path.join(process.cwd(), 'electron', 'bin', 'nitro.exe'),
+      path.join(process.cwd(), 'resources', 'bin', 'nitro.exe'),
       path.join(process.resourcesPath || '', 'bin', 'nitro.exe'),
+      path.join(process.resourcesPath || '', 'electron', 'bin', 'nitro.exe'),
       path.join(os.homedir(), 'jan', 'nitro.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'nitro.exe')
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'nitro.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'nitro.exe')
     ];
   }
 
@@ -219,7 +223,7 @@ export class LocalAIService {
   // Priority: Jan+TurboQuant → Ollama → LM Studio → Error
   // ═══════════════════════════════════════════════════════════════
 
-  async chatWithBestAvailable(model: string, messages: any[]): Promise<any> {
+  async chatWithBestAvailable(model: string, messages: any[], options: { preferred?: 'jan' | 'ollama' | 'lmstudio' } = {}): Promise<any> {
     // 1. Try built-in Jan + TurboQuant first (PRIMARY)
     try {
       let janOnline = await this.checkJanEngine();
@@ -246,7 +250,13 @@ export class LocalAIService {
       const ollamaCheck = await axios.get(`${this.ollamaUrl}/tags`, { timeout: 3000 });
       if (ollamaCheck.status === 200) {
         console.log('ME 1.8: Routing to Ollama (optional external)');
-        const result = await this.chatWithOllama(model, messages);
+        const ollamaModels = ollamaCheck.data?.models || [];
+        const modelNames = ollamaModels.map((m: any) => m.name).filter(Boolean);
+        const selectedModel =
+          modelNames.find((name: string) => name === model || name === `${model}:latest`) ||
+          modelNames[0] ||
+          model;
+        const result = await this.chatWithOllama(selectedModel, messages);
         return { ...result, engine: 'Ollama (External)' };
       }
     } catch (e) {
@@ -267,7 +277,7 @@ export class LocalAIService {
 
     // 4. All local engines offline
     return { 
-      message: { content: 'All local engines are offline. We tried starting the built-in Jan+TurboQuant engine automatically but it failed to respond. Please ensure Ollama or LM Studio are running, or switch to a cloud provider like Gemini or OpenRouter in the sidebar.' },
+      message: { content: `Jan + TurboQuant is the built-in primary engine, but it is not responding on port 1337 right now.${options.preferred === 'jan' ? ' Hermes ME did not treat Jan as an external app; it tried the built-in route first.' : ''}\n\nI also checked optional local fallbacks: Ollama and LM Studio are not available with a usable model. Open Model Hub, press Start Jan TurboQuant, then load a local model. If you want API fallback, choose OpenRouter, Gemini, or NVIDIA from the provider menu; Hermes ME will keep those routes on free-tier models.` },
       engine: 'None (All Offline)'
     };
   }

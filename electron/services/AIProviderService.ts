@@ -233,7 +233,7 @@ export class AIProviderService {
       ];
       
       let targetModel = model;
-      if (!model || (!model.includes(':free') && !model.includes('/'))) {
+      if (!model || !model.includes(':free')) {
         targetModel = "openrouter/auto-free";
       }
 

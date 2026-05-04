@@ -38,7 +38,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
   const [messages, setMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [researchSteps, setResearchSteps] = useState<string[]>([]);
-  const [provider, setProvider] = useState(initialModel?.provider || 'Ollama');
+  const [provider, setProvider] = useState(initialModel?.provider || 'Jan');
   const [model, setModel] = useState(initialModel?.model || '');
   const [showConnectorPanel, setShowConnectorPanel] = useState(false);
   const [chatConnectors, setChatConnectors] = useState<{[key: string]: boolean}>({});
@@ -100,7 +100,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
   const [providerModels, setProviderModels] = useState<{[key: string]: string[]}>({
     'Ollama': [],
     'LM Studio': [],
-    'Jan': [],
+    'Jan': ['Auto local model'],
     'Gemini': ['gemini-1.5-pro', 'gemini-1.5-flash'],
     'OpenRouter': [
       'openrouter/auto-free',
@@ -310,7 +310,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
         ...prev,
         Ollama: ollamaModels?.length ? ollamaModels.map((m: any) => m.name) : prev.Ollama,
         'LM Studio': lmStudioStatus?.data?.length ? lmStudioStatus.data.map((m: any) => m.id) : prev['LM Studio'],
-        Jan: janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : []
+        Jan: janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan
       }));
 
       const ollamaNames = ollamaModels?.map((m: any) => m.name) || [];
@@ -419,21 +419,25 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic }: { init
 
       if (window.ipcRenderer) {
         let response;
-        const normalizedProvider = provider.toLowerCase().replace(' ', '');
+        const normalizedProvider = provider.toLowerCase().replace(/\s+/g, '');
 
         if (['ollama', 'lmstudio', 'jan', 'jan+turboquant'].includes(normalizedProvider)) {
           response = await window.ipcRenderer.chat({ 
-            model: normalizedProvider === 'ollama' && model && !model.includes(':') ? `${model}:latest` : model, 
+            model: model === 'Auto local model'
+              ? ''
+              : normalizedProvider === 'ollama' && model && !model.includes(':')
+                ? `${model}:latest`
+                : model,
             messages: chatHistory,
             provider: normalizedProvider
           });
         } else if (['gemini', 'nvidia', 'openrouter'].includes(normalizedProvider)) {
           // Cloud providers — force free tier if not already specified
           let cloudModel = model;
-          if (normalizedProvider === 'openrouter' && !model.includes('/')) {
+          if (normalizedProvider === 'openrouter' && (!model.includes(':free') || model === 'openrouter/auto')) {
             cloudModel = 'openrouter/auto-free';
           } else if (normalizedProvider === 'nvidia' && !model.includes('/')) {
-            cloudModel = 'meta/llama3-70b-instruct';
+            cloudModel = 'meta/llama-3.1-8b-instruct';
           }
 
           response = await window.ipcRenderer.chatProvider({

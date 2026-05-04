@@ -200,12 +200,22 @@ function createWindow() {
   
   ipcMain.handle('ai:chat', async (_, { model, messages, provider }) => {
     appLog('info', `Sending chat request to ${provider || 'Jan+TurboQuant'} (${model})`);
-    const p = (provider || '').toLowerCase().replace(' ', '')
-    if (p === 'ollama') return aiService.chatWithOllama(model, messages)
-    if (p === 'lmstudio') return aiService.chatWithLMStudio(model, messages)
-    if (p === 'jan' || p === 'jan+turboquant') return aiService.chatWithJan(model, messages)
-    // Default: route through smart engine priority chain (Jan+TQ → Ollama → LM Studio)
-    return aiService.chatWithBestAvailable(model, messages)
+    const p = (provider || '').toLowerCase().replace(/\s+/g, '')
+    try {
+      if (p === 'ollama') return aiService.chatWithOllama(model, messages)
+      if (p === 'lmstudio') return aiService.chatWithLMStudio(model, messages)
+      if (p === 'jan' || p === 'jan+turboquant') return aiService.chatWithBestAvailable(model, messages, { preferred: 'jan' })
+      // Default: route through smart engine priority chain (Jan+TQ → Ollama → LM Studio)
+      return aiService.chatWithBestAvailable(model, messages)
+    } catch (error: any) {
+      appLog('error', `Local AI route failed: ${error?.message || 'Unknown error'}`)
+      return {
+        message: {
+          content: `Local AI route failed: ${error?.message || 'Unknown error'}\n\nJan + TurboQuant is the built-in primary engine. If it is offline, Hermes ME will try optional local fallbacks such as Ollama and LM Studio. Open Model Hub to start the built-in engine or load a local model.`
+        },
+        engine: 'Local router'
+      }
+    }
   })
   ipcMain.handle('ai:check-lmstudio', () => aiService.checkLMStudio())
   

@@ -357,8 +357,8 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                 {janStatus.apiOnline 
                   ? 'Jan/TurboQuant engine is active. Your RTX 5000A is optimized for high-speed GGUF inference.' 
                   : janStatus.installed
-                    ? 'Jan is installed but its local API is not responding on port 1337. Press Start Jan or open Jan manually, then refresh.'
-                    : 'Jan/TurboQuant runtime was not found in the known local paths. Install Jan or place nitro.exe in the app bin folder.'}
+                    ? 'The built-in Jan + TurboQuant runtime is present, but its local API is not responding on port 1337. Press Start Jan TurboQuant, then refresh.'
+                    : 'The built-in Jan + TurboQuant runtime was not found in the app runtime paths. Place nitro.exe in the app bin folder to enable the primary engine.'}
               </p>
             </div>
             <div className="flex items-center space-x-3 mt-6">
@@ -382,10 +382,10 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                 <Share2 className="w-5 h-5 text-white" />
               </div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Connect to Other Local Apps</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight">Local Engine Routes</h2>
             </div>
             <p className="text-sm text-blue-100 max-w-xl font-medium leading-relaxed">
-              Your local models are compatible with OpenAI-style APIs. Use the connection details below to power apps like 
+              Jan + TurboQuant is the built-in primary route. Ollama and LM Studio are optional external local routes. Use these OpenAI-style endpoints for apps like 
               <span className="font-bold text-white mx-1">Cursor</span>, 
               <span className="font-bold text-white mx-1">AnythingLLM</span>, 
               or <span className="font-bold text-white mx-1">VS Code Extensions</span>.
