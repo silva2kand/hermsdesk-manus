@@ -54,6 +54,11 @@ interface Window {
     saveScheduledTasks: (tasks: any[]) => Promise<boolean>;
     runScheduledTask: (id: string) => Promise<any>;
     getScheduledRuns: () => Promise<any[]>;
+    getProjects: () => Promise<any[]>;
+    saveProject: (project: any) => Promise<any>;
+    deleteProject: (id: string) => Promise<any[]>;
+    addProjectFiles: (id: string, files: string[]) => Promise<any>;
+    startProjectTask: (id: string, prompt: string, agentId?: string) => Promise<any>;
 
     // Tool Registry
     getTools: () => Promise<any[]>;

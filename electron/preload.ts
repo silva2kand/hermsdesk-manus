@@ -110,4 +110,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   saveSilvaMemory: (memory: string) => ipcRenderer.invoke('workspace:save-silva-memory', memory),
   getEmailIntelligence: () => ipcRenderer.invoke('workspace:get-email-intelligence'),
   approveEmailRoute: (messageId: string, status: string) => ipcRenderer.invoke('workspace:approve-email-route', { messageId, status }),
+  getProjects: () => ipcRenderer.invoke('workspace:get-projects'),
+  saveProject: (project: any) => ipcRenderer.invoke('workspace:save-project', project),
+  deleteProject: (id: string) => ipcRenderer.invoke('workspace:delete-project', id),
+  addProjectFiles: (id: string, files: string[]) => ipcRenderer.invoke('workspace:add-project-files', { id, files }),
+  startProjectTask: (id: string, prompt: string, agentId?: string) => ipcRenderer.invoke('workspace:start-project-task', { id, prompt, agentId }),
 })

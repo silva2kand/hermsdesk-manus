@@ -299,6 +299,7 @@ export const Sidebar = ({
         </SidebarSection>
 
         <SidebarSection title="WORKSPACE" isCollapsed={isSidebarCollapsed}>
+          <SidebarItem icon={Folder} label="Projects" active={currentView === 'projects'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('projects')} />
           <SidebarItem icon={Users} label="Shared Tasks" active={currentView === 'shared-tasks'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('shared-tasks')} />
           <SidebarItem icon={Folder} label="Shared Files" active={currentView === 'shared-files'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('shared-files')} />
           <SidebarItem icon={Globe} label="Websites" active={currentView === 'websites'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('websites')} />

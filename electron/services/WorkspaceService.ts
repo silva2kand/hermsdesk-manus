@@ -48,6 +48,18 @@ export interface ScheduledTask {
   color: string;
 }
 
+export interface WorkspaceProject {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  files: string[];
+  connectors: string[];
+  taskHistory: { id: string; prompt: string; createdAt: number; agentId?: string }[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export class WorkspaceService {
   private store: any;
 
@@ -115,5 +127,54 @@ export class WorkspaceService {
     );
     this.store.set('emailIntelligence', current);
     return current;
+  }
+
+  getProjects(): WorkspaceProject[] {
+    return this.store.get('projects', []) as WorkspaceProject[];
+  }
+
+  saveProject(project: Partial<WorkspaceProject>) {
+    const now = Date.now();
+    const projects = this.getProjects();
+    const existing = project.id ? projects.find(item => item.id === project.id) : null;
+    const nextProject: WorkspaceProject = {
+      id: project.id || Math.random().toString(36).slice(2),
+      name: project.name || existing?.name || 'Untitled Project',
+      description: project.description ?? existing?.description ?? '',
+      instructions: project.instructions ?? existing?.instructions ?? '',
+      files: project.files || existing?.files || [],
+      connectors: project.connectors || existing?.connectors || [],
+      taskHistory: project.taskHistory || existing?.taskHistory || [],
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    };
+    const next = existing
+      ? projects.map(item => item.id === nextProject.id ? nextProject : item)
+      : [nextProject, ...projects];
+    this.store.set('projects', next);
+    return nextProject;
+  }
+
+  deleteProject(id: string) {
+    const next = this.getProjects().filter(project => project.id !== id);
+    this.store.set('projects', next);
+    return next;
+  }
+
+  addProjectFiles(id: string, files: string[]) {
+    const project = this.getProjects().find(item => item.id === id);
+    if (!project) throw new Error('Project not found.');
+    const merged = Array.from(new Set([...(project.files || []), ...files]));
+    return this.saveProject({ ...project, files: merged });
+  }
+
+  addProjectTask(id: string, prompt: string, agentId?: string) {
+    const project = this.getProjects().find(item => item.id === id);
+    if (!project) throw new Error('Project not found.');
+    const taskHistory = [
+      { id: Math.random().toString(36).slice(2), prompt, createdAt: Date.now(), agentId },
+      ...(project.taskHistory || [])
+    ].slice(0, 100);
+    return this.saveProject({ ...project, taskHistory });
   }
 }

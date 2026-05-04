@@ -50,6 +50,7 @@ function initializeStoreAndServices() {
         enabledCategories: {}
       },
       scheduledTasks: [],
+      projects: [],
       generalSettings: {
         language: 'English',
         theme: 'Quantum Blue',
@@ -411,6 +412,23 @@ function createWindow() {
   ipcMain.handle('workspace:save-silva-memory', (_, memory) => workspaceService.saveSilvaMemory(memory))
   ipcMain.handle('workspace:get-email-intelligence', () => workspaceService.getEmailIntelligence())
   ipcMain.handle('workspace:approve-email-route', (_, { messageId, status }) => workspaceService.approveEmailRoute(messageId, status))
+  ipcMain.handle('workspace:get-projects', () => workspaceService.getProjects())
+  ipcMain.handle('workspace:save-project', (_, project) => workspaceService.saveProject(project))
+  ipcMain.handle('workspace:delete-project', (_, id) => workspaceService.deleteProject(id))
+  ipcMain.handle('workspace:add-project-files', (_, { id, files }) => workspaceService.addProjectFiles(id, files))
+  ipcMain.handle('workspace:start-project-task', async (_, { id, prompt, agentId }) => {
+    const project = workspaceService.addProjectTask(id, prompt, agentId)
+    const context = [
+      `Project: ${project.name}`,
+      project.description ? `Description: ${project.description}` : '',
+      project.instructions ? `Project instructions:\n${project.instructions}` : '',
+      project.connectors?.length ? `Connectors: ${project.connectors.join(', ')}` : '',
+      project.files?.length ? `Files:\n${project.files.join('\n')}` : '',
+      `Task:\n${prompt}`
+    ].filter(Boolean).join('\n\n')
+    const task = await orchestrator.createTask(context, agentId || 'hermes-full', win)
+    return { ok: true, project, task }
+  })
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
