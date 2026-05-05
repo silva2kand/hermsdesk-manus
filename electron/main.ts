@@ -22,6 +22,7 @@ let browserOperator: any;
 let artifactService: any;
 let eventBus: any;
 let webResearchService: any;
+let whatsAppChannelService: any;
 
 function initializeStoreAndServices() {
    try {
@@ -86,6 +87,7 @@ function initializeStoreAndServices() {
   artifactService = new ArtifactService()
   eventBus = new EventBusService(store)
   webResearchService = new SilvaWebResearchService(eventBus)
+  whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus)
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      // Fallback to a non-persistent object if store fails completely
@@ -109,6 +111,7 @@ function initializeStoreAndServices() {
      artifactService = new ArtifactService()
      eventBus = new EventBusService(store)
      webResearchService = new SilvaWebResearchService(eventBus)
+     whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus)
    }
  }
 
@@ -127,6 +130,7 @@ import { BrowserOperatorService } from './services/BrowserOperatorService'
 import { ArtifactService } from './services/ArtifactService'
 import { EventBusService } from './services/EventBusService'
 import { SilvaWebResearchService } from './services/SilvaWebResearchService'
+import { WhatsAppChannelService } from './services/WhatsAppChannelService'
 
 // The built directory structure
 //
@@ -342,6 +346,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   eventBus?.setWindow(win)
   automationService?.setEventBus?.(eventBus)
   browserOperator?.setEventBus?.(eventBus)
+  whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
 
   // IPC Handlers for AI
   ipcMain.handle('ai:list-models', async () => {
@@ -529,6 +534,13 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   ipcMain.handle('desktop:open-path', (_, targetPath) => integrationService.openPath(targetPath))
   ipcMain.handle('desktop:open-terminal', (_, folderPath) => integrationService.openTerminal(folderPath))
   ipcMain.handle('desktop:whatsapp-compose', (_, { message, phone }) => integrationService.composeWhatsAppMessage(message, phone))
+  ipcMain.handle('whatsapp:status', () => whatsAppChannelService.getStatus())
+  ipcMain.handle('whatsapp:ensure-active', () => whatsAppChannelService.ensureActive())
+  ipcMain.handle('whatsapp:settings', () => whatsAppChannelService.getSettings())
+  ipcMain.handle('whatsapp:save-settings', (_, settings) => whatsAppChannelService.saveSettings(settings))
+  ipcMain.handle('whatsapp:routes', () => whatsAppChannelService.getRoutes())
+  ipcMain.handle('whatsapp:route-message', (_, { text, from }) => whatsAppChannelService.routeIncoming(text, from || 'Silva', win))
+  ipcMain.handle('whatsapp:compose-draft', (_, draftId) => whatsAppChannelService.composeDraft(draftId))
   ipcMain.handle('desktop:voice-stack-status', () => integrationService.getVoiceStackStatus())
   ipcMain.handle('desktop:voice-stack-speak', (_, { text, options }) => integrationService.speakWithVoiceStack(text, options))
   ipcMain.handle('desktop:voice-stack-diagnose', () => integrationService.diagnoseVoiceStack())

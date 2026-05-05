@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MessageSquare, Send, Save, RefreshCw, Phone, Shield, Copy, ExternalLink } from 'lucide-react';
+import { MessageSquare, Send, Save, RefreshCw, Phone, Shield, Copy, ExternalLink, Bot, Radio, Users } from 'lucide-react';
 
 const templates = [
   {
@@ -29,6 +29,10 @@ export const WhatsAppMEView = () => {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [draftingReply, setDraftingReply] = useState(false);
+  const [channelStatus, setChannelStatus] = useState<any>(null);
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [routerInput, setRouterInput] = useState('');
+  const [routing, setRouting] = useState(false);
 
   const showNotice = (text: string) => {
     setNotice(text);
@@ -36,8 +40,14 @@ export const WhatsAppMEView = () => {
   };
 
   const refresh = async () => {
-    const data = await window.ipcRenderer?.getWhatsAppDrafts?.();
+    const [data, status, routeList] = await Promise.all([
+      window.ipcRenderer?.getWhatsAppDrafts?.().catch(() => []),
+      window.ipcRenderer?.getWhatsAppChannelStatus?.().catch(() => null),
+      window.ipcRenderer?.getWhatsAppRoutes?.().catch(() => [])
+    ]);
     setDrafts(data || []);
+    setChannelStatus(status);
+    setRoutes(routeList || []);
   };
 
   useEffect(() => {
@@ -72,6 +82,28 @@ export const WhatsAppMEView = () => {
       showNotice(result?.ok ? 'Opened WhatsApp composer. Review and press Send manually.' : 'Could not open WhatsApp.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const keepActive = async () => {
+    const status = await window.ipcRenderer?.ensureWhatsAppActive?.();
+    setChannelStatus(status);
+    showNotice('WhatsApp channel active check ran. Web/Desktop composer routes opened where available.');
+  };
+
+  const routeMessage = async () => {
+    const text = routerInput.trim() || incomingMessage.trim();
+    if (!text) {
+      showNotice('Paste or type a WhatsApp command/message first.');
+      return;
+    }
+    setRouting(true);
+    try {
+      const result = await window.ipcRenderer?.routeWhatsAppMessage?.(text, 'Silva');
+      await refresh();
+      showNotice(result?.ok ? `Routed to ${result.route?.broadcast ? 'all agents' : result.route?.routeLabel}.` : 'Could not route WhatsApp message.');
+    } finally {
+      setRouting(false);
     }
   };
 
@@ -117,6 +149,13 @@ export const WhatsAppMEView = () => {
             <p className="text-sm text-gray-500 mt-1">Real WhatsApp communication workspace: draft, professional reply, save, then open the real composer.</p>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={keepActive}
+              className="px-4 py-2 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-700 shadow-sm transition-all flex items-center"
+            >
+              <Radio className="w-3.5 h-3.5 mr-2" />
+              Keep Active
+            </button>
             <button
               onClick={() => window.ipcRenderer?.openApp?.('whatsapp web')}
               className="px-4 py-2 bg-white border border-gray-100 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50 shadow-sm transition-all flex items-center"
@@ -252,13 +291,75 @@ export const WhatsAppMEView = () => {
           </div>
 
           <div className="space-y-5">
+            <div className="p-5 bg-white border border-gray-100 rounded-3xl shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex items-center">
+                  <div className="w-9 h-9 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center mr-3">
+                    <Radio className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-gray-900">WhatsApp Channel</h2>
+                    <p className="text-[10px] text-gray-500">One WhatsApp identity routed to many agents.</p>
+                  </div>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${channelStatus?.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                  {channelStatus?.ok ? 'Active' : 'Offline'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <div className="p-3 rounded-2xl bg-gray-50">
+                  <p className="text-lg font-black text-gray-900">{routes.length}</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Agent routes</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-gray-50">
+                  <p className="text-lg font-black text-gray-900">{channelStatus?.drafts || drafts.length}</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Drafts</p>
+                </div>
+              </div>
+              <textarea
+                value={routerInput}
+                onChange={e => setRouterInput(e.target.value)}
+                placeholder="Try: solicitor: draft a reply... or all: analyse this issue..."
+                className="w-full h-24 px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-green-50 resize-none"
+              />
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={routeMessage}
+                  disabled={routing}
+                  className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-black hover:bg-black disabled:opacity-60 flex items-center justify-center"
+                >
+                  <Bot className="w-3.5 h-3.5 mr-2" />
+                  {routing ? 'Routing...' : 'Route to Agent'}
+                </button>
+                <button
+                  onClick={() => setRouterInput('all: ')}
+                  className="px-4 py-2 bg-green-50 text-green-700 border border-green-100 rounded-xl text-xs font-black hover:bg-green-100 flex items-center"
+                >
+                  <Users className="w-3.5 h-3.5 mr-2" />
+                  All
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {routes.map(route => (
+                  <button
+                    key={route.prefix}
+                    onClick={() => setRouterInput(`${route.prefix}: `)}
+                    className="p-2 bg-gray-50 hover:bg-green-50 border border-gray-100 hover:border-green-100 rounded-xl text-left transition-all"
+                  >
+                    <p className="text-[10px] font-black text-gray-900">{route.prefix}:</p>
+                    <p className="text-[8px] text-gray-500 truncate">{route.label}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="p-5 bg-gray-950 text-white rounded-3xl shadow-xl">
               <div className="flex items-center mb-3">
                 <Shield className="w-4 h-4 text-green-400 mr-2" />
                 <h2 className="text-xs font-black uppercase tracking-widest">Real Safety</h2>
               </div>
               <p className="text-xs text-gray-300 leading-6">
-                WhatsApp personal/free does not provide an official background read/send API. ME can help you reply like a professional by drafting from pasted messages, storing drafts, copying text, and opening real WhatsApp compose links. Sending stays manual so it is safe and compliant.
+                WhatsApp personal/free does not provide an official background read/send API. ME keeps the channel active, routes pasted/commanded messages to agents, records everything in Silva EventBus, drafts replies, and opens the real composer. Sending stays manual so it is safe and compliant.
               </p>
             </div>
 

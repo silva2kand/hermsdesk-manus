@@ -16,7 +16,11 @@ export type SilvaEvent = {
     | 'search.result'
     | 'log'
     | 'metrics.update'
-    | 'model.info';
+    | 'model.info'
+    | 'channel.message.in'
+    | 'channel.message.out'
+    | 'channel.error'
+    | 'channel.status';
   sessionId: string;
   source: string;
   payload: any;

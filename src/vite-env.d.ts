@@ -67,6 +67,13 @@ interface Window {
     getWhatsAppDrafts: () => Promise<any[]>;
     saveWhatsAppDraft: (draft: any) => Promise<any>;
     markWhatsAppOpened: (id: string) => Promise<any>;
+    getWhatsAppChannelStatus: () => Promise<any>;
+    ensureWhatsAppActive: () => Promise<any>;
+    getWhatsAppChannelSettings: () => Promise<any>;
+    saveWhatsAppChannelSettings: (settings: any) => Promise<any>;
+    getWhatsAppRoutes: () => Promise<any[]>;
+    routeWhatsAppMessage: (text: string, from?: string) => Promise<any>;
+    composeWhatsAppDraft: (draftId: string) => Promise<any>;
     getScheduledTasks: () => Promise<any[]>;
     saveScheduledTasks: (tasks: any[]) => Promise<boolean>;
     runScheduledTask: (id: string) => Promise<any>;
