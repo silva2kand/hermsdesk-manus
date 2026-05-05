@@ -20,7 +20,11 @@ export type SilvaEvent = {
     | 'channel.message.in'
     | 'channel.message.out'
     | 'channel.error'
-    | 'channel.status';
+    | 'channel.status'
+    | 'mail.index.batch'
+    | 'mail.action.proposed'
+    | 'mail.action.approved'
+    | 'mail.action.completed';
   sessionId: string;
   source: string;
   payload: any;

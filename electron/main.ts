@@ -246,7 +246,7 @@ function createWindow() {
     const retainedMessages = (current.messages || []).filter((message: any) => message.id && !incomingIds.has(message.id))
     const messages = [...incomingMessages, ...retainedMessages]
       .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
-      .slice(0, 2000)
+      .slice(0, 100000)
     const foldersByKey = new Map<string, any>()
     ;[...(current.folders || []), ...(data.folders || [])].forEach((folder: any) => {
       const key = folder.id || `${source}:${folder.displayName || 'folder'}`
@@ -264,9 +264,16 @@ function createWindow() {
     }
     workspaceService.saveEmailIntelligence(merged)
 
-    const taskCandidates = merged.messages
-      .filter((message: any) => message.id && !processed.has(message.id))
-      .slice(0, 75)
+    const highValue = (message: any) => (
+      message.unread ||
+      message.importance === 'high' ||
+      message.flagStatus === 'flagged' ||
+      ['solicitors', 'visa-sponsors', 'tax-vat-mot', 'council-bills', 'land-registry', 'accountant', 'insurance'].includes(message.categoryId)
+    )
+    const taskCandidates = incomingMessages
+      .filter((message: any) => message.id && !processed.has(message.id) && highValue(message))
+      .sort((a: any, b: any) => Number(highValue(b)) - Number(highValue(a)) || String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+      .slice(0, 125)
 
     for (const message of taskCandidates) {
       processed.add(message.id)
@@ -290,12 +297,21 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
       )
     }
 
-    store.set('mailProcessedTaskIds', Array.from(processed).slice(-5000))
+    store.set('mailProcessedTaskIds', Array.from(processed).slice(-100000))
     win?.webContents.send('mail:intelligence-updated', {
       source,
       messageCount: merged.messages.length,
       newTasks: taskCandidates.length,
       syncedAt: merged.syncedAt
+    })
+    eventBus?.emit('mail.index.batch', 'mail-me', {
+      source,
+      incomingCount: incomingMessages.length,
+      indexedCount: merged.messages.length,
+      newTasks: taskCandidates.length,
+      syncedAt: merged.syncedAt,
+      complete: data.complete,
+      state: data.state
     })
     appLog('info', `Mail ME auto-analyzed ${merged.messages.length} emails from ${source}; ${taskCandidates.length} new agent tasks queued.`)
     return merged
@@ -305,7 +321,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     try {
       const graph = await microsoftGraph.getStatus().catch(() => ({ connected: false }))
       if (graph?.connected) {
-        const data = await microsoftGraph.syncEmailIntelligence(25)
+        const data = await microsoftGraph.syncEmailIntelligenceBatch({ batchSize: 500 })
         await processEmailIntelligence(data, 'Microsoft Graph')
       }
     } catch (error: any) {
@@ -595,6 +611,35 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   ipcMain.handle('microsoft:graph-sync-email-intelligence', async (_, limitPerFolder) => {
     const data = await microsoftGraph.syncEmailIntelligence(limitPerFolder)
     return processEmailIntelligence(data, 'Microsoft Graph')
+  })
+  ipcMain.handle('microsoft:graph-sync-email-batch', async (_, options) => {
+    const data = await microsoftGraph.syncEmailIntelligenceBatch(options || { batchSize: 500 })
+    return processEmailIntelligence(data, 'Microsoft Graph')
+  })
+  ipcMain.handle('microsoft:graph-mail-sync-state', () => microsoftGraph.getMailSyncState())
+  ipcMain.handle('microsoft:graph-reset-mail-sync', () => microsoftGraph.resetMailSyncState())
+  ipcMain.handle('microsoft:graph-mail-action', async (_, action) => {
+    const actionId = `mail-action-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    if (!action?.approved) {
+      eventBus?.emit('mail.action.proposed', 'mail-me', { actionId, action })
+      return {
+        ok: false,
+        requiresApproval: true,
+        actionId,
+        message: 'Mail writes are real, but send/read-state/move/folder changes require explicit Silva approval.'
+      }
+    }
+
+    eventBus?.emit('mail.action.approved', 'mail-me', { actionId, action })
+    let result: any
+    if (action.type === 'mark-read') result = await microsoftGraph.markMessageRead(action.messageId, true)
+    else if (action.type === 'mark-unread') result = await microsoftGraph.markMessageRead(action.messageId, false)
+    else if (action.type === 'move') result = await microsoftGraph.moveMessage(action.messageId, action.destinationFolderId)
+    else if (action.type === 'create-folder') result = await microsoftGraph.createMailFolder(action.displayName, action.parentFolderId)
+    else if (action.type === 'create-reply-draft') result = await microsoftGraph.createReplyDraft(action.messageId, action.comment)
+    else throw new Error(`Unsupported mail action: ${action.type}`)
+    eventBus?.emit('mail.action.completed', 'mail-me', { actionId, action, result })
+    return result
   })
   ipcMain.handle('microsoft:graph-disconnect', () => microsoftGraph.disconnect())
   

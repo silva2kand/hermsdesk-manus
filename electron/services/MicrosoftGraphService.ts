@@ -21,6 +21,17 @@ type GraphToken = {
   scope?: string;
 };
 
+type MailSyncState = {
+  startedAt?: string;
+  updatedAt?: string;
+  complete?: boolean;
+  folderCursors: Record<string, string | null>;
+  folderCompleted: Record<string, boolean>;
+  totalIndexed: number;
+  lastBatchCount: number;
+  lastError?: string;
+};
+
 export class MicrosoftGraphService {
   private store: any;
   private clientId: string;
@@ -154,6 +165,33 @@ export class MicrosoftGraphService {
     return response.data;
   }
 
+  private async graphGetUrl(url: string, accessToken?: string) {
+    const token = accessToken || await this.getAccessToken();
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 30000
+    });
+    return response.data;
+  }
+
+  private async graphPost(path: string, body: any = {}, accessToken?: string) {
+    const token = accessToken || await this.getAccessToken();
+    const response = await axios.post(`https://graph.microsoft.com/v1.0${path}`, body, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      timeout: 30000
+    });
+    return response.data;
+  }
+
+  private async graphPatch(path: string, body: any = {}, accessToken?: string) {
+    const token = accessToken || await this.getAccessToken();
+    const response = await axios.patch(`https://graph.microsoft.com/v1.0${path}`, body, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      timeout: 30000
+    });
+    return response.data;
+  }
+
   async getProfile(accessToken?: string) {
     return this.graphGet('/me?$select=id,displayName,userPrincipalName,mail', accessToken);
   }
@@ -190,8 +228,16 @@ export class MicrosoftGraphService {
   }
 
   async listMailFolders() {
-    const data = await this.graphGet('/me/mailFolders?$top=100&$select=id,displayName,totalItemCount,unreadItemCount,parentFolderId');
-    return data.value || [];
+    const folders: any[] = [];
+    const readPage = async (urlOrPath: string) => {
+      const data = urlOrPath.startsWith('http')
+        ? await this.graphGetUrl(urlOrPath)
+        : await this.graphGet(urlOrPath);
+      folders.push(...(data.value || []));
+      if (data['@odata.nextLink']) await readPage(data['@odata.nextLink']);
+    };
+    await readPage('/me/mailFolders?$top=100&$select=id,displayName,totalItemCount,unreadItemCount,parentFolderId');
+    return folders;
   }
 
   private categorizeMessage(message: any, folderName: string) {
@@ -267,6 +313,157 @@ export class MicrosoftGraphService {
         return acc;
       }, {})
     };
+  }
+
+  getMailSyncState(): MailSyncState {
+    const state = this.store.get('microsoftGraphMailSyncState', null) as MailSyncState | null;
+    return state || {
+      complete: false,
+      folderCursors: {},
+      folderCompleted: {},
+      totalIndexed: 0,
+      lastBatchCount: 0
+    };
+  }
+
+  resetMailSyncState() {
+    const state: MailSyncState = {
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      complete: false,
+      folderCursors: {},
+      folderCompleted: {},
+      totalIndexed: 0,
+      lastBatchCount: 0
+    };
+    this.store.set('microsoftGraphMailSyncState', state);
+    return { ok: true, state };
+  }
+
+  private normalizeGraphMessage(m: any, folder: any) {
+    const base = {
+      id: m.id,
+      folderId: folder.id,
+      folderName: folder.displayName,
+      subject: m.subject,
+      sender: m.from?.emailAddress?.name || '',
+      senderEmail: m.from?.emailAddress?.address || '',
+      receivedAt: m.receivedDateTime,
+      unread: !m.isRead,
+      hasAttachments: Boolean(m.hasAttachments),
+      bodyPreview: m.bodyPreview || '',
+      webLink: m.webLink || '',
+      importance: m.importance || 'normal',
+      flagStatus: m.flag?.flagStatus || 'notFlagged',
+      categories: m.categories || []
+    };
+    const route = this.categorizeMessage(base, folder.displayName);
+    return {
+      ...base,
+      categoryId: route.id,
+      categoryLabel: route.label,
+      agentId: route.agentId,
+      approvalStatus: 'pending-review'
+    };
+  }
+
+  async syncEmailIntelligenceBatch(options: { batchSize?: number; reset?: boolean } = {}) {
+    if (options.reset) this.resetMailSyncState();
+    const batchSize = Math.max(25, Math.min(Number(options.batchSize) || 500, 2000));
+    const folders = await this.listMailFolders();
+    let state = this.getMailSyncState();
+    if (!state.startedAt) {
+      state = { ...state, startedAt: new Date().toISOString(), complete: false };
+    }
+
+    const folderResults: any[] = [];
+    const routed: any[] = [];
+    let remaining = batchSize;
+
+    for (const folder of folders) {
+      if (remaining <= 0) break;
+      if (state.folderCompleted[folder.id]) continue;
+
+      try {
+        const pageTop = Math.min(50, remaining);
+        const initialPath = `/me/mailFolders/${encodeURIComponent(folder.id)}/messages?$top=${pageTop}&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,webLink,flag,importance,categories`;
+        const data = state.folderCursors[folder.id]
+          ? await this.graphGetUrl(state.folderCursors[folder.id]!)
+          : await this.graphGet(initialPath);
+        const messages = (data.value || []).map((m: any) => this.normalizeGraphMessage(m, folder));
+        routed.push(...messages);
+        remaining -= messages.length;
+        state.folderCursors[folder.id] = data['@odata.nextLink'] || null;
+        state.folderCompleted[folder.id] = !data['@odata.nextLink'];
+        folderResults.push({
+          ...folder,
+          syncedCount: messages.length,
+          cursorActive: Boolean(data['@odata.nextLink']),
+          completed: state.folderCompleted[folder.id]
+        });
+      } catch (error: any) {
+        state.lastError = error?.response?.data?.error?.message || error?.message || 'Could not read folder';
+        folderResults.push({ ...folder, syncedCount: 0, completed: false, error: state.lastError });
+      }
+    }
+
+    const complete = folders.length > 0 && folders.every(folder => state.folderCompleted[folder.id]);
+    state = {
+      ...state,
+      updatedAt: new Date().toISOString(),
+      complete,
+      totalIndexed: Number(state.totalIndexed || 0) + routed.length,
+      lastBatchCount: routed.length
+    };
+    this.store.set('microsoftGraphMailSyncState', state);
+
+    return {
+      syncedAt: new Date().toISOString(),
+      folders: folderResults,
+      messages: routed.sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt))),
+      summary: routed.reduce((acc: Record<string, number>, item) => {
+        acc[item.categoryId] = (acc[item.categoryId] || 0) + 1;
+        return acc;
+      }, {}),
+      state,
+      complete,
+      batchSize,
+      batchCount: routed.length
+    };
+  }
+
+  async markMessageRead(messageId: string, isRead = true) {
+    const result = await this.graphPatch(`/me/messages/${encodeURIComponent(messageId)}`, { isRead });
+    return { ok: true, action: isRead ? 'mark-read' : 'mark-unread', messageId, result };
+  }
+
+  async moveMessage(messageId: string, destinationFolderId: string) {
+    const result = await this.graphPost(`/me/messages/${encodeURIComponent(messageId)}/move`, { destinationId: destinationFolderId });
+    return { ok: true, action: 'move', messageId, destinationFolderId, result };
+  }
+
+  async createMailFolder(displayName: string, parentFolderId?: string) {
+    const safeName = String(displayName || '').trim();
+    if (!safeName) throw new Error('Folder name is required.');
+    const path = parentFolderId
+      ? `/me/mailFolders/${encodeURIComponent(parentFolderId)}/childFolders`
+      : '/me/mailFolders';
+    const result = await this.graphPost(path, { displayName: safeName });
+    return { ok: true, action: 'create-folder', folder: result };
+  }
+
+  async createReplyDraft(messageId: string, comment = '') {
+    const draft = await this.graphPost(`/me/messages/${encodeURIComponent(messageId)}/createReply`, {});
+    if (comment && draft?.id) {
+      const body = {
+        body: {
+          contentType: 'Text',
+          content: String(comment)
+        }
+      };
+      await this.graphPatch(`/me/messages/${encodeURIComponent(draft.id)}`, body);
+    }
+    return { ok: true, action: 'create-reply-draft', sourceMessageId: messageId, draftId: draft?.id, draft };
   }
 
   disconnect() {

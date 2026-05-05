@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Mail, Plus, Copy, Check, Shield, User, Globe, 
-  Trash2, AlertCircle, ChevronRight, Bell, Tags, WifiOff, RefreshCw
+  Trash2, AlertCircle, ChevronRight, Bell, Tags, WifiOff, RefreshCw, Database, LockKeyhole
 } from 'lucide-react';
 import { mailCategories } from '../data/hermesAgents';
 
@@ -19,6 +19,8 @@ export const MailMEView = () => {
   const [graphMessages, setGraphMessages] = useState<any[]>([]);
   const [graphLogin, setGraphLogin] = useState<any>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
+  const [mailSyncState, setMailSyncState] = useState<any>(null);
+  const [batchIndexing, setBatchIndexing] = useState(false);
 
   React.useEffect(() => {
     const loadSettings = async () => {
@@ -30,6 +32,7 @@ export const MailMEView = () => {
         refreshMailConnectors();
         refreshClassicOutlook();
         refreshGraphStatus();
+        refreshMailSyncState();
       }
     };
     loadSettings();
@@ -75,6 +78,11 @@ export const MailMEView = () => {
     if (status) setGraphStatus(status);
   };
 
+  const refreshMailSyncState = async () => {
+    const state = await (window.ipcRenderer as any)?.getMailSyncState?.();
+    if (state) setMailSyncState(state);
+  };
+
   const startGraphLogin = async () => {
     const result = await window.ipcRenderer?.startMicrosoftGraphLogin?.();
     setGraphLogin(result);
@@ -112,6 +120,26 @@ export const MailMEView = () => {
     } finally {
       setLoadingGraph(false);
     }
+  };
+
+  const indexGraphBatch = async (reset = false) => {
+    if (!(window.ipcRenderer as any)?.syncEmailBatch) return;
+    setBatchIndexing(true);
+    try {
+      const result = await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000, reset });
+      setMailSyncState(result?.state || null);
+      showNotice(`Indexed ${result?.batchCount || result?.messages?.length || 0} real Graph emails${result?.complete ? '; mailbox complete.' : '; more batches remain.'}`);
+    } catch (error: any) {
+      showNotice(error?.message || 'Could not index Microsoft Graph mailbox.');
+    } finally {
+      setBatchIndexing(false);
+    }
+  };
+
+  const resetGraphIndex = async () => {
+    await (window.ipcRenderer as any)?.resetMailSyncState?.();
+    await refreshMailSyncState();
+    showNotice('Microsoft Graph mailbox index checkpoint reset. Next run starts from newest mail again.');
   };
 
   const copyEmail = () => {
@@ -296,6 +324,58 @@ export const MailMEView = () => {
 
       <div className="p-6 bg-white border border-gray-100 rounded-3xl space-y-4">
         <div className="flex items-center justify-between gap-4">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center text-white">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-gray-900">Full Mailbox Intelligence Index</h3>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Real paged Microsoft Graph crawl for large mailboxes. It keeps checkpoints, merges folders, and queues high-value analysis tasks.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => indexGraphBatch(false)}
+              disabled={!graphStatus?.connected || batchIndexing}
+              className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300"
+            >
+              {batchIndexing ? 'Indexing...' : 'Index next 1,000'}
+            </button>
+            <button
+              onClick={resetGraphIndex}
+              disabled={!graphStatus?.connected || batchIndexing}
+              className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all disabled:text-gray-300"
+            >
+              Reset checkpoint
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <IndexStat label="Total indexed" value={(mailSyncState?.totalIndexed || 0).toLocaleString()} />
+          <IndexStat label="Last batch" value={(mailSyncState?.lastBatchCount || 0).toLocaleString()} />
+          <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected ? 'Crawling' : 'Connect Graph'} />
+          <IndexStat label="Updated" value={mailSyncState?.updatedAt ? new Date(mailSyncState.updatedAt).toLocaleString() : 'Not started'} />
+        </div>
+
+        {mailSyncState?.lastError && (
+          <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-[10px] font-bold text-red-700">
+            Last Graph indexing error: {mailSyncState.lastError}
+          </div>
+        )}
+
+        <div className="p-4 bg-green-50/60 border border-green-100 rounded-2xl flex items-start space-x-3">
+          <LockKeyhole className="w-4 h-4 text-green-700 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-green-700 leading-relaxed">
+            Write routes are real but locked: mark read/unread, move mail, create folders, and create reply drafts require explicit approval. Background indexing never sends, deletes, moves, unsubscribes, or changes mailbox state.
+          </p>
+        </div>
+      </div>
+
+      <div className="p-6 bg-white border border-gray-100 rounded-3xl space-y-4">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-black text-gray-900">Classic Outlook Local Inbox</h3>
             <p className="text-[11px] text-gray-500 mt-1">
@@ -476,5 +556,12 @@ const MailConnectorStatus = ({ label, connected, detail, onRefresh }: any) => (
     <button onClick={onRefresh} className="p-2 text-gray-400 hover:text-gray-900 hover:bg-white/60 rounded-xl transition-all" title="Refresh status">
       <RefreshCw className="w-3.5 h-3.5" />
     </button>
+  </div>
+);
+
+const IndexStat = ({ label, value }: { label: string; value: string }) => (
+  <div className="p-4 bg-gray-50/70 border border-gray-100 rounded-2xl">
+    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{label}</p>
+    <p className="text-sm font-black text-gray-900 mt-1 truncate">{value}</p>
   </div>
 );
