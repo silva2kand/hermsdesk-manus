@@ -39,6 +39,7 @@ interface Window {
     speakVoiceStack: (text: string, options?: any) => Promise<{ ok: boolean, mode?: string, endpoint?: string, voice?: string, language?: string, path?: string, error?: string }>;
     diagnoseVoiceStack: () => Promise<any>;
     buildVoiceStack: () => Promise<{ ok: boolean, mode?: string, script?: string, message?: string, error?: string }>;
+    getSilvaEvents: (limit?: number) => Promise<any[]>;
     getAutomationEvents: () => Promise<any[]>;
     openBrowserAutomation: (target?: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any }>;
     researchWebAutomation: (query: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any, query?: string }>;

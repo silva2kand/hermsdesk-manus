@@ -14,11 +14,16 @@ const MAX_EVENTS = 100;
 
 export class AutomationService {
   private win: BrowserWindow | null = null;
+  private eventBus: any = null;
 
   constructor(private store: any) {}
 
   setWindow(win: BrowserWindow | null) {
     this.win = win;
+  }
+
+  setEventBus(eventBus: any) {
+    this.eventBus = eventBus;
   }
 
   getEvents(): AutomationEvent[] {
@@ -43,6 +48,12 @@ export class AutomationService {
       type: next.status === 'error' ? 'error' : 'info',
       content: `${next.title}: ${next.detail}`
     });
+    this.eventBus?.emit(next.type === 'research' ? 'search.query' : 'tool.called', 'automation', {
+      title: next.title,
+      detail: next.detail,
+      status: next.status,
+      url: next.url
+    }, next.id);
     return next;
   }
 

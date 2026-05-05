@@ -27,6 +27,7 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [silvaEvents, setSilvaEvents] = useState<any[]>([]);
 
   const refresh = async () => {
     const [skills, intel] = await Promise.all([
@@ -60,7 +61,17 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
       push({ type: 'automation', title: `Mail ME ${event?.source || ''}`, message: `${event?.messageCount || 0} emails analyzed, ${event?.newTasks || 0} new agent tasks queued.` });
       refresh();
     };
+    const onSilvaEvent = (_: any, event: any) => {
+      setSilvaEvents(prev => [event, ...prev].slice(0, 80));
+      push({
+        type: event?.type?.startsWith('search.') ? 'research' : event?.type?.startsWith('agent.') ? 'agent' : 'automation',
+        title: event?.type || 'Silva Event',
+        message: event?.payload?.message || event?.payload?.query || event?.payload?.tool || event?.payload?.engine || event?.source || 'Event bus update'
+      });
+    };
     const onSyncMail = () => syncMail();
+
+    window.ipcRenderer?.getSilvaEvents?.(80).then(events => setSilvaEvents(events || [])).catch(() => {});
 
     window.ipcRenderer?.on?.('app:log', onAppLog);
     window.ipcRenderer?.on?.('agent:update', onAgentLog);
@@ -70,6 +81,7 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     window.ipcRenderer?.on?.('scheduler:run', onScheduler);
     window.ipcRenderer?.on?.('mail:intelligence-updated', onMailUpdated);
     window.ipcRenderer?.on?.('mail:sync-intelligence', onSyncMail);
+    window.ipcRenderer?.on?.('silva:event', onSilvaEvent);
     return () => {
       window.ipcRenderer?.off?.('app:log', onAppLog);
       window.ipcRenderer?.off?.('agent:update', onAgentLog);
@@ -79,6 +91,7 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
       window.ipcRenderer?.off?.('scheduler:run', onScheduler);
       window.ipcRenderer?.off?.('mail:intelligence-updated', onMailUpdated);
       window.ipcRenderer?.off?.('mail:sync-intelligence', onSyncMail);
+      window.ipcRenderer?.off?.('silva:event', onSilvaEvent);
     };
   }, []);
 
@@ -179,8 +192,8 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
               <p className="text-[8px] font-black uppercase tracking-widest text-gray-300">Agents</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2">
-              <p className="text-lg font-black">{notifications.filter(n => ['browser', 'research', 'automation'].includes(n.type)).length}</p>
-              <p className="text-[8px] font-black uppercase tracking-widest text-gray-300">Events</p>
+              <p className="text-lg font-black">{silvaEvents.length}</p>
+              <p className="text-[8px] font-black uppercase tracking-widest text-gray-300">Bus</p>
             </div>
             <div className="rounded-xl bg-white/10 p-2">
               <p className="text-lg font-black">{pendingSkills.length + routeItems.length}</p>
@@ -203,6 +216,26 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
               <Search className="w-3.5 h-3.5" />
             </button>
           </div>
+        </section>
+
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Event Bus</h3>
+            <span className="text-[9px] font-black text-gray-400">{silvaEvents.length}</span>
+          </div>
+          {silvaEvents.length === 0 && <p className="text-[10px] text-gray-400">No engine/tool/research events yet.</p>}
+          {silvaEvents.slice(0, 10).map(event => (
+            <div key={event.id} className="p-3 bg-gray-950 text-white rounded-2xl">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[9px] font-black uppercase tracking-widest text-blue-200 truncate">{event.type}</span>
+                <span className="text-[8px] text-gray-400">{new Date(event.createdAt).toLocaleTimeString()}</span>
+              </div>
+              <p className="text-[10px] font-bold text-white mt-1 truncate">{event.source}</p>
+              <p className="text-[9px] text-gray-300 mt-1 line-clamp-3">
+                {event.payload?.query || event.payload?.title || event.payload?.message || event.payload?.tool || event.payload?.engine || JSON.stringify(event.payload || {}).slice(0, 180)}
+              </p>
+            </div>
+          ))}
         </section>
 
         <section className="space-y-2">

@@ -105,6 +105,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   speakVoiceStack: (text: string, options?: any) => ipcRenderer.invoke('desktop:voice-stack-speak', { text, options }),
   diagnoseVoiceStack: () => ipcRenderer.invoke('desktop:voice-stack-diagnose'),
   buildVoiceStack: () => ipcRenderer.invoke('desktop:voice-stack-build'),
+  getSilvaEvents: (limit?: number) => ipcRenderer.invoke('silva-events:get-recent', limit),
   getAutomationEvents: () => ipcRenderer.invoke('automation:get-events'),
   openBrowserAutomation: (target?: string) => ipcRenderer.invoke('automation:open-browser', target),
   researchWebAutomation: (query: string) => ipcRenderer.invoke('automation:research-web', query),

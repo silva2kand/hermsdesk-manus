@@ -20,6 +20,8 @@ let wideResearchService: any;
 let automationService: any;
 let browserOperator: any;
 let artifactService: any;
+let eventBus: any;
+let webResearchService: any;
 
 function initializeStoreAndServices() {
    try {
@@ -82,6 +84,8 @@ function initializeStoreAndServices() {
   automationService = new AutomationService(store)
   browserOperator = new BrowserOperatorService(store)
   artifactService = new ArtifactService()
+  eventBus = new EventBusService(store)
+  webResearchService = new SilvaWebResearchService(eventBus)
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      // Fallback to a non-persistent object if store fails completely
@@ -103,6 +107,8 @@ function initializeStoreAndServices() {
      automationService = new AutomationService(store)
      browserOperator = new BrowserOperatorService(store)
      artifactService = new ArtifactService()
+     eventBus = new EventBusService(store)
+     webResearchService = new SilvaWebResearchService(eventBus)
    }
  }
 
@@ -119,6 +125,8 @@ import { WideResearchService } from './services/WideResearchService'
 import { AutomationService } from './services/AutomationService'
 import { BrowserOperatorService } from './services/BrowserOperatorService'
 import { ArtifactService } from './services/ArtifactService'
+import { EventBusService } from './services/EventBusService'
+import { SilvaWebResearchService } from './services/SilvaWebResearchService'
 
 // The built directory structure
 //
@@ -217,6 +225,7 @@ function createWindow() {
   // Helper for sending logs to the console
   const appLog = (type: 'info' | 'error' | 'bug', content: string) => {
     win?.webContents.send('app:log', { type, content });
+    eventBus?.log('app', content, type === 'error' ? 'error' : type === 'bug' ? 'warn' : 'info');
   };
 
   const processEmailIntelligence = async (data: any, source = 'mailbox') => {
@@ -330,6 +339,9 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   wideResearchService?.setWindow(win)
   automationService?.setWindow(win)
   browserOperator?.setWindow(win)
+  eventBus?.setWindow(win)
+  automationService?.setEventBus?.(eventBus)
+  browserOperator?.setEventBus?.(eventBus)
 
   // IPC Handlers for AI
   ipcMain.handle('ai:list-models', async () => {
@@ -339,15 +351,42 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   
   ipcMain.handle('ai:chat', async (_, { model, messages, provider }) => {
     appLog('info', `Sending chat request to ${provider || 'Jan+TurboQuant'} (${model})`);
+    const sessionId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const startedAt = Date.now();
+    eventBus?.emit('session.started', 'local-ai', {
+      sessionId,
+      engine: provider || 'Jan+TurboQuant',
+      model: model || 'auto',
+      streaming: false,
+      note: 'Current route uses non-streaming engine API unless the backend exposes a streaming adapter.'
+    }, sessionId);
     const p = (provider || '').toLowerCase().replace(/\s+/g, '')
     try {
-      if (p === 'ollama') return aiService.chatWithOllama(model, messages)
-      if (p === 'lmstudio') return aiService.chatWithLMStudio(model, messages)
-      if (p === 'jan' || p === 'jan+turboquant') return aiService.chatWithBestAvailable(model, messages, { preferred: 'jan' })
+      let result: any;
+      if (p === 'ollama') result = await aiService.chatWithOllama(model, messages)
+      else if (p === 'lmstudio') result = await aiService.chatWithLMStudio(model, messages)
+      else if (p === 'jan' || p === 'jan+turboquant') result = await aiService.chatWithBestAvailable(model, messages, { preferred: 'jan' })
       // Default: route through smart engine priority chain (Jan+TQ → Ollama → LM Studio)
-      return aiService.chatWithBestAvailable(model, messages)
+      else result = await aiService.chatWithBestAvailable(model, messages)
+      const content = result?.message?.content || result?.content || '';
+      eventBus?.emit('session.finished', 'local-ai', {
+        sessionId,
+        engine: result?.engine || provider || 'local-ai',
+        model: model || 'auto',
+        streaming: false,
+        durationMs: Date.now() - startedAt,
+        outputChars: content.length,
+        tokensEstimated: Math.ceil(content.length / 4)
+      }, sessionId);
+      return result;
     } catch (error: any) {
       appLog('error', `Local AI route failed: ${error?.message || 'Unknown error'}`)
+      eventBus?.emit('session.finished', 'local-ai', {
+        sessionId,
+        engine: provider || 'local-ai',
+        error: error?.message || 'Unknown error',
+        durationMs: Date.now() - startedAt
+      }, sessionId);
       return {
         message: {
           content: `Local AI route failed: ${error?.message || 'Unknown error'}\n\nJan + TurboQuant is the built-in primary engine. If it is offline, Hermes ME will try optional local fallbacks such as Ollama and LM Studio. Open Model Hub to start the built-in engine or load a local model.`
@@ -386,11 +425,15 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   
   ipcMain.handle('ai:chat-provider', async (_, { provider, model, messages }) => {
     appLog('info', `Cloud request to ${provider}`);
+    const sessionId = `cloud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const startedAt = Date.now();
+    eventBus?.emit('session.started', 'cloud-ai', { sessionId, provider, model, streaming: false }, sessionId);
     const apiKeys = await providerService.getAPIKeys();
     const key = apiKeys[provider];
     
     if (!key) {
       appLog('error', `Missing API key for ${provider}`);
+      eventBus?.emit('session.finished', 'cloud-ai', { sessionId, provider, model, error: 'missing-api-key', durationMs: Date.now() - startedAt }, sessionId);
       return { content: `Error: No API key found for ${provider}. Please add it in Settings > API Keys.` };
     }
 
@@ -400,18 +443,21 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
         result = await providerService.chatGemini(key, messages);
         const content = result.candidates?.[0]?.content?.parts?.[0]?.text || "No response from Gemini";
         appLog('info', 'Gemini response received');
+        eventBus?.emit('session.finished', 'cloud-ai', { sessionId, provider, model, durationMs: Date.now() - startedAt, outputChars: content.length }, sessionId);
         return { content };
       }
       if (provider === 'nvidia') {
         result = await providerService.chatNvidiaNIM(key, model, messages);
         const content = result.choices?.[0]?.message?.content || "No response from NVIDIA NIM";
         appLog('info', 'NVIDIA NIM response received');
+        eventBus?.emit('session.finished', 'cloud-ai', { sessionId, provider, model, durationMs: Date.now() - startedAt, outputChars: content.length }, sessionId);
         return { content };
       }
       if (provider === 'openrouter') {
         result = await providerService.chatOpenRouter(key, model, messages);
         const content = result.choices?.[0]?.message?.content || "No response from OpenRouter";
         appLog('info', 'OpenRouter response received');
+        eventBus?.emit('session.finished', 'cloud-ai', { sessionId, provider, model, durationMs: Date.now() - startedAt, outputChars: content.length }, sessionId);
         return { content };
       }
       return { content: `Cloud provider ${provider} not yet fully implemented in main process.` };
@@ -419,6 +465,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
       const errorMsg = e.response?.data?.error?.message || e.message;
       const status = e.response?.status;
       appLog('error', `${provider} error (${status || 'unknown'}): ${errorMsg}`);
+      eventBus?.emit('session.finished', 'cloud-ai', { sessionId, provider, model, status, error: errorMsg, durationMs: Date.now() - startedAt }, sessionId);
       return { content: `Error calling ${provider}: ${errorMsg} (Status: ${status || 'unknown'})` };
     }
   })
@@ -438,7 +485,22 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   })
   ipcMain.handle('ai:chat-best', async (_, { model, messages }) => {
     appLog('info', 'Smart routing through engine priority chain...');
-    return aiService.chatWithBestAvailable(model, messages);
+    const sessionId = `smart-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const startedAt = Date.now();
+    eventBus?.emit('session.started', 'smart-router', { sessionId, model: model || 'auto', streaming: false }, sessionId);
+    eventBus?.emit('plan.updated', 'smart-router', { sessionId, steps: ['Try Jan + TurboQuant', 'Fallback to Ollama', 'Fallback to LM Studio', 'Return result'] }, sessionId);
+    const result = await aiService.chatWithBestAvailable(model, messages);
+    const content = result?.message?.content || result?.content || '';
+    eventBus?.emit('session.finished', 'smart-router', {
+      sessionId,
+      engine: result?.engine || 'smart-router',
+      model: model || 'auto',
+      streaming: false,
+      durationMs: Date.now() - startedAt,
+      outputChars: content.length,
+      tokensEstimated: Math.ceil(content.length / 4)
+    }, sessionId);
+    return result;
   })
 
   // Dialog Handlers for real file/folder picking
@@ -471,9 +533,18 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   ipcMain.handle('desktop:voice-stack-speak', (_, { text, options }) => integrationService.speakWithVoiceStack(text, options))
   ipcMain.handle('desktop:voice-stack-diagnose', () => integrationService.diagnoseVoiceStack())
   ipcMain.handle('desktop:voice-stack-build', () => integrationService.buildVoiceStackNeeds())
+  ipcMain.handle('silva-events:get-recent', (_, limit) => eventBus.getEvents(limit))
   ipcMain.handle('automation:get-events', () => automationService.getEvents())
   ipcMain.handle('automation:open-browser', (_, target) => automationService.openBrowser(target))
-  ipcMain.handle('automation:research-web', (_, query) => automationService.researchWeb(query))
+  ipcMain.handle('automation:research-web', async (_, query) => {
+    const sessionId = `research-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    eventBus?.emit('tool.called', 'automation', { sessionId, tool: 'silva.search_web', args: { query } }, sessionId);
+    const [trace, opened] = await Promise.all([
+      webResearchService.search(query, sessionId).catch((error: any) => ({ ok: false, error: error?.message, results: [] })),
+      automationService.researchWeb(query)
+    ]);
+    return { ...opened, trace };
+  })
   ipcMain.handle('browser-operator:get-state', () => browserOperator.getState())
   ipcMain.handle('browser-operator:open', (_, target) => browserOperator.open(target))
   ipcMain.handle('browser-operator:navigate', (_, target) => browserOperator.navigate(target))
@@ -612,7 +683,13 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   // Orchestrator Handlers
   ipcMain.handle('agents:get-all', () => orchestrator.getAgents())
   ipcMain.handle('agents:update-status', (_, { id, status, background }) => orchestrator.updateAgentStatus(id, status, background))
-  ipcMain.handle('agents:create-task', (_, { input, agentId }) => orchestrator.createTask(input, agentId, win))
+  ipcMain.handle('agents:create-task', async (_, { input, agentId }) => {
+    const sessionId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    eventBus?.emit('agent.step', 'multi-agent', { sessionId, agentId: agentId || 'auto', status: 'queued', inputPreview: String(input || '').slice(0, 240) }, sessionId);
+    const task = await orchestrator.createTask(input, agentId, win);
+    eventBus?.emit('agent.step', 'multi-agent', { sessionId, agentId: task?.assignedAgentId || agentId || 'auto', taskId: task?.id, status: task?.status || 'running' }, sessionId);
+    return task;
+  })
   ipcMain.handle('agents:get-tasks', () => orchestrator.getTasks())
 
   // Workspace Handlers

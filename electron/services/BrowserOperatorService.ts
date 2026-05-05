@@ -18,6 +18,7 @@ export class BrowserOperatorService {
   private operatorWindow: BrowserWindow | null = null;
   private appWindow: BrowserWindow | null = null;
   private screenshotDir: string;
+  private eventBus: any = null;
 
   constructor(private store: any) {
     this.screenshotDir = path.join(app.getPath('userData'), 'browser-operator');
@@ -26,6 +27,10 @@ export class BrowserOperatorService {
 
   setWindow(win: BrowserWindow | null) {
     this.appWindow = win;
+  }
+
+  setEventBus(eventBus: any) {
+    this.eventBus = eventBus;
   }
 
   getState() {
@@ -54,6 +59,13 @@ export class BrowserOperatorService {
       type: next.status === 'error' ? 'error' : 'info',
       content: `Browser Operator: ${next.detail}`
     });
+    this.eventBus?.emit(next.status === 'error' ? 'tool.result' : 'tool.called', 'browser-operator', {
+      tool: `browser.${next.type}`,
+      status: next.status,
+      detail: next.detail,
+      url: next.url,
+      screenshotPath: next.screenshotPath
+    }, next.id);
     return next;
   }
 
