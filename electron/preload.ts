@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getConnectors: () => ipcRenderer.invoke('tools:get-connectors'),
   saveConnector: (connector: any) => ipcRenderer.invoke('tools:save-connector', connector),
   toggleConnector: (id: string, enabled: boolean) => ipcRenderer.invoke('tools:toggle-connector', { id, enabled }),
+  executeTool: (toolId: string, params: any) => ipcRenderer.invoke('tools:execute', { toolId, params }),
 
   // Skills Engine
   getInstalledSkills: () => ipcRenderer.invoke('skills:get-installed'),

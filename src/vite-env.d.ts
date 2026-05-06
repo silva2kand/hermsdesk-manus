@@ -109,6 +109,7 @@ interface Window {
     getTools: () => Promise<any[]>;
     saveConnector: (connector: any) => Promise<{[key: string]: boolean}>;
     toggleConnector: (id: string, enabled: boolean) => Promise<{[key: string]: boolean}>;
+    executeTool: (toolId: string, params: any) => Promise<any>;
 
     // Skills Engine
     getInstalledSkills: () => Promise<string[]>;

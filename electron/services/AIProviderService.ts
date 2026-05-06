@@ -159,26 +159,7 @@ export class AIProviderService {
   }
 
   getKnowledge() {
-    return this.store.get('knowledge', [
-      {
-        id: 'presentation-style',
-        title: 'Presentation, Video, and Content Production Style Guide',
-        desc: 'Global rules for smooth, minimal slides (max 6 lines), consistent fonts, brand colors, and step-by-step training flow.',
-        rules: '1. Max 6 lines per slide\n2. Use brand font (Inter)\n3. Primary color: #2563eb\n4. Always include a summary at the end.',
-        created: 'Mar 17, 2026',
-        type: 'Official',
-        color: 'bg-purple-500'
-      },
-      {
-        id: 'ai-architecture',
-        title: 'AI System Architecture & Model Routing Preferences',
-        desc: 'Local-first execution (LM Studio/Ollama). Cloud routing for advanced reasoning (Grok, Gemini, OpenRouter).',
-        rules: '1. Default to Ollama for coding\n2. Use Gemini for multimodal\n3. Route to Grok for complex reasoning.',
-        created: 'Mar 17, 2026',
-        type: 'Personal',
-        color: 'bg-blue-600'
-      }
-    ]);
+    return this.store.get('knowledge', []);
   }
 
   queryKnowledge(query: string) {

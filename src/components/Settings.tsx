@@ -67,7 +67,7 @@ export const Settings = () => {
     const fetchData = async () => {
       if (window.ipcRenderer) {
         const savedSettings = await (window.ipcRenderer as any).getGeneralSettings();
-        setSettings(savedSettings);
+        if (savedSettings) setSettings((prev: any) => ({ ...prev, ...savedSettings, notifications: { ...prev.notifications, ...(savedSettings.notifications || {}) } }));
         const keys = await (window.ipcRenderer as any).getAPIKeys();
         setApiKeys(keys);
         const statuses = await (window.ipcRenderer as any).getConnectorStatuses?.();
@@ -90,6 +90,15 @@ export const Settings = () => {
       setSettings(next);
       await (window.ipcRenderer as any).saveGeneralSettings(next);
     }
+  };
+
+  const saveProfessionalFlag = (id: string, value: boolean) => {
+    saveSettings({
+      professional: {
+        ...(settings.professional || {}),
+        [id]: value
+      }
+    });
   };
 
   const handleCreateShortcut = async () => {
@@ -225,15 +234,21 @@ export const Settings = () => {
                 <div className="p-4 rounded-xl border border-gray-100 bg-white space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-700">Auto-detect legal documents</span>
-                    <div className="w-8 h-4 bg-blue-600 rounded-full relative cursor-pointer">
-                      <div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full shadow-sm" />
-                    </div>
+                    <button
+                      onClick={() => saveProfessionalFlag('legalAutoDetect', !settings.professional?.legalAutoDetect)}
+                      className={`w-8 h-4 rounded-full relative cursor-pointer ${settings.professional?.legalAutoDetect ? 'bg-blue-600' : 'bg-gray-200'}`}
+                    >
+                      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm ${settings.professional?.legalAutoDetect ? 'right-0.5' : 'left-0.5'}`} />
+                    </button>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-700">Email organization (Client Matters)</span>
-                    <div className="w-8 h-4 bg-gray-200 rounded-full relative cursor-pointer">
-                      <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full shadow-sm" />
-                    </div>
+                    <button
+                      onClick={() => saveProfessionalFlag('legalEmailOrganization', !settings.professional?.legalEmailOrganization)}
+                      className={`w-8 h-4 rounded-full relative cursor-pointer ${settings.professional?.legalEmailOrganization ? 'bg-blue-600' : 'bg-gray-200'}`}
+                    >
+                      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm ${settings.professional?.legalEmailOrganization ? 'right-0.5' : 'left-0.5'}`} />
+                    </button>
                   </div>
                 </div>
               </section>
@@ -252,13 +267,21 @@ export const Settings = () => {
                 <div className="p-4 rounded-xl border border-gray-100 bg-white space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-700">HMRC Portal Integration</span>
-                    <button className="text-[10px] font-bold text-blue-600 uppercase">Connect</button>
+                    <button
+                      onClick={() => setActiveTab('API & Connections')}
+                      className="text-[10px] font-bold text-blue-600 uppercase"
+                    >
+                      Configure
+                    </button>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-700">VAT Return Reminders</span>
-                    <div className="w-8 h-4 bg-blue-600 rounded-full relative cursor-pointer">
-                      <div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full shadow-sm" />
-                    </div>
+                    <button
+                      onClick={() => saveProfessionalFlag('vatReturnReminders', !settings.professional?.vatReturnReminders)}
+                      className={`w-8 h-4 rounded-full relative cursor-pointer ${settings.professional?.vatReturnReminders ? 'bg-blue-600' : 'bg-gray-200'}`}
+                    >
+                      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm ${settings.professional?.vatReturnReminders ? 'right-0.5' : 'left-0.5'}`} />
+                    </button>
                   </div>
                 </div>
               </section>

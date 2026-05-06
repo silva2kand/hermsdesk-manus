@@ -1,4 +1,7 @@
 import Store from 'electron-store';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════
 // ToolRegistryService — HermesDesk ME 1.8
@@ -68,6 +71,82 @@ export class ToolRegistryService {
   getToolDefinitionsForLLM(agentId?: string): string {
     const tools = agentId ? this.getToolsForAgent(agentId) : this.tools;
     return tools.map(t => `- ${t.name}: ${t.description}`).join('\n');
+  }
+
+  private resolveLocalPath(inputPath: string) {
+    if (!inputPath || typeof inputPath !== 'string') {
+      throw new Error('A real local path is required.');
+    }
+    return path.resolve(inputPath.replace(/^~(?=$|[\\/])/, os.homedir()));
+  }
+
+  async executeTool(toolId: string, params: any = {}) {
+    if (toolId !== 'file-system') {
+      return {
+        ok: false,
+        toolId,
+        error: `${toolId} has no local executable handler yet. Configure a real connector/API before running it.`
+      };
+    }
+
+    const action = params.action || params.operation;
+    if (action === 'read_file') {
+      const filePath = this.resolveLocalPath(params.path);
+      const stats = await fs.promises.stat(filePath);
+      if (!stats.isFile()) throw new Error(`Not a file: ${filePath}`);
+      const maxBytes = Math.min(Number(params.maxBytes || 1024 * 1024), 5 * 1024 * 1024);
+      const handle = await fs.promises.open(filePath, 'r');
+      try {
+        const buffer = Buffer.alloc(Math.min(stats.size, maxBytes));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        return {
+          ok: true,
+          path: filePath,
+          bytesRead,
+          truncated: stats.size > bytesRead,
+          content: buffer.subarray(0, bytesRead).toString('utf8')
+        };
+      } finally {
+        await handle.close();
+      }
+    }
+
+    if (action === 'list_directory') {
+      const folderPath = this.resolveLocalPath(params.path || process.cwd());
+      const entries = await fs.promises.readdir(folderPath, { withFileTypes: true });
+      return {
+        ok: true,
+        path: folderPath,
+        files: entries.slice(0, 500).map(entry => ({
+          name: entry.name,
+          path: path.join(folderPath, entry.name),
+          type: entry.isDirectory() ? 'folder' : 'file'
+        })),
+        truncated: entries.length > 500
+      };
+    }
+
+    if (action === 'write_file') {
+      if (!params.approved) {
+        return {
+          ok: false,
+          requiresApproval: true,
+          action: 'write_file',
+          path: this.resolveLocalPath(params.path),
+          message: 'Writing files is real and requires explicit approval.'
+        };
+      }
+      const filePath = this.resolveLocalPath(params.path);
+      await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.promises.writeFile(filePath, String(params.content ?? ''), 'utf8');
+      return { ok: true, path: filePath, bytesWritten: Buffer.byteLength(String(params.content ?? ''), 'utf8') };
+    }
+
+    return {
+      ok: false,
+      toolId,
+      error: `Unsupported file-system action: ${action || 'missing action'}`
+    };
   }
 
   async getConnectors(): Promise<Record<string, boolean>> {

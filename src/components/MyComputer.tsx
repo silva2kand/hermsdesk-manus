@@ -179,8 +179,13 @@ export const MyComputer = () => {
               <div className="mt-4 grid grid-cols-3 gap-3 text-center">
                 <div><p className="text-lg font-black">{overview?.cpu ?? 0}%</p><p className="text-[9px] text-gray-400 uppercase">CPU</p></div>
                 <div><p className="text-lg font-black">{overview?.ram?.percent ?? 0}%</p><p className="text-[9px] text-gray-400 uppercase">RAM</p></div>
-                <div><p className="text-lg font-black">0%</p><p className="text-[9px] text-gray-400 uppercase">GPU</p></div>
+                <div><p className="text-lg font-black">{overview?.gpu?.utilization ?? 0}%</p><p className="text-[9px] text-gray-400 uppercase">GPU</p></div>
               </div>
+              {overview?.gpu?.name && (
+                <p className="text-[9px] text-gray-400 mt-3 truncate" title={overview.gpu.name}>
+                  {overview.gpu.name} · {overview.gpu.memoryUsedMb} / {overview.gpu.memoryTotalMb} MB
+                </p>
+              )}
             </div>
           </div>
         </div>

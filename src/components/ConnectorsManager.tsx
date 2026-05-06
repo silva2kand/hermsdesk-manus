@@ -49,6 +49,7 @@ const ConnectorItem = ({ connector, isConnected, status, onToggle }: { connector
         ? 'Real local route enabled'
         : 'Route enabled - configure credentials if needed');
   const live = Boolean(status?.liveVerified);
+  const buttonLabel = !enabled ? 'Enable Route' : live ? 'Live' : 'Route Only';
   
   return (
     <div className="group p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between hover:border-blue-100 hover:shadow-sm transition-all">
@@ -78,14 +79,17 @@ const ConnectorItem = ({ connector, isConnected, status, onToggle }: { connector
         </div>
       </div>
       <div className="flex items-center space-x-2">
-        <button 
+        <button
+          title={live ? 'This connector is live verified.' : enabled ? 'Route is visible, but real data needs OAuth/API/local service.' : 'Enable the route in HermsDesk.'}
           onClick={onToggle}
           className={`px-4 py-1.5 rounded-xl text-[11px] font-bold transition-all ${
-          enabled 
-            ? 'bg-gray-50 text-gray-400 border border-gray-100' 
+          !enabled
+            ? 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm'
+            : live
+              ? 'bg-green-50 text-green-700 border border-green-100'
             : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm'
         }`}>
-          {enabled ? 'Route On' : 'Enable Route'}
+          {buttonLabel}
         </button>
       </div>
     </div>
@@ -240,7 +244,7 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Recommended</h3>
-              <button className="text-[10px] font-bold text-blue-600 hover:underline">View all</button>
+              <button onClick={() => setSearchQuery('')} className="text-[10px] font-bold text-blue-600 hover:underline">View all</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {recommended.map(c => (

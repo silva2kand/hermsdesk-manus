@@ -86,12 +86,33 @@ export class DesktopIntegrationService {
   async getComputerOverview() {
     const cwd = process.cwd();
     const home = os.homedir();
-    const [fsSizes, mem, currentLoad, osInfo, workspaceSize] = await Promise.all([
+    const gpuProbe = async () => {
+      if (process.platform !== 'win32') return null;
+      try {
+        const { stdout } = await execFileAsync('nvidia-smi', [
+          '--query-gpu=name,utilization.gpu,memory.total,memory.used',
+          '--format=csv,noheader,nounits'
+        ], { timeout: 4000, windowsHide: true });
+        const first = stdout.trim().split(/\r?\n/)[0];
+        if (!first) return null;
+        const [name, utilization, memoryTotal, memoryUsed] = first.split(',').map(part => part.trim());
+        return {
+          name,
+          utilization: Number(utilization) || 0,
+          memoryTotalMb: Number(memoryTotal) || 0,
+          memoryUsedMb: Number(memoryUsed) || 0
+        };
+      } catch {
+        return null;
+      }
+    };
+    const [fsSizes, mem, currentLoad, osInfo, workspaceSize, gpu] = await Promise.all([
       si.fsSize().catch(() => []),
       si.mem().catch(() => null),
       si.currentLoad().catch(() => null),
       si.osInfo().catch(() => null),
-      this.getFolderSize(cwd).catch(() => ({ bytes: 0, partial: false }))
+      this.getFolderSize(cwd).catch(() => ({ bytes: 0, partial: false })),
+      gpuProbe()
     ]);
 
     const systemDriveName = process.platform === 'win32' ? 'C:' : path.parse(home).root;
@@ -108,6 +129,7 @@ export class DesktopIntegrationService {
         used: mem.active,
         percent: Math.round((mem.active / mem.total) * 100)
       } : null,
+      gpu,
       systemDrive: systemDrive ? {
         fs: systemDrive.fs || systemDrive.mount || systemDriveName,
         mount: systemDrive.mount,

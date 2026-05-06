@@ -40,6 +40,37 @@ export const KnowledgeView = () => {
     }
   };
 
+  const handleUpdateField = async (id: string, field: string, value: string) => {
+    const newData = knowledgeData.map(k => k.id === id ? { ...k, [field]: value } : k);
+    setKnowledgeData(newData);
+    await window.ipcRenderer?.saveKnowledge(newData);
+  };
+
+  const saveKnowledgeList = async (items: any[]) => {
+    setKnowledgeData(items);
+    await window.ipcRenderer?.saveKnowledge(items);
+  };
+
+  const addKnowledge = async () => {
+    const now = new Date();
+    const item = {
+      id: `knowledge-${now.getTime()}`,
+      title: 'New Knowledge',
+      desc: 'Add real instructions, rules, or reference context here.',
+      rules: '',
+      created: now.toLocaleDateString(),
+      type: 'Custom',
+      color: 'bg-blue-600'
+    };
+    await saveKnowledgeList([item, ...knowledgeData]);
+    setEditingId(item.id);
+  };
+
+  const deleteKnowledge = async (id: string) => {
+    await saveKnowledgeList(knowledgeData.filter(item => item.id !== id));
+    if (editingId === id) setEditingId(null);
+  };
+
   if (editingId && editingItem) {
     return (
       <div className="space-y-8 animate-in fade-in duration-300">
@@ -58,11 +89,20 @@ export const KnowledgeView = () => {
 
         <div className="bg-white border border-gray-100 rounded-[32px] overflow-hidden shadow-sm p-8 space-y-6">
           <div className="space-y-2">
+            <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Title</label>
+            <input
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+              value={editingItem.title}
+              onChange={(e) => handleUpdateField(editingId, 'title', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
             <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Description</label>
             <textarea 
               className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all h-24 resize-none"
               value={editingItem.desc}
-              readOnly
+              onChange={(e) => handleUpdateField(editingId, 'desc', e.target.value)}
             />
           </div>
 
@@ -100,7 +140,7 @@ export const KnowledgeView = () => {
           <h2 className="text-xl font-bold text-gray-900">Knowledge</h2>
           <p className="text-sm text-gray-500 mt-1">Manage what ME remembers and how it applies context.</p>
         </div>
-        <button className="flex items-center px-6 py-2.5 bg-gray-900 text-white rounded-2xl text-xs font-black hover:bg-gray-800 transition-all shadow-lg shadow-gray-200">
+        <button onClick={addKnowledge} className="flex items-center px-6 py-2.5 bg-gray-900 text-white rounded-2xl text-xs font-black hover:bg-gray-800 transition-all shadow-lg shadow-gray-200">
           <Plus className="w-4 h-4 mr-2" />
           Add Knowledge
         </button>
@@ -120,6 +160,15 @@ export const KnowledgeView = () => {
 
       {/* Knowledge Cards */}
       <div className="space-y-4">
+        {filteredKnowledge.length === 0 && (
+          <div className="p-8 bg-white border border-gray-100 rounded-[32px] text-center">
+            <p className="text-sm font-black text-gray-900">No knowledge records yet</p>
+            <p className="text-xs text-gray-500 mt-1">Add real rules, documents, or memory context. HermsDesk no longer seeds sample documents here.</p>
+            <button onClick={addKnowledge} className="mt-4 px-5 py-2.5 bg-gray-900 text-white rounded-2xl text-xs font-black">
+              Add Knowledge
+            </button>
+          </div>
+        )}
         {filteredKnowledge.map((item) => (
           <div 
             key={item.id} 
@@ -157,7 +206,7 @@ export const KnowledgeView = () => {
                   <Edit3 className="w-4 h-4" />
                 </button>
                 <button 
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); deleteKnowledge(item.id); }}
                   className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                 >
                   <Trash2 className="w-4 h-4" />

@@ -855,6 +855,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     const id = payload?.id || payload?.name;
     return toolRegistry.toggleConnector(id, payload?.enabled);
   })
+  ipcMain.handle('tools:execute', (_, { toolId, params }) => toolRegistry.executeTool(toolId, params))
 
   // Skills Engine Handlers
   ipcMain.handle('skills:get-installed', () => skillsEngine.getInstalledSkills())
