@@ -16,6 +16,17 @@ export interface SkillAction {
   timestamp: number;
 }
 
+export interface SkillPackage {
+  id: string;
+  name: string;
+  description: string;
+  version?: string;
+  path?: string;
+  installed: boolean;
+  source: 'built-in' | 'local-package';
+  instructions?: string;
+}
+
 export class SkillsEngineService {
   private store: any;
   private pendingActions: SkillAction[] = [];
@@ -40,6 +51,18 @@ export class SkillsEngineService {
   getInstalledSkills() {
     const saved = this.store.get('installed_skills', this.defaultSkills) as string[];
     return Array.from(new Set([...this.defaultSkills, ...(Array.isArray(saved) ? saved : [])]));
+  }
+
+  getSkillPackages(): SkillPackage[] {
+    const installed = new Set(this.getInstalledSkills());
+    const builtIn: SkillPackage[] = this.defaultSkills.map(id => ({
+      id,
+      name: id.replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase()),
+      description: this.describeBuiltInSkill(id),
+      installed: installed.has(id),
+      source: 'built-in'
+    }));
+    return [...builtIn, ...this.loadLocalSkillPackages(installed)];
   }
 
   getSkillGuidance() {
@@ -70,8 +93,74 @@ export class SkillsEngineService {
 
     return {
       installed,
-      prompt: rules.join('\n')
+      prompt: [
+        ...rules,
+        ...this.getSkillPackages()
+          .filter(skill => skill.installed && skill.instructions)
+          .map(skill => `${skill.name}: ${skill.instructions}`)
+      ].join('\n')
     };
+  }
+
+  private describeBuiltInSkill(id: string) {
+    const descriptions: Record<string, string> = {
+      'me-api': 'Manage ME tasks, projects, configuration, and local system automation.',
+      'skill-creator': 'Create reusable skill packages and workflow instructions.',
+      'os-control': 'Use approval-first local OS actions, app launch, and terminal routes.',
+      'file-explorer': 'Read, list, and organize files with approval gates for writes.',
+      'mythos-execution': 'Execute multi-step work with verification and recovery.',
+      'mythos-recovery': 'Recover from tool/model/action failures and continue safely.',
+      'mythos-pc-operator': 'Operate local PC/browser/tool routes with visible evidence.',
+      'mythos-whatsapp-reply': 'Draft professional WhatsApp replies and open the real composer.',
+      'mythos-truthful-connectors': 'Separate enabled routes from authenticated live connections.',
+      'mythos-justice-casework': 'Build evidence-first legal, appeal, review, and complaint packs.',
+      'mythos-purchase-protection': 'Research sellers/products and build refund or chargeback packs.'
+    };
+    return descriptions[id] || 'Reusable ME workflow skill.';
+  }
+
+  private loadLocalSkillPackages(installed: Set<string>): SkillPackage[] {
+    const roots = [
+      path.join(app.getPath('userData'), 'skills'),
+      path.join(process.cwd(), 'skills')
+    ];
+    const packages: SkillPackage[] = [];
+    for (const root of roots) {
+      if (!fs.existsSync(root)) continue;
+      for (const folder of fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory())) {
+        const skillPath = path.join(root, folder.name);
+        const mdPath = path.join(skillPath, 'SKILL.md');
+        const jsonPath = path.join(skillPath, 'SKILL.json');
+        try {
+          let manifest: any = {};
+          if (fs.existsSync(jsonPath)) {
+            manifest = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+          }
+          const md = fs.existsSync(mdPath) ? fs.readFileSync(mdPath, 'utf8') : '';
+          const id = manifest.id || folder.name;
+          packages.push({
+            id,
+            name: manifest.name || id.replace(/-/g, ' '),
+            description: manifest.description || md.split(/\r?\n/).find(line => line.trim() && !line.startsWith('#')) || 'Local skill package',
+            version: manifest.version,
+            path: skillPath,
+            installed: installed.has(id),
+            source: 'local-package',
+            instructions: md.slice(0, 4000)
+          });
+        } catch {
+          packages.push({
+            id: folder.name,
+            name: folder.name,
+            description: 'Skill package exists but could not be parsed.',
+            path: skillPath,
+            installed: installed.has(folder.name),
+            source: 'local-package'
+          });
+        }
+      }
+    }
+    return packages;
   }
 
   toggleSkill(skillId: string, installed: boolean) {

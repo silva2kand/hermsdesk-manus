@@ -44,12 +44,13 @@ interface Window {
     openBrowserAutomation: (target?: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any }>;
     researchWebAutomation: (query: string) => Promise<{ ok: boolean, url?: string, error?: string, event?: any, query?: string }>;
     getBrowserOperatorState: () => Promise<any>;
-    openBrowserOperator: (target?: string) => Promise<any>;
-    navigateBrowserOperator: (target: string) => Promise<any>;
-    readBrowserOperator: () => Promise<any>;
-    clickBrowserOperator: (selector: string) => Promise<any>;
-    typeBrowserOperator: (selector: string, text: string) => Promise<any>;
-    screenshotBrowserOperator: () => Promise<any>;
+    openBrowserOperator: (target?: string, sessionId?: string, label?: string) => Promise<any>;
+    navigateBrowserOperator: (target: string, sessionId?: string) => Promise<any>;
+    readBrowserOperator: (sessionId?: string) => Promise<any>;
+    clickBrowserOperator: (selector: string, sessionId?: string) => Promise<any>;
+    typeBrowserOperator: (selector: string, text: string, sessionId?: string) => Promise<any>;
+    screenshotBrowserOperator: (sessionId?: string) => Promise<any>;
+    inspectBrowserOperator: (sessionId?: string) => Promise<any>;
     getClassicOutlookStatus: () => Promise<any>;
     listClassicOutlookMessages: (limit?: number) => Promise<any[] | { ok: false, error: string }>;
     startMicrosoftGraphLogin: () => Promise<any>;
@@ -86,6 +87,7 @@ interface Window {
     addProjectFiles: (id: string, files: string[]) => Promise<any>;
     startProjectTask: (id: string, prompt: string, agentId?: string) => Promise<any>;
     getWideResearchRuns: () => Promise<any[]>;
+    getWideResearchBlackboard: (runId?: string) => Promise<any[]>;
     startWideResearch: (brief: string, items?: string[]) => Promise<any>;
     getConnectorStatuses: () => Promise<Record<string, any>>;
     createSlidesArtifact: (title: string, brief: string) => Promise<any>;
@@ -103,6 +105,7 @@ interface Window {
 
     // Skills Engine
     getInstalledSkills: () => Promise<string[]>;
+    getSkillPackages: () => Promise<any[]>;
     getSkillGuidance: () => Promise<{ installed: string[], prompt: string }>;
     toggleSkill: (skillId: string, installed: boolean) => Promise<string[]>;
     proposeSkill: (action: any) => Promise<any>;

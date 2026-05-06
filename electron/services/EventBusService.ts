@@ -10,6 +10,8 @@ export type SilvaEvent = {
     | 'tool.called'
     | 'tool.result'
     | 'agent.step'
+    | 'agent.thought'
+    | 'agent.blackboard'
     | 'memory.read'
     | 'memory.write'
     | 'search.query'

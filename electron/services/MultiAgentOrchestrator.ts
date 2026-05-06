@@ -216,6 +216,7 @@ export class MultiAgentOrchestrator {
   private store: any;
   private aiService: any;
   private skillsEngine: any;
+  private eventBus: any = null;
   private cancelFlags: Map<string, boolean> = new Map();
 
   private agents: Agent[] = [
@@ -339,6 +340,23 @@ export class MultiAgentOrchestrator {
     });
   }
 
+  setEventBus(eventBus: any) {
+    this.eventBus = eventBus;
+  }
+
+  private emitThought(task: Task, agent: Agent, phase: 'PLAN' | 'THINK' | 'TOOL_CALL' | 'OBSERVATION' | 'REVISE' | 'DONE' | 'ERROR', content: string, payload: any = {}) {
+    const eventPayload = {
+      taskId: task.id,
+      agentId: agent.id,
+      agentName: agent.name,
+      phase,
+      content,
+      ...payload
+    };
+    this.eventBus?.emit('agent.thought', 'agent-orchestrator', eventPayload, task.id);
+    return eventPayload;
+  }
+
   getAgents() {
     return this.agents.map(a => ({
       ...a,
@@ -416,6 +434,10 @@ export class MultiAgentOrchestrator {
     this.updateAgentStatus(agent.id, 'running', agent.background);
     agent.currentTask = task.input.slice(0, 100);
     sendUpdate(`${agent.name} v${agent.version} starting...`, 'info');
+    this.emitThought(task, agent, 'PLAN', `${agent.name} accepted task and started the local agent loop.`, {
+      steps: task.steps,
+      inputPreview: task.input.slice(0, 500)
+    });
 
     const skillGuidance = this.skillsEngine?.getSkillGuidance?.();
     const messages: any[] = [
@@ -439,6 +461,10 @@ export class MultiAgentOrchestrator {
 
       iterations++;
       sendUpdate(`Iteration ${iterations}/${maxIterations}: Thinking...`, 'thinking');
+      this.emitThought(task, agent, 'THINK', `Iteration ${iterations}/${maxIterations}: preparing next model call.`, {
+        iteration: iterations,
+        maxIterations
+      });
 
       try {
         // Call LLM through the smart engine router (Jan+TQ first)
@@ -449,11 +475,19 @@ export class MultiAgentOrchestrator {
 
         const content = response?.message?.content || '';
         const engine = response?.engine || 'Unknown';
+        this.eventBus?.emit('model.info', 'agent-orchestrator', {
+          taskId: task.id,
+          agentId: agent.id,
+          engine,
+          iteration: iterations,
+          outputChars: content.length
+        }, task.id);
 
         if (!content) {
           recoveryAttempts++;
           const recoveryMessage = `No response from ${engine}. Recovery ${recoveryAttempts}/${maxRecoveryAttempts}: retrying with a smaller continuation prompt.`;
           sendUpdate(recoveryMessage, 'error');
+          this.emitThought(task, agent, 'REVISE', recoveryMessage, { engine, iteration: iterations, recoveryAttempts });
           task.history.push({ role: 'system', content: recoveryMessage, engine, iteration: iterations, recoveryAttempts });
           messages.push({
             role: 'user',
@@ -465,6 +499,10 @@ export class MultiAgentOrchestrator {
         }
 
         sendUpdate(`Engine: ${engine}`, 'info');
+        this.emitThought(task, agent, 'OBSERVATION', `Model route returned output from ${engine}.`, {
+          engine,
+          outputPreview: content.slice(0, 800)
+        });
 
         // Check for tool calls in the response
         const toolCalls = this.extractAllToolCalls(content);
@@ -475,6 +513,10 @@ export class MultiAgentOrchestrator {
             if (this.cancelFlags.get(agent.id)) break;
 
             sendUpdate(`Tool: ${toolCall.name}(${JSON.stringify(toolCall.params)})`, 'tool');
+            this.emitThought(task, agent, 'TOOL_CALL', `Calling ${toolCall.name}.`, {
+              tool: toolCall.name,
+              params: toolCall.params
+            });
 
             try {
               const action = this.skillsEngine.proposeAction({
@@ -490,11 +532,19 @@ export class MultiAgentOrchestrator {
                 : JSON.stringify(result.result || result.error).slice(0, 2000);
 
               sendUpdate(resultStr, 'result');
+              this.emitThought(task, agent, 'OBSERVATION', `Tool ${toolCall.name} returned a result.`, {
+                tool: toolCall.name,
+                resultPreview: resultStr.slice(0, 1000)
+              });
 
               messages.push({ role: 'assistant', content });
               messages.push({ role: 'user', content: `Tool "${toolCall.name}" result:\n${resultStr}\n\nContinue with the task or provide your final answer.` });
             } catch (toolErr: any) {
               sendUpdate(`Tool error: ${toolErr.message}`, 'error');
+              this.emitThought(task, agent, 'ERROR', `Tool ${toolCall.name} failed: ${toolErr.message}`, {
+                tool: toolCall.name,
+                error: toolErr.message
+              });
               messages.push({ role: 'assistant', content });
               messages.push({ role: 'user', content: `Tool "${toolCall.name}" failed: ${toolErr.message}. Try a different approach.` });
             }
@@ -502,6 +552,10 @@ export class MultiAgentOrchestrator {
         } else {
           // No tool calls — this is the agent's final response
           sendUpdate(content, 'info');
+          this.emitThought(task, agent, 'DONE', 'Agent produced a final response.', {
+            outputPreview: content.slice(0, 1000),
+            engine
+          });
           task.history.push({ role: 'assistant', content, engine, iteration: iterations });
           completed = true;
           break;
@@ -510,6 +564,10 @@ export class MultiAgentOrchestrator {
         recoveryAttempts++;
         const message = err?.message || 'Unknown engine error';
         sendUpdate(`Engine error: ${message}`, 'error');
+        this.emitThought(task, agent, 'ERROR', `Engine route failed: ${message}`, {
+          iteration: iterations,
+          recoveryAttempts
+        });
         task.history.push({ role: 'system', content: `Engine error: ${message}`, iteration: iterations, recoveryAttempts });
         if (recoveryAttempts >= maxRecoveryAttempts) {
           task.status = 'failed';
@@ -538,6 +596,10 @@ export class MultiAgentOrchestrator {
     if (agent.status === 'running') {
       this.updateAgentStatus(agent.id, 'idle', agent.background);
     }
+    this.emitThought(task, agent, task.status === 'failed' ? 'ERROR' : 'DONE', `Agent loop finished with status ${task.status}.`, {
+      status: task.status,
+      historyCount: task.history.length
+    });
   }
 
   /** Extract ALL tool calls from LLM output */

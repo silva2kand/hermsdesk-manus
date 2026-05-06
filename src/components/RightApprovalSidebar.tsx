@@ -28,14 +28,17 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const [notice, setNotice] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [silvaEvents, setSilvaEvents] = useState<any[]>([]);
+  const [computerSessions, setComputerSessions] = useState<any[]>([]);
 
   const refresh = async () => {
-    const [skills, intel] = await Promise.all([
+    const [skills, intel, browserState] = await Promise.all([
       window.ipcRenderer?.getPendingSkills?.().catch(() => []),
-      window.ipcRenderer?.getEmailIntelligence?.().catch(() => null)
+      window.ipcRenderer?.getEmailIntelligence?.().catch(() => null),
+      window.ipcRenderer?.getBrowserOperatorState?.().catch(() => null)
     ]);
     setPendingSkills(skills || []);
     if (intel) setEmailIntel(intel);
+    setComputerSessions(browserState?.sessions || []);
   };
 
   useEffect(() => {
@@ -54,7 +57,10 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     const onAppLog = (_: any, log: any) => push({ type: log?.type || 'system', title: 'System', message: log?.content || 'Update' });
     const onAgentLog = (_: any, data: any) => push({ type: 'agent', title: agentNames[data?.agentId] || data?.agentId || 'Agent', message: data?.content || data?.status || 'Agent update' });
     const onAutomation = (_: any, event: any) => push({ type: 'automation', title: event?.title || event?.name || 'Automation', message: event?.detail || event?.message || event?.url || 'Automation step ran' });
-    const onBrowser = (_: any, event: any) => push({ type: 'browser', title: event?.title || event?.action || 'Browser Operator', message: event?.text || event?.url || event?.message || 'Browser event' });
+    const onBrowser = (_: any, event: any) => {
+      push({ type: 'browser', title: event?.title || event?.action || 'Browser Operator', message: event?.text || event?.url || event?.message || 'Browser event' });
+      window.ipcRenderer?.getBrowserOperatorState?.().then(state => setComputerSessions(state?.sessions || [])).catch(() => {});
+    };
     const onWideResearch = (_: any, event: any) => push({ type: 'research', title: event?.title || 'Wide Research', message: event?.brief || event?.status || event?.message || 'Research lane updated' });
     const onScheduler = (_: any, event: any) => push({ type: 'scheduler', title: event?.title || 'Scheduled Task', message: event?.task || event?.message || 'Scheduled task updated' });
     const onMailUpdated = (_: any, event: any) => {
@@ -235,6 +241,37 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
                 {event.payload?.query || event.payload?.title || event.payload?.message || event.payload?.tool || event.payload?.engine || JSON.stringify(event.payload || {}).slice(0, 180)}
               </p>
             </div>
+          ))}
+        </section>
+
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Live Computers</h3>
+            <button
+              onClick={() => window.ipcRenderer?.openBrowserOperator?.('https://www.google.com', `computer-${Date.now()}`, 'Research Computer').catch(() => {})}
+              className="text-[9px] font-black text-blue-600 hover:text-blue-800"
+            >
+              New
+            </button>
+          </div>
+          {computerSessions.length === 0 && <p className="text-[10px] text-gray-400">No browser computer sessions yet.</p>}
+          {computerSessions.slice(0, 5).map(session => (
+            <button
+              key={session.id}
+              onClick={() => window.ipcRenderer?.screenshotBrowserOperator?.(session.id).catch(() => {})}
+              className="w-full p-3 bg-white border border-gray-100 hover:border-blue-100 rounded-2xl text-left transition-all"
+              title="Capture a real thumbnail/screenshot"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Monitor className={`w-3.5 h-3.5 ${session.online ? 'text-green-600' : 'text-gray-300'}`} />
+                  <p className="text-[10px] font-black text-gray-900 truncate">{session.label || session.id}</p>
+                </div>
+                <span className={`text-[8px] font-black uppercase ${session.online ? 'text-green-600' : 'text-gray-400'}`}>{session.online ? 'Live' : 'Closed'}</span>
+              </div>
+              <p className="text-[9px] text-gray-500 truncate mt-1">{session.url || 'No page loaded'}</p>
+              <p className="text-[8px] text-gray-400 mt-1">{session.thumbnailPath ? 'Thumbnail captured' : 'Click to capture thumbnail'}</p>
+            </button>
           ))}
         </section>
 

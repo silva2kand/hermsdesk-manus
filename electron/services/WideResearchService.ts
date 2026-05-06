@@ -22,6 +22,7 @@ export class WideResearchService {
   private store: any;
   private aiService: any;
   private win: any = null;
+  private eventBus: any = null;
 
   constructor(sharedStore: any, aiService: any) {
     this.store = sharedStore || new Store({ name: 'wide-research', atomically: false, watch: false });
@@ -30,6 +31,10 @@ export class WideResearchService {
 
   setWindow(win: any) {
     this.win = win;
+  }
+
+  setEventBus(eventBus: any) {
+    this.eventBus = eventBus;
   }
 
   getRuns(): WideResearchRun[] {
@@ -51,6 +56,7 @@ export class WideResearchService {
     };
     this.saveRun(run);
     this.emit('wide-research:run', run);
+    this.writeBlackboard(run.id, 'system', 'Wide Research run started.', { brief, workerCount: run.workers.length });
     this.executeRun(run.id).catch(error => {
       const failed = { ...this.getRun(run.id), status: 'failed' as const, synthesis: error.message, completedAt: Date.now() };
       this.saveRun(failed as WideResearchRun);
@@ -62,6 +68,11 @@ export class WideResearchService {
   private async executeRun(runId: string) {
     let run = this.getRun(runId);
     if (!run) throw new Error('Wide Research run not found.');
+
+    this.eventBus?.emit('plan.updated', 'wide-research', {
+      runId,
+      steps: run.workers.map(worker => `Research worker: ${worker.item}`)
+    }, runId);
 
     const workerResults = await Promise.all(run.workers.map(worker => this.executeWorker(run!, worker)));
     run = this.getRun(runId)!;
@@ -86,6 +97,9 @@ export class WideResearchService {
     run.synthesis = synthesisResponse?.message?.content || findings;
     run.completedAt = Date.now();
     this.saveRun(run);
+    this.writeBlackboard(run.id, 'synthesizer', 'Wide Research synthesis completed.', {
+      synthesisPreview: (run.synthesis || '').slice(0, 1200)
+    });
     this.emit('wide-research:run', run);
     return run;
   }
@@ -93,6 +107,7 @@ export class WideResearchService {
   private async executeWorker(run: WideResearchRun, worker: ResearchWorker) {
     worker.status = 'running';
     this.updateWorker(run.id, worker);
+    this.writeBlackboard(run.id, worker.id, `Worker started: ${worker.item}`, { item: worker.item });
     try {
       const response = await this.aiService.chatWithBestAvailable('', [
         {
@@ -106,9 +121,17 @@ export class WideResearchService {
       ]);
       worker.status = 'done';
       worker.result = response?.message?.content || 'No result returned.';
+      this.writeBlackboard(run.id, worker.id, `Worker completed: ${worker.item}`, {
+        item: worker.item,
+        resultPreview: (worker.result || '').slice(0, 1200)
+      });
     } catch (error: any) {
       worker.status = 'failed';
       worker.error = error?.message || 'Worker failed.';
+      this.writeBlackboard(run.id, worker.id, `Worker failed: ${worker.item}`, {
+        item: worker.item,
+        error: worker.error
+      });
     }
     this.updateWorker(run.id, worker);
     return worker;
@@ -132,6 +155,27 @@ export class WideResearchService {
       ? runs.map(item => item.id === run.id ? run : item)
       : [run, ...runs];
     this.store.set('wideResearchRuns', next.slice(0, 50));
+  }
+
+  getBlackboard(runId?: string) {
+    const board = this.store.get('wideResearchBlackboard', []) as any[];
+    const items = Array.isArray(board) ? board : [];
+    return runId ? items.filter(item => item.runId === runId) : items.slice(0, 200);
+  }
+
+  private writeBlackboard(runId: string, actor: string, message: string, payload: any = {}) {
+    const entry = {
+      id: `bb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      runId,
+      actor,
+      message,
+      payload,
+      createdAt: new Date().toISOString()
+    };
+    const board = [entry, ...this.getBlackboard()].slice(0, 500);
+    this.store.set('wideResearchBlackboard', board);
+    this.eventBus?.emit('agent.blackboard', 'wide-research', entry, runId);
+    return entry;
   }
 
   private normalizeItems(brief: string, items?: string[]) {

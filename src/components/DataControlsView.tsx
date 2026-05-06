@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Globe, Lock, Shield, Database, ChevronRight, ExternalLink, 
-  Trash2, RefreshCw, Key, Info, MousePointerClick, Type, Camera, FileSearch
+  Trash2, RefreshCw, Key, Info, MousePointerClick, Type, Camera, FileSearch, Eye
 } from 'lucide-react';
 
 export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' }) => {
@@ -12,6 +12,7 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
   const [selector, setSelector] = useState('input[name="q"]');
   const [typeText, setTypeText] = useState('');
   const [pageText, setPageText] = useState('');
+  const [activeSessionId, setActiveSessionId] = useState('main');
 
   React.useEffect(() => {
     refreshOperator();
@@ -33,13 +34,13 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
   };
 
   const openOperator = async () => {
-    const result = await window.ipcRenderer?.openBrowserOperator?.(target);
+    const result = await window.ipcRenderer?.openBrowserOperator?.(target, activeSessionId, activeSessionId === 'main' ? 'Main Computer' : activeSessionId);
     await refreshOperator();
     showNotice(result?.ok ? 'Browser Operator opened with a live controlled window.' : (result?.error || 'Could not open Browser Operator.'));
   };
 
   const readOperator = async () => {
-    const result = await window.ipcRenderer?.readBrowserOperator?.();
+    const result = await window.ipcRenderer?.readBrowserOperator?.(activeSessionId);
     if (result?.ok) {
       setPageText(result.text || '');
       showNotice(`Read page: ${result.title || result.url}`);
@@ -49,21 +50,32 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
   };
 
   const clickOperator = async () => {
-    const result = await window.ipcRenderer?.clickBrowserOperator?.(selector);
+    const result = await window.ipcRenderer?.clickBrowserOperator?.(selector, activeSessionId);
     await refreshOperator();
     showNotice(result?.ok ? `Clicked ${selector}` : (result?.error || 'Selector not found.'));
   };
 
   const typeOperator = async () => {
-    const result = await window.ipcRenderer?.typeBrowserOperator?.(selector, typeText);
+    const result = await window.ipcRenderer?.typeBrowserOperator?.(selector, typeText, activeSessionId);
     await refreshOperator();
     showNotice(result?.ok ? `Typed into ${selector}` : (result?.error || 'Selector not found.'));
   };
 
   const screenshotOperator = async () => {
-    const result = await window.ipcRenderer?.screenshotBrowserOperator?.();
+    const result = await window.ipcRenderer?.screenshotBrowserOperator?.(activeSessionId);
     await refreshOperator();
     showNotice(result?.ok ? `Screenshot saved: ${result.path}` : (result?.error || 'Screenshot failed.'));
+  };
+
+  const inspectOperator = async () => {
+    const result = await window.ipcRenderer?.inspectBrowserOperator?.(activeSessionId);
+    await refreshOperator();
+    if (result?.ok) {
+      setPageText(`Screenshot: ${result.screenshotPath}\nURL: ${result.url}\nTitle: ${result.title}\n\n${result.visibleText || ''}`);
+      showNotice('Captured real screen frame and page text for the computer browser.');
+    } else {
+      showNotice(result?.error || 'Could not inspect browser screen.');
+    }
   };
 
   const analyzeCsv = async () => {
@@ -129,6 +141,20 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
                   Open / Navigate
                 </button>
               </div>
+              <div className="flex flex-wrap gap-2">
+                {['main', ...(operatorState?.sessions || []).map((session: any) => session.id)].filter((id, index, all) => all.indexOf(id) === index).slice(0, 8).map(id => (
+                  <button
+                    key={id}
+                    onClick={() => setActiveSessionId(id)}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black border ${activeSessionId === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-100'}`}
+                  >
+                    {id === 'main' ? 'Main Computer' : id}
+                  </button>
+                ))}
+                <button onClick={() => setActiveSessionId(`computer-${Date.now()}`)} className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-gray-50 text-gray-700 border-gray-100">
+                  New Computer
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto_auto] gap-2">
                 <input value={selector} onChange={e => setSelector(e.target.value)} className="px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs outline-none" placeholder="CSS selector" />
                 <input value={typeText} onChange={e => setTypeText(e.target.value)} className="px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs outline-none" placeholder="Text to type" />
@@ -153,6 +179,10 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
                 <button onClick={analyzeCsv} className="px-4 py-2 bg-green-50 text-green-700 border border-green-100 rounded-xl text-xs font-black flex items-center">
                   <Database className="w-3.5 h-3.5 mr-2" />
                   Analyze CSV
+                </button>
+                <button onClick={inspectOperator} className="px-4 py-2 bg-purple-50 text-purple-700 border border-purple-100 rounded-xl text-xs font-black flex items-center">
+                  <Eye className="w-3.5 h-3.5 mr-2" />
+                  See Screen
                 </button>
               </div>
               {pageText && (

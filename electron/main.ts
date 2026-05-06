@@ -360,6 +360,8 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   automationService?.setWindow(win)
   browserOperator?.setWindow(win)
   eventBus?.setWindow(win)
+  orchestrator?.setEventBus?.(eventBus)
+  wideResearchService?.setEventBus?.(eventBus)
   automationService?.setEventBus?.(eventBus)
   browserOperator?.setEventBus?.(eventBus)
   whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
@@ -574,12 +576,19 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     return { ...opened, trace };
   })
   ipcMain.handle('browser-operator:get-state', () => browserOperator.getState())
-  ipcMain.handle('browser-operator:open', (_, target) => browserOperator.open(target))
-  ipcMain.handle('browser-operator:navigate', (_, target) => browserOperator.navigate(target))
-  ipcMain.handle('browser-operator:read', () => browserOperator.readPage())
-  ipcMain.handle('browser-operator:click', (_, selector) => browserOperator.click(selector))
-  ipcMain.handle('browser-operator:type', (_, { selector, text }) => browserOperator.type(selector, text))
-  ipcMain.handle('browser-operator:screenshot', () => browserOperator.screenshot())
+  ipcMain.handle('browser-operator:open', (_, target) => {
+    const payload = typeof target === 'object' && target !== null ? target : { target }
+    return browserOperator.open(payload.target, payload.sessionId, payload.label)
+  })
+  ipcMain.handle('browser-operator:navigate', (_, target) => {
+    const payload = typeof target === 'object' && target !== null ? target : { target }
+    return browserOperator.navigate(payload.target, payload.sessionId)
+  })
+  ipcMain.handle('browser-operator:read', (_, sessionId) => browserOperator.readPage(sessionId))
+  ipcMain.handle('browser-operator:click', (_, payload) => typeof payload === 'object' ? browserOperator.click(payload.selector, payload.sessionId) : browserOperator.click(payload))
+  ipcMain.handle('browser-operator:type', (_, { selector, text, sessionId }) => browserOperator.type(selector, text, sessionId))
+  ipcMain.handle('browser-operator:screenshot', (_, sessionId) => browserOperator.screenshot(sessionId))
+  ipcMain.handle('browser-operator:inspect', (_, sessionId) => browserOperator.inspectScreen(sessionId))
   ipcMain.handle('outlook:classic-status', () => integrationService.getClassicOutlookStatus())
   ipcMain.handle('outlook:classic-messages', async (_, limit) => {
     const messages = await integrationService.listClassicOutlookMessages(limit)
@@ -730,6 +739,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
 
   // Skills Engine Handlers
   ipcMain.handle('skills:get-installed', () => skillsEngine.getInstalledSkills())
+  ipcMain.handle('skills:get-packages', () => skillsEngine.getSkillPackages())
   ipcMain.handle('skills:get-guidance', () => skillsEngine.getSkillGuidance())
   ipcMain.handle('skills:toggle', (_, { skillId, installed }) => skillsEngine.toggleSkill(skillId, installed))
   ipcMain.handle('skills:propose', (_, action) => skillsEngine.proposeAction(action))
@@ -785,6 +795,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     return { ok: true, project, task }
   })
   ipcMain.handle('wide-research:get-runs', () => wideResearchService.getRuns())
+  ipcMain.handle('wide-research:get-blackboard', (_, runId) => wideResearchService.getBlackboard(runId))
   ipcMain.handle('wide-research:start', (_, { brief, items }) => wideResearchService.startRun(brief, items))
   ipcMain.handle('artifacts:create-slides', (_, { title, brief }) => artifactService.createSlides(title, brief))
   ipcMain.handle('artifacts:create-website', (_, { title, brief }) => artifactService.createWebsite(title, brief))

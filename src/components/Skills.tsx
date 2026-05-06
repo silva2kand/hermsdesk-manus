@@ -144,6 +144,7 @@ export const Skills = () => {
   const [activeTab, setActiveTab] = useState<SkillCategory>('MYTHOS');
   const [query, setQuery] = useState('');
   const [installedSkills, setInstalledSkills] = useState<string[]>([]);
+  const [packageSkills, setPackageSkills] = useState<any[]>([]);
   const [notice, setNotice] = useState('');
 
   const showNotice = (message: string) => {
@@ -152,12 +153,16 @@ export const Skills = () => {
   };
 
   const refresh = async () => {
-    const installed = await window.ipcRenderer?.getInstalledSkills?.().catch(() => []);
+    const [installed, packages] = await Promise.all([
+      window.ipcRenderer?.getInstalledSkills?.().catch(() => []),
+      window.ipcRenderer?.getSkillPackages?.().catch(() => [])
+    ]);
     const merged = Array.from(new Set([
       ...(installed || []),
       ...skillCatalog.filter(skill => skill.defaultInstalled).map(skill => skill.id)
     ]));
     setInstalledSkills(merged);
+    setPackageSkills(packages || []);
   };
 
   useEffect(() => {
@@ -166,11 +171,21 @@ export const Skills = () => {
 
   const filteredSkills = useMemo(() => {
     const lower = query.toLowerCase();
-    return skillCatalog.filter(skill =>
+    const packaged = packageSkills
+      .filter(skill => !skillCatalog.some(item => item.id === skill.id))
+      .map(skill => ({
+        id: skill.id,
+        name: skill.name,
+        category: 'CUSTOM' as SkillCategory,
+        icon: Wrench,
+        description: skill.description,
+        updated: skill.source === 'local-package' ? 'LOCAL SKILL PACKAGE' : 'BUILT-IN PACKAGE'
+      }));
+    return [...skillCatalog, ...packaged].filter(skill =>
       skill.category === activeTab &&
       (!lower || skill.name.toLowerCase().includes(lower) || skill.description.toLowerCase().includes(lower))
     );
-  }, [activeTab, query]);
+  }, [activeTab, query, packageSkills]);
 
   const toggleSkill = async (skillId: string) => {
     const installed = installedSkills.includes(skillId);

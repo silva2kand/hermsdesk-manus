@@ -4,18 +4,29 @@ import path from 'node:path';
 
 export type BrowserOperatorEvent = {
   id: string;
-  type: 'open' | 'navigate' | 'click' | 'type' | 'read' | 'screenshot' | 'error';
+  type: 'open' | 'navigate' | 'click' | 'type' | 'read' | 'screenshot' | 'vision' | 'error';
   status: 'done' | 'error';
   detail: string;
   url?: string;
+  sessionId?: string;
   screenshotPath?: string;
   createdAt: string;
+};
+
+type BrowserSession = {
+  id: string;
+  label: string;
+  url: string;
+  online: boolean;
+  thumbnailPath?: string;
+  updatedAt: string;
 };
 
 const MAX_EVENTS = 100;
 
 export class BrowserOperatorService {
   private operatorWindow: BrowserWindow | null = null;
+  private operatorWindows: Map<string, BrowserWindow> = new Map();
   private appWindow: BrowserWindow | null = null;
   private screenshotDir: string;
   private eventBus: any = null;
@@ -34,11 +45,39 @@ export class BrowserOperatorService {
   }
 
   getState() {
+    const sessions = this.getSessions();
     return {
-      online: Boolean(this.operatorWindow && !this.operatorWindow.isDestroyed()),
-      url: this.operatorWindow && !this.operatorWindow.isDestroyed() ? this.operatorWindow.webContents.getURL() : '',
+      online: sessions.some(session => session.online),
+      url: this.operatorWindow && !this.operatorWindow.isDestroyed() ? this.operatorWindow.webContents.getURL() : sessions[0]?.url || '',
+      sessions,
       events: this.getEvents()
     };
+  }
+
+  getSessions(): BrowserSession[] {
+    const saved = this.store.get('browserOperatorSessions', []) as BrowserSession[];
+    const byId = new Map((Array.isArray(saved) ? saved : []).map(session => [session.id, session]));
+    for (const [id, win] of this.operatorWindows.entries()) {
+      if (win.isDestroyed()) {
+        this.operatorWindows.delete(id);
+        continue;
+      }
+      const previous = byId.get(id);
+      byId.set(id, {
+        id,
+        label: previous?.label || id,
+        url: win.webContents.getURL(),
+        online: true,
+        thumbnailPath: previous?.thumbnailPath,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    const sessions = Array.from(byId.values()).map(session => ({
+      ...session,
+      online: Boolean(this.operatorWindows.get(session.id) && !this.operatorWindows.get(session.id)?.isDestroyed())
+    })).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    this.store.set('browserOperatorSessions', sessions.slice(0, 12));
+    return sessions.slice(0, 12);
   }
 
   getEvents(): BrowserOperatorEvent[] {
@@ -64,6 +103,7 @@ export class BrowserOperatorService {
       status: next.status,
       detail: next.detail,
       url: next.url,
+      sessionId: next.sessionId,
       screenshotPath: next.screenshotPath
     }, next.id);
     return next;
@@ -77,12 +117,16 @@ export class BrowserOperatorService {
     return `https://www.google.com/search?q=${encodeURIComponent(raw)}`;
   }
 
-  private ensureWindow() {
-    if (this.operatorWindow && !this.operatorWindow.isDestroyed()) return this.operatorWindow;
-    this.operatorWindow = new BrowserWindow({
+  private ensureWindow(sessionId = 'main', label = 'Main Computer') {
+    const existing = this.operatorWindows.get(sessionId);
+    if (existing && !existing.isDestroyed()) {
+      this.operatorWindow = existing;
+      return existing;
+    }
+    const created = new BrowserWindow({
       width: 1180,
       height: 820,
-      title: 'HermesDesk ME Browser Operator',
+      title: `HermesDesk ME Computer - ${label}`,
       show: true,
       webPreferences: {
         sandbox: true,
@@ -90,38 +134,59 @@ export class BrowserOperatorService {
         nodeIntegration: false
       }
     });
-    this.operatorWindow.on('closed', () => {
-      this.operatorWindow = null;
+    created.on('closed', () => {
+      this.operatorWindows.delete(sessionId);
+      if (this.operatorWindow === created) this.operatorWindow = null;
+      this.saveSession(sessionId, label, '', false);
     });
-    return this.operatorWindow;
+    this.operatorWindows.set(sessionId, created);
+    this.operatorWindow = created;
+    this.saveSession(sessionId, label, '', true);
+    return created;
   }
 
-  async open(target?: string) {
+  private saveSession(id: string, label: string, url: string, online: boolean, thumbnailPath?: string) {
+    const sessions = this.getSessions().filter(session => session.id !== id);
+    sessions.unshift({
+      id,
+      label,
+      url,
+      online,
+      thumbnailPath,
+      updatedAt: new Date().toISOString()
+    });
+    this.store.set('browserOperatorSessions', sessions.slice(0, 12));
+  }
+
+  async open(target?: string, sessionId = 'main', label = 'Main Computer') {
     const url = this.normalizeTarget(target);
     try {
-      const win = this.ensureWindow();
+      const win = this.ensureWindow(sessionId, label);
       await win.loadURL(url);
       win.show();
+      this.saveSession(sessionId, label, url, true);
       return {
         ok: true,
         url,
-        event: this.push({ type: 'open', status: 'done', detail: `Opened ${url}`, url })
+        sessionId,
+        sessions: this.getSessions(),
+        event: this.push({ type: 'open', status: 'done', detail: `Opened ${url}`, url, sessionId })
       };
     } catch (error: any) {
       return {
         ok: false,
         error: error?.message || 'Could not open browser operator',
-        event: this.push({ type: 'error', status: 'error', detail: error?.message || `Open failed: ${url}`, url })
+        event: this.push({ type: 'error', status: 'error', detail: error?.message || `Open failed: ${url}`, url, sessionId })
       };
     }
   }
 
-  async navigate(target: string) {
-    return this.open(target);
+  async navigate(target: string, sessionId = 'main') {
+    return this.open(target, sessionId, sessionId === 'main' ? 'Main Computer' : sessionId);
   }
 
-  async readPage() {
-    const win = this.ensureWindow();
+  async readPage(sessionId = 'main') {
+    const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
         (() => ({
@@ -130,15 +195,16 @@ export class BrowserOperatorService {
           text: document.body ? document.body.innerText.slice(0, 12000) : ''
         }))()
       `);
-      this.push({ type: 'read', status: 'done', detail: `Read page: ${result.title || result.url}`, url: result.url });
+      this.saveSession(sessionId, sessionId, result.url, true);
+      this.push({ type: 'read', status: 'done', detail: `Read page: ${result.title || result.url}`, url: result.url, sessionId });
       return { ok: true, ...result };
     } catch (error: any) {
       return { ok: false, error: error?.message || 'Could not read page' };
     }
   }
 
-  async click(selector: string) {
-    const win = this.ensureWindow();
+  async click(selector: string, sessionId = 'main') {
+    const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
         (() => {
@@ -149,15 +215,15 @@ export class BrowserOperatorService {
           return { ok: true, text: (el.innerText || el.getAttribute('aria-label') || el.getAttribute('title') || '').slice(0, 200), url: location.href };
         })()
       `);
-      this.push({ type: result.ok ? 'click' : 'error', status: result.ok ? 'done' : 'error', detail: result.ok ? `Clicked ${selector}` : `${selector}: ${result.error}`, url: result.url });
+      this.push({ type: result.ok ? 'click' : 'error', status: result.ok ? 'done' : 'error', detail: result.ok ? `Clicked ${selector}` : `${selector}: ${result.error}`, url: result.url, sessionId });
       return result;
     } catch (error: any) {
       return { ok: false, error: error?.message || 'Click failed' };
     }
   }
 
-  async type(selector: string, text: string) {
-    const win = this.ensureWindow();
+  async type(selector: string, text: string, sessionId = 'main') {
+    const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
         (() => {
@@ -174,26 +240,45 @@ export class BrowserOperatorService {
           return { ok: true, url: location.href };
         })()
       `);
-      this.push({ type: result.ok ? 'type' : 'error', status: result.ok ? 'done' : 'error', detail: result.ok ? `Typed into ${selector}` : `${selector}: ${result.error}`, url: result.url });
+      this.push({ type: result.ok ? 'type' : 'error', status: result.ok ? 'done' : 'error', detail: result.ok ? `Typed into ${selector}` : `${selector}: ${result.error}`, url: result.url, sessionId });
       return result;
     } catch (error: any) {
       return { ok: false, error: error?.message || 'Type failed' };
     }
   }
 
-  async screenshot() {
-    const win = this.ensureWindow();
+  async screenshot(sessionId = 'main') {
+    const win = this.ensureWindow(sessionId);
     try {
       const image = await win.webContents.capturePage();
-      const filePath = path.join(this.screenshotDir, `browser-${Date.now()}.png`);
+      const filePath = path.join(this.screenshotDir, `browser-${sessionId}-${Date.now()}.png`);
       fs.writeFileSync(filePath, nativeImage.createFromBuffer(image.toPNG()).toPNG());
+      this.saveSession(sessionId, sessionId, win.webContents.getURL(), true, filePath);
       return {
         ok: true,
         path: filePath,
-        event: this.push({ type: 'screenshot', status: 'done', detail: `Saved screenshot ${filePath}`, url: win.webContents.getURL(), screenshotPath: filePath })
+        sessions: this.getSessions(),
+        event: this.push({ type: 'screenshot', status: 'done', detail: `Saved screenshot ${filePath}`, url: win.webContents.getURL(), sessionId, screenshotPath: filePath })
       };
     } catch (error: any) {
       return { ok: false, error: error?.message || 'Screenshot failed' };
     }
+  }
+
+  async inspectScreen(sessionId = 'main') {
+    const shot = await this.screenshot(sessionId);
+    if (!shot.ok) return shot;
+    const page = await this.readPage(sessionId).catch((error: any) => ({ ok: false, error: error?.message }));
+    const result = {
+      ok: true,
+      sessionId,
+      screenshotPath: shot.path,
+      url: page?.url || '',
+      title: page?.title || '',
+      visibleText: String(page?.text || '').slice(0, 6000),
+      note: 'Real screenshot and DOM text captured. Vision-model interpretation requires a connected multimodal provider.'
+    };
+    this.push({ type: 'vision', status: 'done', detail: `Captured visual inspection frame for ${sessionId}`, url: result.url, sessionId, screenshotPath: shot.path });
+    return result;
   }
 }
