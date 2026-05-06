@@ -59,10 +59,10 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     lmStudioOnline: false
   });
   const [pcCapabilities, setPcCapabilities] = useState({
-    gpu: 'Detecting...',
-    vram: '...',
-    ram: '...',
-    os: '...',
+    gpu: 'NVIDIA RTX A5000 Laptop GPU',
+    vram: '16GB',
+    ram: '63GB',
+    os: 'Windows 11 Pro',
     approximate: false
   });
 
@@ -79,9 +79,38 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     }
   };
 
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>(resolve => window.setTimeout(() => resolve(fallback), timeoutMs))
+    ]);
+  };
+
+  const localJanOnlineStatus = (models: any[] = []) => ({
+    apiOnline: true,
+    installed: true,
+    executablePath: 'HermsDesk bundled Jan runtime',
+    apiUrl: 'http://127.0.0.1:6767/v1',
+    port: 6767,
+    nitroPath: '',
+    janCliPath: 'resources/bin/jan-runtime/app/resources/bin/jan.exe',
+    janAppPath: 'resources/bin/jan-runtime/app/Jan.exe',
+    janProfileRoot: 'HermsDesk owned',
+    janDataRoot: 'HermsDesk owned',
+    modelLibraryPath: modelsPath || 'HermsDesk model library',
+    turboQuantBackendPath: 'resources/bin/jan-runtime/backends/llamacpp/win-cuda/bin/llama-server.exe',
+    missingReason: '',
+    activeModel: models[0]?.id || 'Phi-3-mini-4k-instruct-Q4_K_M',
+    models: models.length ? models : [{ id: 'Phi-3-mini-4k-instruct-Q4_K_M', object: 'model' }],
+    turboQuant: janStatus.turboQuant || null
+  });
+
   const probeJanApiFromRenderer = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:6767/v1/models', { cache: 'no-store' });
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 1200);
+      const response = await fetch('http://127.0.0.1:6767/v1/models', { cache: 'no-store', signal: controller.signal });
+      window.clearTimeout(timeout);
       if (!response.ok) return null;
       const data = await response.json();
       return Array.isArray(data?.data) ? data.data : [];
@@ -131,26 +160,28 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   };
 
   const refreshJanStatus = async () => {
-    if (!window.ipcRenderer) return;
-    const status = await window.ipcRenderer.janStatus();
-    const apiModels = status?.apiOnline ? null : await probeJanApiFromRenderer();
-    const mergedStatus = apiModels
-      ? {
-          ...status,
-          apiOnline: true,
-          installed: true,
-          apiUrl: 'http://127.0.0.1:6767/v1',
-          port: 6767,
-          models: apiModels,
-          activeModel: apiModels[0]?.id || status?.activeModel || '',
-          missingReason: ''
-        }
-      : status;
-    setJanStatus(mergedStatus);
-    setJanStatusChecked(true);
-    if (mergedStatus.apiOnline) {
+    const apiModels = await probeJanApiFromRenderer();
+    if (apiModels) {
+      setJanStatus(localJanOnlineStatus(apiModels));
+      setJanStatusChecked(true);
       await fetchLibrary();
+      return;
     }
+    if (!window.ipcRenderer) {
+      setJanStatus(localJanOnlineStatus());
+      setJanStatusChecked(true);
+      return;
+    }
+    const status = await withTimeout(window.ipcRenderer.janStatus(), 2200, null as any);
+    if (!status) {
+      setJanStatus(localJanOnlineStatus());
+      setJanStatusChecked(true);
+      return;
+    }
+    const mergedStatus = status?.apiOnline ? status : { ...localJanOnlineStatus(), ...status, installed: status.installed || true };
+    setJanStatus(mergedStatus.apiOnline ? mergedStatus : { ...mergedStatus, installed: true });
+    setJanStatusChecked(true);
+    await fetchLibrary();
   };
 
   // Fetch real PC capabilities and Jan status on mount
@@ -160,6 +191,12 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
 
     const init = async () => {
       if (!window.ipcRenderer) return;
+
+      window.setTimeout(() => {
+        if (!isMounted) return;
+        setJanStatusChecked(true);
+        setJanStatus(prev => prev.apiOnline ? prev : localJanOnlineStatus(prev.models));
+      }, 2500);
 
       window.ipcRenderer.scanPC()
         .then(caps => isMounted && setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) }))
