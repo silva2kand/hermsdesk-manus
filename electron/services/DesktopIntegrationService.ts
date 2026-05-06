@@ -261,16 +261,16 @@ export class DesktopIntegrationService {
 
   private async startVoiceStackServer() {
     try {
-      await axios.get('http://localhost:7100/', { timeout: 1500 });
+      await axios.get('http://localhost:7100/', { timeout: 700, validateStatus: status => status >= 200 && status < 500 });
       return { ok: true, alreadyRunning: true };
     } catch {
       if (!fs.existsSync(VOICE_STACK_LAUNCHER)) return { ok: false, error: 'Silva Voice Stack launcher was not found.' };
       const child = spawn(VOICE_STACK_LAUNCHER, [], { cwd: VOICE_STACK_ROOT, detached: true, stdio: 'ignore', windowsHide: true });
       child.unref();
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
         try {
-          await axios.get('http://localhost:7100/', { timeout: 1500 });
+          await axios.get('http://localhost:7100/', { timeout: 700, validateStatus: status => status >= 200 && status < 500 });
           return { ok: true, started: true };
         } catch {
           // Voice models can take a moment to initialize.
@@ -491,14 +491,34 @@ Pause
     try {
       await this.startVoiceStackServer();
       const [home, profiles, accents] = await Promise.all([
-        axios.get('http://localhost:7100/', { timeout: 2000 }),
-        axios.get('http://localhost:7100/tts/profiles', { timeout: 2000 }).catch(() => null),
-        axios.get('http://localhost:7100/tts/accents', { timeout: 2000 }).catch(() => null)
+        axios.get('http://localhost:7100/', { timeout: 900, validateStatus: status => status >= 200 && status < 500 }),
+        axios.get('http://localhost:7100/tts/profiles', { timeout: 900, validateStatus: status => status >= 200 && status < 500 }).catch(() => null),
+        axios.get('http://localhost:7100/tts/accents', { timeout: 900, validateStatus: status => status >= 200 && status < 500 }).catch(() => null)
       ]);
-      return { ok: true, url: 'http://localhost:7100/', status: home.status, profiles: profiles?.data || null, accents: accents?.data || null };
+      return { ok: true, ready: true, url: 'http://localhost:7100/', status: home.status, profiles: profiles?.data || null, accents: accents?.data || null };
     } catch (error: any) {
       return { ok: false, url: 'http://localhost:7100/', error: error.message };
     }
+  }
+
+  private speakWithWindowsSapiDetached(cleanText: string) {
+    if (process.platform !== 'win32') return false;
+    const escaped = cleanText.replace(/'/g, "''");
+    const script = `
+Add-Type -AssemblyName System.Speech
+$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$speaker.Rate = 0
+$speaker.Volume = 100
+$speaker.Speak('${escaped}')
+`;
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    child.unref();
+    return true;
   }
 
   async speakWithVoiceStack(text: string, options: any = {}) {
@@ -523,10 +543,12 @@ Pause
     const endpoints = ['/tts/synthesize', '/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
     let lastError = '';
 
+    await this.startVoiceStackServer().catch(() => null);
+
     for (const endpoint of endpoints) {
       try {
         const response = await axios.post(`http://localhost:7100${endpoint}`, payload, {
-          timeout: 300000,
+          timeout: 1200,
           responseType: 'arraybuffer',
           validateStatus: status => status >= 200 && status < 300
         });
@@ -545,26 +567,17 @@ Pause
         try { parsed = JSON.parse(body); } catch { parsed = { message: body }; }
         return { ok: true, mode: 'silva-premium-voice-stack', endpoint, voice, language, response: parsed };
       } catch (error: any) {
+        if (error?.code === 'ECONNABORTED') {
+          return { ok: true, mode: 'silva-voice-stack-queued', endpoint, voice, language };
+        }
         lastError = error?.response?.data
           ? Buffer.from(error.response.data).toString('utf8').slice(0, 300)
           : error?.message || String(error);
       }
     }
 
-    if (process.platform === 'win32') {
-      try {
-        const escaped = cleanText.replace(/'/g, "''");
-        await this.runPowerShellText(`
-Add-Type -AssemblyName System.Speech
-$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$speaker.Rate = 0
-$speaker.Volume = 100
-$speaker.Speak('${escaped}')
-`, 300000);
-        return { ok: true, mode: 'windows-sapi-fallback', voice, language };
-      } catch (error: any) {
-        lastError = `${lastError || ''} ${error?.message || error}`.trim();
-      }
+    if (this.speakWithWindowsSapiDetached(cleanText)) {
+      return { ok: true, mode: 'windows-sapi-queued', voice, language };
     }
 
     return {

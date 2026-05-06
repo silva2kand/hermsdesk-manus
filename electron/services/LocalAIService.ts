@@ -325,10 +325,33 @@ export class LocalAIService {
 
     const runtime = this.getJanRuntimeDiagnostics();
     if (runtime.janCliPath) {
+      const library = await providerService.listLibraryModels().catch(() => []);
+      const models = Array.isArray(library) ? library.filter((model: any) => model?.path && fs.existsSync(model.path)) : [];
+      const preferred = (
+        models.find((model: any) => /qwen/i.test(model.name || model.id || '')) ||
+        models.find((model: any) => /phi/i.test(model.name || model.id || '')) ||
+        models[0]
+      );
+      if (preferred) {
+        const started = await this.startJanCliServe(preferred.path, preferred.name || preferred.id);
+        const newStatus = await this.getJanEngineStatus();
+        if (started.ok || newStatus.apiOnline) {
+          this.activeJanModel = preferred.name || preferred.id;
+          this.store.set('activeJanModel', this.activeJanModel);
+          return {
+            ok: true,
+            engine: 'Jan + TurboQuant',
+            message: `Built-in Jan + TurboQuant started with ${this.activeJanModel}.`,
+            model: this.activeJanModel,
+            status: newStatus
+          };
+        }
+        return { ok: false, engine: 'Jan + TurboQuant', error: started.error || 'Jan CLI did not become ready.', status: newStatus };
+      }
       return {
         ok: false,
         engine: 'Jan + TurboQuant',
-        error: 'Bundled Jan CLI is installed. Download a GGUF model in Model Hub and press Load; HermsDesk will start `jan serve` for that model on port 6767.',
+        error: 'Bundled Jan CLI is installed, but no usable GGUF model is in the HermsDesk model library. Download Qwen or Phi in Model Hub, then press Start Jan.',
         status
       };
     }
