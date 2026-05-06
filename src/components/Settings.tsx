@@ -111,6 +111,7 @@ export const Settings = () => {
   ];
 
   const cloudProviders = [
+    { id: 'jan-turboquant', name: 'Jan + TurboQuant Local API Key', icon: Cpu, color: 'bg-gray-900' },
     { id: 'gemini', name: 'Google Gemini', icon: Globe, color: 'bg-blue-500' },
     { id: 'nvidia', name: 'NVIDIA NIM', icon: Cpu, color: 'bg-green-600' },
     { id: 'openrouter', name: 'OpenRouter', icon: Zap, color: 'bg-purple-600' },
@@ -178,7 +179,7 @@ export const Settings = () => {
                </div>
 
                {[
-                 { id: 'jan-turboquant', name: 'Jan + TurboQuant', port: '1337' },
+                 { id: 'jan-turboquant', name: 'Jan + TurboQuant', port: '6767' },
                  { id: 'ollama', name: 'Ollama', port: '11434' },
                  { id: 'lm-studio', name: 'LM Studio', port: '1234' },
                  { id: 'opencode', name: 'OpenCode', port: '4096 / 3456' },

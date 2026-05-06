@@ -18,7 +18,7 @@ export interface Model {
 // LocalAIService — HermesDesk ME 1.8
 // 
 // ENGINE PRIORITY:
-//   1. Jan + TurboQuant  (built-in, primary, port 1337)
+//   1. Jan + TurboQuant  (built-in, primary, port 6767; 1337 compatibility)
 //   2. Ollama            (optional external, port 11434)
 //   3. LM Studio         (optional external, port 1234)
 //   4. Cloud free-tier   (fallback only — OpenRouter/NVIDIA/Gemini)
@@ -32,7 +32,7 @@ export class LocalAIService {
   private store: any;
 
   // Built-in Jan + TurboQuant Engine (PRIMARY)
-  private janUrl = 'http://127.0.0.1:1337/v1';
+  private janUrl = 'http://127.0.0.1:6767/v1';
   private activeJanModel = '';
   private modelsPath = path.join(os.homedir(), 'jan', 'models');
 
@@ -75,8 +75,21 @@ export class LocalAIService {
     ];
   }
 
+  private getJanCliSearchPaths() {
+    return [
+      path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe'),
+      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'resources', 'bin', 'jan.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'resources', 'bin', 'jan.exe')
+    ];
+  }
+
   private getJanAppSearchPaths() {
     return [
+      path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'Jan.exe'),
+      path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'jan.exe'),
+      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'Jan.exe'),
+      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'jan.exe'),
       path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'Jan.exe'),
       path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'Jan.exe'),
       path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'jan.exe'),
@@ -89,18 +102,27 @@ export class LocalAIService {
 
   private getJanRuntimeDiagnostics() {
     const nitroPaths = this.getNitroSearchPaths();
+    const janCliPaths = this.getJanCliSearchPaths();
     const janAppPaths = this.getJanAppSearchPaths();
     const nitroPath = nitroPaths.find(p => fs.existsSync(p)) || '';
+    const janCliPath = janCliPaths.find(p => fs.existsSync(p)) || '';
     const janAppPath = janAppPaths.find(p => fs.existsSync(p) && p.toLowerCase().endsWith('.exe')) || '';
     return {
       nitroPath,
+      janCliPath,
       janAppPath,
-      installed: Boolean(nitroPath || janAppPath),
-      searchedPaths: [...nitroPaths, ...janAppPaths],
-      missingReason: nitroPath || janAppPath
+      installed: Boolean(nitroPath || janCliPath || janAppPath),
+      searchedPaths: [...nitroPaths, ...janCliPaths, ...janAppPaths],
+      missingReason: nitroPath || janCliPath || janAppPath
         ? ''
-        : 'No bundled nitro.exe or Jan.exe was found in the app bin/resources paths or the user Jan install paths.'
+        : 'No bundled nitro.exe, Jan CLI, or Jan.exe was found in the app bin/resources paths or the user Jan install paths.'
     };
+  }
+
+  private getJanAuthHeaders() {
+    const keys = (this.store.get('api-keys', {}) || {}) as Record<string, string>;
+    const token = process.env.JAN_API_KEY || keys.jan || keys['jan-turboquant'] || keys.janTurboQuant || '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -109,14 +131,19 @@ export class LocalAIService {
 
   /** Health check for the built-in Jan + TurboQuant engine */
   async checkJanEngine(): Promise<boolean> {
-    for (const baseUrl of ['http://127.0.0.1:1337/v1', 'http://localhost:1337/v1']) {
+    const headers = this.getJanAuthHeaders();
+    for (const baseUrl of ['http://127.0.0.1:6767/v1', 'http://localhost:6767/v1', 'http://127.0.0.1:1337/v1', 'http://localhost:1337/v1']) {
       try {
-        const response = await axios.get(`${baseUrl}/models`, { timeout: 2500 });
+        const response = await axios.get(`${baseUrl}/models`, { timeout: 2500, headers });
         if (response.status === 200) {
           this.janUrl = baseUrl;
           return true;
         }
-      } catch {
+      } catch (error: any) {
+        if (error?.response?.status === 401 || error?.response?.status === 403) {
+          this.janUrl = baseUrl;
+          return true;
+        }
         // Try the next host form before declaring Jan offline.
       }
     }
@@ -127,25 +154,32 @@ export class LocalAIService {
   async getJanEngineStatus(): Promise<any> {
     const isOnline = await this.checkJanEngine();
     let models: any[] = [];
+    let authRequired = false;
     if (isOnline) {
       try {
-        const resp = await axios.get(`${this.janUrl}/models`);
+        const resp = await axios.get(`${this.janUrl}/models`, { headers: this.getJanAuthHeaders() });
         models = resp.data?.data || resp.data?.models || [];
+        const firstModel = models.map((m: any) => m.id || m.name || m.model).filter(Boolean)[0];
+        if (firstModel && !this.activeJanModel) {
+          this.activeJanModel = firstModel;
+          this.store.set('activeJanModel', firstModel);
+        }
       } catch (e: any) {
+        authRequired = e?.response?.status === 401 || e?.response?.status === 403;
         console.error('Failed to fetch Jan models:', e.message);
       }
     }
 
-    // Detect if another service is occupying port 1337
+    // Detect if another service is occupying the Jan API port
     let portOccupiedByOther = false;
     if (!isOnline) {
       try {
-        const probe = await axios.get('http://127.0.0.1:1337/v1/models', { timeout: 1500 });
+        const probe = await axios.get('http://127.0.0.1:6767/v1/models', { timeout: 1500 });
         // If we get a response but it's not Jan format, another service is there
         portOccupiedByOther = probe.status === 200;
       } catch (e: any) {
-        // Expected if nothing is running on 1337
-        console.log('Port 1337 probe failed/timeout:', e.message);
+        // Expected if nothing is running on 6767
+        console.log('Port 6767 probe failed/timeout:', e.message);
       }
     }
 
@@ -156,17 +190,19 @@ export class LocalAIService {
       role: 'Primary Built-in Engine',
       apiOnline: isOnline,
       installed: runtime.installed || isOnline,
-      port: 1337,
+      port: this.janUrl.includes(':6767') ? 6767 : 1337,
       apiUrl: this.janUrl,
       executablePath: runtime.nitroPath || runtime.janAppPath,
       nitroPath: runtime.nitroPath,
+      janCliPath: runtime.janCliPath,
       janAppPath: runtime.janAppPath,
       searchedPaths: runtime.searchedPaths,
       missingReason: runtime.missingReason,
       activeModel: this.activeJanModel,
+      authRequired,
       portOccupiedByOther,
       models,
-      externalAccessUrl: 'http://localhost:1337/v1'
+      externalAccessUrl: this.janUrl
     };
   }
 
@@ -177,13 +213,22 @@ export class LocalAIService {
       return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in engine is already running.', status };
     }
     if (status.portOccupiedByOther) {
-      return { ok: false, engine: 'Jan + TurboQuant', error: 'Port 1337 is occupied by another service. Please free the port so the built-in engine can start.' };
+      return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan API port is occupied by another service. Please free port 6767/1337 so the built-in engine can start.' };
     }
 
     const runtime = this.getJanRuntimeDiagnostics();
+    if (runtime.janCliPath) {
+      return {
+        ok: false,
+        engine: 'Jan + TurboQuant',
+        error: 'Bundled Jan CLI is installed. Download a GGUF model in Model Hub and press Load; HermsDesk will start `jan serve` for that model on port 6767.',
+        status
+      };
+    }
+
     if (runtime.nitroPath) {
       console.log(`ME 1.8: Spawning Jan+TurboQuant Nitro from ${runtime.nitroPath}`);
-      const nitro = spawn(runtime.nitroPath, ['--port', '1337'], {
+      const nitro = spawn(runtime.nitroPath, ['--port', '6767'], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true
@@ -197,7 +242,7 @@ export class LocalAIService {
           return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in Nitro runtime started successfully.', status: newStatus };
         }
       }
-      return { ok: false, engine: 'Jan + TurboQuant', error: 'Nitro was launched but the Jan-compatible API did not become ready on port 1337.', status: await this.getJanEngineStatus() };
+      return { ok: false, engine: 'Jan + TurboQuant', error: 'Nitro was launched but the Jan-compatible API did not become ready on port 6767.', status: await this.getJanEngineStatus() };
     }
 
     if (runtime.janAppPath) {
@@ -216,15 +261,56 @@ export class LocalAIService {
           return { ok: true, engine: 'Jan + TurboQuant', message: 'Jan desktop runtime started and API is ready.', status: newStatus };
         }
       }
-      return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan desktop was launched but its OpenAI-compatible API did not become ready on port 1337. Enable Jan local API/server in Jan settings.', status: await this.getJanEngineStatus() };
+      return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan desktop was launched but its OpenAI-compatible API did not become ready on port 6767. Enable Jan local API/server in Jan settings, or load a GGUF model from Model Hub to start Jan CLI serve.', status: await this.getJanEngineStatus() };
     }
 
     return {
       ok: false,
       engine: 'Jan + TurboQuant',
-      error: 'Built-in Jan/TurboQuant runtime files are missing. Add nitro.exe to the app bin/resources folder or install Jan so Jan.exe is available; then press Start Jan TurboQuant.',
+      error: 'Built-in Jan/TurboQuant runtime files are missing. Run `npm run setup:jan` to place the official Jan runtime inside this app, then rebuild.',
       status: await this.getJanEngineStatus()
     };
+  }
+
+  private async startJanCliServe(modelPath: string, modelName: string) {
+    const runtime = this.getJanRuntimeDiagnostics();
+    if (!runtime.janCliPath) {
+      return { ok: false, error: 'Bundled Jan CLI was not found. Run npm run setup:jan first.' };
+    }
+    if (!modelPath || !fs.existsSync(modelPath)) {
+      return { ok: false, error: `Model file not found: ${modelPath || modelName}` };
+    }
+
+    const logPath = path.join(os.tmpdir(), 'hermsdesk-jan-serve.log');
+    const apiKey = process.env.JAN_API_KEY || ((this.store.get('api-keys', {}) || {}) as any)['jan-turboquant'] || '';
+    const args = [
+      'serve',
+      modelName || path.basename(modelPath),
+      '--model-path',
+      modelPath,
+      '--port',
+      '6767',
+      '--fit',
+      '--detach',
+      '--log',
+      logPath
+    ];
+    if (apiKey) args.push('--api-key', apiKey);
+
+    const child = spawn(runtime.janCliPath, args, {
+      cwd: path.dirname(runtime.janCliPath),
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    child.unref();
+
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const online = await this.checkJanEngine();
+      if (online) return { ok: true, logPath };
+    }
+    return { ok: false, error: `Jan CLI started but the model server did not become ready on port 6767. Check log: ${logPath}`, logPath };
   }
 
   /** Load a model into the built-in Jan + TurboQuant engine */
@@ -233,16 +319,6 @@ export class LocalAIService {
     
     try {
       const status = await this.getJanEngineStatus();
-      if (!status.apiOnline) {
-        return {
-          ok: false,
-          engine: 'Jan + TurboQuant',
-          error: 'Jan + TurboQuant is not online on port 1337. Start the built-in engine first, then load the model.',
-          status
-        };
-      }
-
-      // 1. Check if model exists in library
       const library = await providerService.listLibraryModels();
       const target = library.find((m: any) => m.name === model.name || m.id === model.name);
       
@@ -250,10 +326,44 @@ export class LocalAIService {
         throw new Error(`Model ${model.name} not found in library. Download it first from Model Hub.`);
       }
 
+      const runtime = this.getJanRuntimeDiagnostics();
+      if (runtime.janCliPath && (!status.apiOnline || this.janUrl.includes(':6767'))) {
+        const started = await this.startJanCliServe(target.path, target.name || model.name);
+        if (!started.ok) {
+          return {
+            ok: false,
+            engine: 'Jan + TurboQuant',
+            model: model.name,
+            error: started.error,
+            status: await this.getJanEngineStatus()
+          };
+        }
+        this.activeJanModel = model.name;
+        this.store.set('activeJanModel', model.name);
+        return { ok: true, engine: 'Jan + TurboQuant', model: model.name, status: await this.getJanEngineStatus() };
+      }
+
+      if (!status.apiOnline) {
+        return {
+          ok: false,
+          engine: 'Jan + TurboQuant',
+          error: 'Jan + TurboQuant is not online. Start the built-in engine first, then load the model.',
+          status
+        };
+      }
+      if (status.authRequired) {
+        return {
+          ok: false,
+          engine: 'Jan + TurboQuant',
+          error: 'Jan local API is running but requires an API key. Save the Jan Local API key in Settings -> API & Connections as Jan + TurboQuant, or set JAN_API_KEY.',
+          status
+        };
+      }
+
       // 2. Load model into the built-in engine via Jan API
       const response = await axios.post(`${this.janUrl}/models/load`, {
         model: target.id
-      }, { timeout: 30000 });
+      }, { timeout: 30000, headers: this.getJanAuthHeaders() });
 
       if (response.status === 200) {
         this.activeJanModel = model.name;
@@ -276,11 +386,15 @@ export class LocalAIService {
   /** Chat with the built-in Jan + TurboQuant engine (PRIMARY) */
   async chatWithJan(model: string, messages: any[]): Promise<any> {
     try {
+      const status = await this.getJanEngineStatus();
+      if (status.authRequired) {
+        throw new Error('Jan local API is running but requires an API key. Save the Jan Local API key in Settings -> API & Connections as Jan + TurboQuant, or set JAN_API_KEY.');
+      }
       const response = await axios.post(`${this.janUrl}/chat/completions`, {
         model: model || this.activeJanModel || 'local-model',
         messages: messages.map(m => ({ role: m.role, content: m.content })),
         stream: false
-      }, { timeout: 120000 });
+      }, { timeout: 120000, headers: this.getJanAuthHeaders() });
       
       const content = response.data?.choices?.[0]?.message?.content || '';
       return { 
@@ -290,7 +404,7 @@ export class LocalAIService {
       };
     } catch (error: any) {
       if (error.code === 'ECONNREFUSED') {
-        throw new Error('Built-in Jan+TurboQuant engine is not responding on port 1337.');
+        throw new Error('Built-in Jan+TurboQuant engine is not responding on port 6767/1337.');
       }
       throw new Error(`Jan+TurboQuant error: ${error.message}`);
     }
@@ -367,7 +481,7 @@ export class LocalAIService {
 
     // 5. All local engines offline
     return { 
-      message: { content: `Jan + TurboQuant is the built-in primary engine, but it is not responding on port 1337 right now.${options.preferred === 'jan' ? ' Hermes ME did not treat Jan as an external app; it tried the built-in route first.' : ''}\n\nI also checked optional local fallbacks: Ollama, LM Studio, and OpenCode are not available with a usable model. Open Model Hub, press Start Jan TurboQuant, then load a local model. If you want API fallback, choose OpenRouter, Gemini, or NVIDIA from the provider menu; Hermes ME will keep those routes on free-tier models.` },
+      message: { content: `Jan + TurboQuant is the built-in primary engine, but it is not responding on port 6767/1337 right now.${options.preferred === 'jan' ? ' Hermes ME did not treat Jan as an external app; it tried the built-in route first.' : ''}\n\nI also checked optional local fallbacks: Ollama, LM Studio, and OpenCode are not available with a usable model. Open Model Hub, press Load on a GGUF model to start the bundled Jan CLI server. If you want API fallback, choose OpenRouter, Gemini, or NVIDIA from the provider menu; Hermes ME will keep those routes on free-tier models.` },
       engine: 'None (All Offline)'
     };
   }
@@ -389,7 +503,7 @@ export class LocalAIService {
         name: 'Jan + TurboQuant',
         role: 'Built-in Engine',
         online: janOnline,
-        port: 1337,
+        port: janOnline ? (this.janUrl.includes(':6767') ? 6767 : 1337) : 6767,
         url: this.janUrl,
         activeModel: this.activeJanModel
       },

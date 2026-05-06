@@ -38,7 +38,7 @@ export class ToolRegistryService {
   private tools: Tool[] = [
     { id: 'ollama', name: 'Ollama', category: 'llm', description: 'Optional external LLM engine (port 11434)' },
     { id: 'lm-studio', name: 'LM Studio', category: 'llm', description: 'Optional external model server (port 1234)' },
-    { id: 'jan-turboquant', name: 'Jan + TurboQuant', category: 'llm', description: 'Built-in primary engine (port 1337)' },
+    { id: 'jan-turboquant', name: 'Jan + TurboQuant', category: 'llm', description: 'Built-in primary engine (port 6767; 1337 compatibility)' },
     { id: 'opencode', name: 'OpenCode', category: 'llm', description: 'Optional external OpenAI-compatible local route (ports 4096/3456)' },
     { id: 'gmail', name: 'Gmail', category: 'email', description: 'Email access and drafts' },
     { id: 'outlook-mail', name: 'Outlook Mail', category: 'email', description: 'Microsoft Graph and Classic Outlook mail indexing, drafts, and approval-gated actions' },

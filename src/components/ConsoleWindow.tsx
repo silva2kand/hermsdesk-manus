@@ -68,7 +68,7 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
     if (isOpen && logs.length === 0) {
       setLogs([
         { id: 1, type: 'info', content: 'HermesDesk ME 1.8 Console Initialized', time: new Date().toLocaleTimeString(), agent: 'system' },
-        { id: 2, type: 'info', content: 'Engine Priority: Jan+TurboQuant (1337) → Ollama (11434) → LM Studio (1234) → Cloud', time: new Date().toLocaleTimeString(), agent: 'system' },
+        { id: 2, type: 'info', content: 'Engine Priority: Jan+TurboQuant (6767) → Ollama (11434) → LM Studio (1234) → Cloud', time: new Date().toLocaleTimeString(), agent: 'system' },
         { id: 3, type: 'bug', content: 'Checking built-in Jan+TurboQuant engine status...', time: new Date().toLocaleTimeString(), agent: 'system' }
       ]);
     }

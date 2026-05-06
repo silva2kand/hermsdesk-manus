@@ -787,7 +787,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
         detail: id === 'my-browser'
           ? (browser.online ? `Operator open: ${browser.url}` : 'Browser operator not opened yet')
           : id === 'jan-turboquant'
-            ? (jan.apiOnline ? 'Jan + TurboQuant API verified on port 1337' : 'Jan route enabled, engine offline')
+            ? (jan.apiOnline ? `Jan + TurboQuant API verified at ${jan.apiUrl || 'localhost:6767/v1'}` : jan.installed ? 'Bundled Jan runtime found; load a GGUF model to start Jan serve' : 'Bundled Jan runtime missing; run setup:jan')
             : ['outlook-mail', 'outlook-calendar'].includes(id)
               ? (graph.connected ? 'Microsoft Graph OAuth connected' : 'Microsoft Graph OAuth not connected')
               : id === 'opencode'

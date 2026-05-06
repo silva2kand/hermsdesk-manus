@@ -488,7 +488,7 @@ export const connectorsData: Connector[] = [
   {
     id: 'jan-turboquant',
     title: 'Jan + TurboQuant',
-    desc: 'Built-in primary local AI engine exposed inside HermsDesk on port 1337',
+    desc: 'Built-in primary local AI engine exposed inside HermsDesk on port 6767',
     icon: Cpu,
     color: 'bg-gray-950',
     category: 'Custom API',

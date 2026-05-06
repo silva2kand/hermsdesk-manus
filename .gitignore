@@ -8,6 +8,7 @@ dist-electron
 package-lock.json
 build
 release
+bin/jan-runtime/
 *.exe
 *.zip
 *.dmg

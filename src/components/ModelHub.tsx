@@ -390,13 +390,13 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                 {janStatus.apiOnline 
                   ? 'Jan/TurboQuant engine is active. Your RTX 5000A is optimized for high-speed GGUF inference.' 
                   : janStatus.installed
-                    ? 'The built-in Jan + TurboQuant runtime is present, but its local API is not responding on port 1337. Press Start Jan TurboQuant, then refresh.'
+                    ? 'The built-in Jan + TurboQuant runtime is present. Load a GGUF model to start Jan CLI serve on port 6767, or press Start to open the runtime.'
                     : 'The built-in Jan + TurboQuant runtime was not found in the app runtime paths. Place nitro.exe in the app bin folder to enable the primary engine.'}
               </p>
               <div className="grid grid-cols-1 gap-2">
                 <RuntimeLine label="Nitro" value={janStatus.nitroPath || 'Not found'} ok={Boolean(janStatus.nitroPath)} />
                 <RuntimeLine label="Jan app" value={janStatus.janAppPath || 'Not found'} ok={Boolean(janStatus.janAppPath)} />
-                <RuntimeLine label="API" value={janStatus.apiOnline ? janStatus.executablePath || 'Port 1337 online' : 'Port 1337 offline'} ok={janStatus.apiOnline} />
+                <RuntimeLine label="API" value={janStatus.apiOnline ? 'Port 6767/1337 online' : 'Port 6767 offline'} ok={janStatus.apiOnline} />
               </div>
             </div>
             <div className="flex items-center space-x-3 mt-6">
@@ -432,7 +432,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
             {[
-              { name: 'Jan/TurboQuant', port: '1337', url: 'http://localhost:1337/v1', online: janStatus.apiOnline },
+              { name: 'Jan/TurboQuant', port: '6767', url: 'http://localhost:6767/v1', online: janStatus.apiOnline },
               { name: 'Ollama', port: '11434', url: 'http://localhost:11434', online: otherEngines.ollamaOnline },
               { name: 'LM Studio', port: '1234', url: 'http://localhost:1234/v1', online: otherEngines.lmStudioOnline }
             ].map((engine) => (

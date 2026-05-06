@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "electron:dev": "vite",
     "electron:build": "vite build && electron-builder",
-    "shortcut": "powershell.exe -ExecutionPolicy Bypass -File ./scripts/create-shortcut.ps1"
+    "shortcut": "powershell.exe -ExecutionPolicy Bypass -File ./scripts/create-shortcut.ps1",
+    "setup:jan": "powershell.exe -ExecutionPolicy Bypass -File ./scripts/setup-bundled-jan.ps1"
   },
   "build": {
     "directories": {
@@ -21,6 +22,15 @@
       "!dist/win-unpacked/**",
       "dist-electron/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/jan-runtime/app",
+        "to": "bin/jan-runtime/app",
+        "filter": [
+          "**/*"
+        ]
+      }
     ]
   },
   "dependencies": {
