@@ -3,7 +3,7 @@ import {
   Plus, Smile, Monitor, Mic, ArrowUp, Search, ChevronDown, Info, ExternalLink, ChevronRight, File, Folder, Globe,
   MessageSquare as MsgIcon, Mail, Briefcase, Cpu, Zap, Github, Layout, Calculator, Palette, HardDrive, Wrench, Brain,
   RefreshCw, Copy, Volume2, Edit3, StepForward, RotateCcw, X, Rocket, LayoutGrid, FileText, MessageSquare, Video,
-  Scale, CreditCard, Radio
+  Scale, CreditCard, Radio, Code as CodeIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -79,7 +79,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [engineStatus, setEngineStatus] = useState<{[key: string]: 'online' | 'offline' | 'checking'}>({
     'Jan + TurboQuant': 'checking',
     Ollama: 'checking',
-    'LM Studio': 'checking'
+    'LM Studio': 'checking',
+    OpenCode: 'checking'
   });
 
   // Update when initialModel changes
@@ -104,10 +105,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
               setModel(preset.model || 'Auto local model');
             }
             // Auto-detect best local engine
-            const [ollama, jan, lmstudio] = await Promise.all([
+            const [ollama, jan, lmstudio, openCode] = await Promise.all([
               window.ipcRenderer.listModels().catch(() => []),
               window.ipcRenderer.janStatus().catch(() => null),
-              window.ipcRenderer.checkLMStudio().catch(() => null)
+              window.ipcRenderer.checkLMStudio().catch(() => null),
+              window.ipcRenderer.checkOpenCode?.().catch(() => null)
             ]);
 
             if (!isMounted) return;
@@ -115,7 +117,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             if (preset?.provider === 'Jan') {
               setProvider('Jan');
               if (preset.model) setModel(preset.model);
-              setEngineStatus(prev => ({ ...prev, 'Jan + TurboQuant': jan?.apiOnline ? 'online' : 'offline' }));
+              setEngineStatus(prev => ({
+                ...prev,
+                'Jan + TurboQuant': jan?.apiOnline ? 'online' : jan?.installed ? 'checking' : 'offline',
+                OpenCode: openCode?.online ? 'online' : 'offline'
+              }));
             } else if (jan && jan.apiOnline) {
               setProvider('Jan');
               const janModels = jan.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
@@ -128,6 +134,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             } else if (lmstudio) {
               setProvider('LM Studio');
               setEngineStatus(prev => ({ ...prev, 'LM Studio': 'online' }));
+            } else if (openCode?.online) {
+              setProvider('OpenCode');
+              const openCodeModels = openCode.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
+              if (openCodeModels.length) setModel(openCodeModels[0]);
+              setEngineStatus(prev => ({ ...prev, OpenCode: 'online' }));
             }
           }
         } catch (error) {
@@ -154,6 +165,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [providerModels, setProviderModels] = useState<{[key: string]: string[]}>({
     'Ollama': [],
     'LM Studio': [],
+    'OpenCode': [],
     'Jan': ['Auto local model'],
     'Gemini': ['gemini-1.5-pro', 'gemini-1.5-flash'],
     'OpenRouter': [
@@ -176,6 +188,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const chatConnectorItems = [
     { name: 'LM Studio', icon: Monitor, color: 'bg-blue-700', desc: 'Local model server' },
     { name: 'Ollama', icon: Cpu, color: 'bg-gray-800', desc: 'Local inference engine' },
+    { name: 'OpenCode', icon: CodeIcon, color: 'bg-emerald-700', desc: 'Local/OpenAI-compatible code model route' },
     { name: 'GitHub', icon: Github, color: 'bg-black', desc: 'Code sync & issues' },
     { name: 'Notion', icon: FileText, color: 'bg-gray-900', desc: 'Workspace & docs' },
     { name: 'WhatsApp', icon: MessageSquare, color: 'bg-green-600', desc: 'Direct messaging' },
@@ -355,20 +368,23 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const checkEngines = async () => {
     if (!window.ipcRenderer) return;
     
-    setEngineStatus(prev => ({ ...prev, Ollama: 'checking', 'LM Studio': 'checking', 'Jan + TurboQuant': 'checking' }));
+    setEngineStatus(prev => ({ ...prev, Ollama: 'checking', 'LM Studio': 'checking', 'Jan + TurboQuant': 'checking', OpenCode: 'checking' }));
     
     try {
       const ollamaModels = await window.ipcRenderer.listModels();
       const lmStudioStatus = await window.ipcRenderer.checkLMStudio();
       const janStatus = await window.ipcRenderer.janStatus();
+      const openCodeStatus = await window.ipcRenderer.checkOpenCode?.().catch(() => null);
       const libraryModels = await window.ipcRenderer.listLibraryModels();
       const janApiModels = janStatus?.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
+      const openCodeModels = openCodeStatus?.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
 
       setProviderModels(prev => ({
         ...prev,
         Ollama: ollamaModels?.length ? ollamaModels.map((m: any) => m.name) : prev.Ollama,
         'LM Studio': lmStudioStatus?.data?.length ? lmStudioStatus.data.map((m: any) => m.id) : prev['LM Studio'],
-        Jan: ['Auto local model', ...(janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan.filter(m => m !== 'Auto local model'))]
+        Jan: ['Auto local model', ...(janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan.filter(m => m !== 'Auto local model'))],
+        OpenCode: openCodeModels.length ? openCodeModels : prev.OpenCode
       }));
 
       const ollamaNames = ollamaModels?.map((m: any) => m.name) || [];
@@ -386,14 +402,16 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       setEngineStatus({
         'Jan + TurboQuant': janStatus && janStatus.apiOnline ? 'online' : 'offline',
         Ollama: ollamaModels && ollamaModels.length > 0 ? 'online' : 'offline',
-        'LM Studio': lmStudioStatus ? 'online' : 'offline'
+        'LM Studio': lmStudioStatus ? 'online' : 'offline',
+        OpenCode: openCodeStatus?.online ? 'online' : 'offline'
       });
     } catch (e) {
       console.error('Engine check failed:', e);
       setEngineStatus({
         'Jan + TurboQuant': 'offline',
         Ollama: 'offline',
-        'LM Studio': 'offline'
+        'LM Studio': 'offline',
+        OpenCode: 'offline'
       });
     }
   };
@@ -638,7 +656,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         let response;
         const normalizedProvider = provider.toLowerCase().replace(/\s+/g, '');
 
-        if (['ollama', 'lmstudio', 'jan', 'jan+turboquant'].includes(normalizedProvider)) {
+        if (['ollama', 'lmstudio', 'jan', 'jan+turboquant', 'opencode'].includes(normalizedProvider)) {
           response = await window.ipcRenderer.chat({ 
             model: model === 'Auto local model'
               ? ''
@@ -858,7 +876,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           </div>
           
           {/* Engine Status Badge */}
-          {['Ollama', 'LM Studio', 'Jan'].includes(provider) && (
+          {['Ollama', 'LM Studio', 'Jan', 'OpenCode'].includes(provider) && (
             <div className="flex items-center space-x-1.5 px-2 py-0.5 bg-white border border-gray-100 rounded-full shadow-sm">
               <div className={`w-1.5 h-1.5 rounded-full ${
                 engineStatus[engineKey(provider)] === 'online' ? 'bg-green-500 animate-pulse' : 

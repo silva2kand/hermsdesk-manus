@@ -70,7 +70,7 @@ export class WhatsAppChannelService {
       webLikelyOpen: processStatus.browserRunning,
       routes: ROUTES,
       drafts: drafts.length,
-      limitation: 'Free/personal WhatsApp has no official background read/send API. HermesDesk keeps routing, drafting, event bus audit, and real composer open; sending remains manual.'
+      limitation: 'Uses your real WhatsApp Desktop/Web sessions. HermesDesk routes, drafts, audits, and opens both composer routes; automatic background read/send is not exposed by personal WhatsApp without UI automation approval.'
     };
     this.eventBus?.emit('channel.status', 'whatsapp', status);
     return status;

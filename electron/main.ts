@@ -34,6 +34,7 @@ function initializeStoreAndServices() {
        defaults: {
       connectors: {
         'my-browser': true, 'ollama': true, 'lm-studio': true, 'google-gemini': true,
+        'opencode': true,
         'openrouter': true, 'instagram': true, 'instagram-marketplace': true,
         'meta-ads': true, 'gmail': true, 'google-calendar': true, 'google-drive': true,
         'outlook-mail': true, 'outlook-calendar': true, 'github': true, 'slack': true,
@@ -389,6 +390,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
       if (p === 'ollama') result = await aiService.chatWithOllama(model, messages)
       else if (p === 'lmstudio') result = await aiService.chatWithLMStudio(model, messages)
       else if (p === 'jan' || p === 'jan+turboquant') result = await aiService.chatWithBestAvailable(model, messages, { preferred: 'jan' })
+      else if (p === 'opencode') result = await aiService.chatWithOpenCode(model, messages)
       // Default: route through smart engine priority chain (Jan+TQ → Ollama → LM Studio)
       else result = await aiService.chatWithBestAvailable(model, messages)
       const content = result?.message?.content || result?.content || '';
@@ -419,6 +421,8 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     }
   })
   ipcMain.handle('ai:check-lmstudio', () => aiService.checkLMStudio())
+  ipcMain.handle('ai:check-opencode', () => aiService.checkOpenCode())
+  ipcMain.handle('ai:list-opencode-models', () => aiService.listOpenCodeModels())
   
   // New Providers
   ipcMain.handle('ai:search-hf', (_, query) => providerService.searchHuggingFace(query))
@@ -511,7 +515,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     const sessionId = `smart-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const startedAt = Date.now();
     eventBus?.emit('session.started', 'smart-router', { sessionId, model: model || 'auto', streaming: false }, sessionId);
-    eventBus?.emit('plan.updated', 'smart-router', { sessionId, steps: ['Try Jan + TurboQuant', 'Fallback to Ollama', 'Fallback to LM Studio', 'Return result'] }, sessionId);
+    eventBus?.emit('plan.updated', 'smart-router', { sessionId, steps: ['Try Jan + TurboQuant', 'Fallback to Ollama', 'Fallback to LM Studio', 'Fallback to OpenCode', 'Return result'] }, sessionId);
     const result = await aiService.chatWithBestAvailable(model, messages);
     const content = result?.message?.content || result?.content || '';
     eventBus?.emit('session.finished', 'smart-router', {
@@ -676,6 +680,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     const jan = await aiService.getJanEngineStatus().catch(() => ({ apiOnline: false }))
     const ollama = await aiService.listOllamaModels().then((models: any[]) => ({ ok: Array.isArray(models) && models.length > 0 })).catch(() => ({ ok: false }))
     const lm = await aiService.checkLMStudio().catch(() => null)
+    const openCode = await aiService.checkOpenCode().catch(() => null)
     const browser = browserOperator.getState()
     const makeStatus = (id: string) => {
       const routeEnabled = routes?.[id] !== false
@@ -683,7 +688,8 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
         'google-gemini': 'gemini',
         openrouter: 'openrouter',
         nvidia: 'nvidia',
-        huggingface: 'huggingface'
+        huggingface: 'huggingface',
+        opencode: 'opencode'
       }
       const oauthConnected = (
         (['outlook-mail', 'outlook-calendar'].includes(id) && Boolean(graph.connected)) ||
@@ -694,6 +700,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
         (id === 'jan-turboquant' && Boolean(jan.apiOnline)) ||
         (id === 'ollama' && Boolean(ollama.ok)) ||
         (id === 'lm-studio' && Boolean(lm?.online || lm?.data)) ||
+        (id === 'opencode' && Boolean(openCode?.online) && !openCode?.authRequired) ||
         (id === 'my-browser' && Boolean(browser.online)) ||
         oauthConnected ||
         apiKeySaved
@@ -704,19 +711,23 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
         apiKeySaved,
         oauthConnected,
         liveVerified,
-        status: !routeEnabled ? 'disabled' : liveVerified ? 'live verified' : apiKeySaved ? 'api key saved' : oauthConnected ? 'oauth connected' : 'route only',
+        status: !routeEnabled ? 'disabled' : id === 'opencode' && openCode?.authRequired ? 'auth required' : liveVerified ? 'live verified' : apiKeySaved ? 'api key saved' : oauthConnected ? 'oauth connected' : 'route only',
         detail: id === 'my-browser'
           ? (browser.online ? `Operator open: ${browser.url}` : 'Browser operator not opened yet')
           : id === 'jan-turboquant'
             ? (jan.apiOnline ? 'Jan + TurboQuant API verified on port 1337' : 'Jan route enabled, engine offline')
             : ['outlook-mail', 'outlook-calendar'].includes(id)
               ? (graph.connected ? 'Microsoft Graph OAuth connected' : 'Microsoft Graph OAuth not connected')
+              : id === 'opencode'
+                ? (openCode?.authRequired
+                  ? `OpenCode detected at ${openCode.url}, but a local token/API key is required`
+                  : openCode?.online ? `OpenCode verified at ${openCode.url}` : 'OpenCode route enabled, no local OpenAI-compatible endpoint detected')
               : apiKeyProvider[id]
                 ? (apiKeySaved ? `${apiKeyProvider[id]} API key saved locally` : `${apiKeyProvider[id]} API key missing`)
                 : 'Route enabled only. Add OAuth/API/MCP server before private data access works.'
       }
     }
-    const knownIds = Array.from(new Set([...Object.keys(routes || {}), 'jan-turboquant', 'ollama', 'lm-studio', 'my-browser', 'outlook-mail', 'outlook-calendar', 'google-gemini', 'openrouter', 'nvidia', 'huggingface']))
+    const knownIds = Array.from(new Set([...Object.keys(routes || {}), 'jan-turboquant', 'ollama', 'lm-studio', 'opencode', 'my-browser', 'outlook-mail', 'outlook-calendar', 'google-gemini', 'openrouter', 'nvidia', 'huggingface']))
     return Object.fromEntries(knownIds.map(id => [id, makeStatus(id)]))
   })
 

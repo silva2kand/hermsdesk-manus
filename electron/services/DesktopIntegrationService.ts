@@ -263,7 +263,16 @@ export class DesktopIntegrationService {
       if (!fs.existsSync(VOICE_STACK_LAUNCHER)) return { ok: false, error: 'Silva Voice Stack launcher was not found.' };
       const child = spawn(VOICE_STACK_LAUNCHER, [], { cwd: VOICE_STACK_ROOT, detached: true, stdio: 'ignore', windowsHide: true });
       child.unref();
-      return { ok: true, started: true };
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          await axios.get('http://localhost:7100/', { timeout: 1500 });
+          return { ok: true, started: true };
+        } catch {
+          // Voice models can take a moment to initialize.
+        }
+      }
+      return { ok: true, started: true, warmingUp: true };
     }
   }
 
@@ -271,20 +280,23 @@ export class DesktopIntegrationService {
     const rootExists = fs.existsSync(VOICE_STACK_ROOT);
     const pythonExists = fs.existsSync(VOICE_STACK_PYTHON);
     const launcherExists = fs.existsSync(VOICE_STACK_LAUNCHER);
-    const missingModels: string[] = [];
-    const modelPaths = [
+    const missingOptionalModels: string[] = [];
+    const optionalModelPaths = [
       'models\\kokoro\\en-gb\\m1.pth',
       'models\\kokoro\\en-gb\\f1.pth',
       'models\\kokoro\\en-us\\m1.pth',
       'models\\kokoro\\en-us\\f1.pth',
       'models\\kokoro\\en-in\\m1.pth',
       'models\\kokoro\\en-in\\f1.pth',
-      'models\\piper\\ta\\tamil_m1.onnx',
-      'models\\xtts-v2\\model.pth'
+      'models\\piper\\ta\\tamil_m1.onnx'
     ];
-    for (const modelPath of modelPaths) {
-      if (!fs.existsSync(path.join(VOICE_STACK_ROOT, modelPath))) missingModels.push(modelPath);
+    for (const modelPath of optionalModelPaths) {
+      if (!fs.existsSync(path.join(VOICE_STACK_ROOT, modelPath))) missingOptionalModels.push(modelPath);
     }
+    const xttsModel = fs.existsSync(path.join(VOICE_STACK_ROOT, 'models\\xtts-v2\\model.pth'));
+    const openVoiceConverter = fs.existsSync(path.join(VOICE_STACK_ROOT, 'models\\openvoice\\converter\\checkpoint.pth'));
+    const accentPresets = fs.existsSync(path.join(VOICE_STACK_ROOT, 'silva_voice\\profiles\\accent_presets.json'));
+    const premiumStackReady = xttsModel && openVoiceConverter && accentPresets;
 
     let python = null;
     if (pythonExists) {
@@ -299,17 +311,21 @@ export class DesktopIntegrationService {
     }
 
     return {
-      ok: rootExists && (pythonExists || process.platform === 'win32'),
+      ok: rootExists && pythonExists && launcherExists && premiumStackReady,
       root: VOICE_STACK_ROOT,
       rootExists,
       pythonExists,
       launcherExists,
       python,
-      missingModels,
-      fallback: 'Windows SAPI speech fallback is available when premium Silva Voice Stack packages/models are missing.',
-      recommendedAction: missingModels.length
-        ? 'Run Build Voice Stack, then add/download the missing Kokoro/Piper voice model files listed here.'
-        : 'Run Build Voice Stack to refresh Python packages and restart the server.'
+      premiumStackReady,
+      xttsModel,
+      openVoiceConverter,
+      accentPresets,
+      missingOptionalModels,
+      fallback: 'Windows SAPI speech fallback is available only if the premium Silva Voice Stack endpoint fails.',
+      recommendedAction: premiumStackReady
+        ? 'Premium XTTS/OpenVoice stack detected. Start Voice Stack and use Tamil Jaffna, Tamil India, English UK, or English US presets.'
+        : 'Run Build Voice Stack to repair packages, then add/download missing premium model files.'
     };
   }
 
@@ -447,17 +463,24 @@ Pause
     const deepLink = cleanedPhone
       ? `whatsapp://send?phone=${cleanedPhone}&text=${text}`
       : `whatsapp://send?text=${text}`;
+    const web = cleanedPhone
+      ? `https://wa.me/${cleanedPhone}?text=${text}`
+      : `https://web.whatsapp.com/send?text=${text}`;
 
+    const opened: string[] = [];
     try {
       await shell.openExternal(deepLink);
-      return { ok: true, url: deepLink, mode: 'desktop' };
+      opened.push('desktop');
     } catch {
-      const web = cleanedPhone
-        ? `https://wa.me/${cleanedPhone}?text=${text}`
-        : `https://web.whatsapp.com/send?text=${text}`;
-      await shell.openExternal(web);
-      return { ok: true, url: web, mode: 'web' };
+      // Desktop link failed; Web is still a real local browser route.
     }
+    try {
+      await shell.openExternal(web);
+      opened.push('web');
+    } catch (error: any) {
+      if (!opened.length) return { ok: false, url: web, mode: 'failed', error: error?.message || 'Could not open WhatsApp Desktop or Web.' };
+    }
+    return { ok: true, url: opened.includes('desktop') ? deepLink : web, webUrl: web, mode: opened.join('+') };
   }
 
   async getVoiceStackStatus() {
@@ -510,13 +533,13 @@ Pause
           const audioPath = path.join(app.getPath('temp'), `hermes-voice-${Date.now()}.${ext}`);
           fs.writeFileSync(audioPath, Buffer.from(response.data));
           await shell.openPath(audioPath);
-          return { ok: true, mode: 'audio-file', endpoint, voice, language, path: audioPath };
+        return { ok: true, mode: 'silva-premium-audio-file', endpoint, voice, language, path: audioPath };
         }
 
         const body = Buffer.from(response.data).toString('utf8');
         let parsed: any = {};
         try { parsed = JSON.parse(body); } catch { parsed = { message: body }; }
-        return { ok: true, mode: 'voice-stack', endpoint, voice, language, response: parsed };
+        return { ok: true, mode: 'silva-premium-voice-stack', endpoint, voice, language, response: parsed };
       } catch (error: any) {
         lastError = error?.response?.data
           ? Buffer.from(error.response.data).toString('utf8').slice(0, 300)

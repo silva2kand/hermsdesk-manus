@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   listModels: () => ipcRenderer.invoke('ai:list-models'),
   chat: (data: { model: string, messages: any[], provider?: string }) => ipcRenderer.invoke('ai:chat', data),
   checkLMStudio: () => ipcRenderer.invoke('ai:check-lmstudio'),
+  checkOpenCode: () => ipcRenderer.invoke('ai:check-opencode'),
+  listOpenCodeModels: () => ipcRenderer.invoke('ai:list-opencode-models'),
   checkJan: () => ipcRenderer.invoke('ai:check-jan'),
   janStatus: () => ipcRenderer.invoke('ai:jan-status'),
   startJan: () => ipcRenderer.invoke('ai:start-jan'),

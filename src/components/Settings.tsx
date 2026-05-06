@@ -20,7 +20,8 @@ import {
   Bell,
   Languages,
   Moon,
-  Sun
+  Sun,
+  Code
 } from 'lucide-react';
 
 const SettingTab = ({ 
@@ -114,6 +115,7 @@ export const Settings = () => {
     { id: 'nvidia', name: 'NVIDIA NIM', icon: Cpu, color: 'bg-green-600' },
     { id: 'openrouter', name: 'OpenRouter', icon: Zap, color: 'bg-purple-600' },
     { id: 'huggingface', name: 'Hugging Face', icon: Smile, color: 'bg-orange-500' },
+    { id: 'opencode', name: 'OpenCode Local Token', icon: Code, color: 'bg-gray-900' },
   ];
 
   return (
@@ -179,6 +181,7 @@ export const Settings = () => {
                  { id: 'jan-turboquant', name: 'Jan + TurboQuant', port: '1337' },
                  { id: 'ollama', name: 'Ollama', port: '11434' },
                  { id: 'lm-studio', name: 'LM Studio', port: '1234' },
+                 { id: 'opencode', name: 'OpenCode', port: '4096 / 3456' },
                ].map((l) => {
                  const status = engineStatuses[l.id];
                  return (
@@ -189,12 +192,12 @@ export const Settings = () => {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-gray-900">{l.name}</p>
-                        <p className="text-[10px] text-gray-400">localhost:{l.port}</p>
+                        <p className="text-[10px] text-gray-400">{status?.detail || `localhost:${l.port}`}</p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-3">
                       <span className={`text-[10px] font-bold uppercase ${status?.liveVerified ? 'text-green-500' : 'text-orange-500'}`}>
-                        {status?.liveVerified ? 'Live verified' : 'Offline / route only'}
+                        {status?.status || (status?.liveVerified ? 'Live verified' : 'Offline / route only')}
                       </span>
                       <button onClick={async () => setEngineStatuses(await (window.ipcRenderer as any).getConnectorStatuses?.())} className="px-4 py-1.5 bg-gray-100 text-gray-900 rounded-lg text-xs font-bold hover:bg-gray-200">
                         Refresh

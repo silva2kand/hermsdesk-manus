@@ -32,13 +32,20 @@ export class LocalAIService {
   private store: any;
 
   // Built-in Jan + TurboQuant Engine (PRIMARY)
-  private janUrl = 'http://localhost:1337/v1';
+  private janUrl = 'http://127.0.0.1:1337/v1';
   private activeJanModel = '';
   private modelsPath = path.join(os.homedir(), 'jan', 'models');
 
   // Optional External Engines
   private ollamaUrl = 'http://localhost:11434/api';
   private lmStudioUrl = 'http://localhost:1234/v1';
+  private openCodeUrls = [
+    process.env.OPENCODE_API_URL || '',
+    'http://127.0.0.1:4096/v1',
+    'http://localhost:4096/v1',
+    'http://127.0.0.1:3456/v1',
+    'http://localhost:3456/v1'
+  ].filter(Boolean);
 
   // System resource cache
   private pcCache = {
@@ -52,6 +59,7 @@ export class LocalAIService {
 
   constructor(sharedStore?: any) {
     this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
+    this.activeJanModel = this.store.get('activeJanModel', '') as string;
   }
 
   private getNitroSearchPaths() {
@@ -73,12 +81,18 @@ export class LocalAIService {
 
   /** Health check for the built-in Jan + TurboQuant engine */
   async checkJanEngine(): Promise<boolean> {
-    try {
-      const response = await axios.get(`${this.janUrl}/models`, { timeout: 2000 });
-      return response.status === 200;
-    } catch (e) {
-      return false;
+    for (const baseUrl of ['http://127.0.0.1:1337/v1', 'http://localhost:1337/v1']) {
+      try {
+        const response = await axios.get(`${baseUrl}/models`, { timeout: 2500 });
+        if (response.status === 200) {
+          this.janUrl = baseUrl;
+          return true;
+        }
+      } catch {
+        // Try the next host form before declaring Jan offline.
+      }
     }
+    return false;
   }
 
   /** Full status report for the built-in engine */
@@ -98,7 +112,7 @@ export class LocalAIService {
     let portOccupiedByOther = false;
     if (!isOnline) {
       try {
-        const probe = await axios.get('http://localhost:1337/v1/models', { timeout: 1500 });
+        const probe = await axios.get('http://127.0.0.1:1337/v1/models', { timeout: 1500 });
         // If we get a response but it's not Jan format, another service is there
         portOccupiedByOther = probe.status === 200;
       } catch (e: any) {
@@ -282,9 +296,21 @@ export class LocalAIService {
       console.log('ME 1.8: LM Studio unavailable...');
     }
 
-    // 4. All local engines offline
+    // 4. Try OpenCode/OpenAI-compatible local route (optional external)
+    try {
+      const openCode = await this.checkOpenCode();
+      if (openCode?.online) {
+        console.log('ME 1.8: Routing to OpenCode (optional external)');
+        const result = await this.chatWithOpenCode(model, messages);
+        return { ...result, engine: 'OpenCode (External)' };
+      }
+    } catch {
+      console.log('ME 1.8: OpenCode unavailable...');
+    }
+
+    // 5. All local engines offline
     return { 
-      message: { content: `Jan + TurboQuant is the built-in primary engine, but it is not responding on port 1337 right now.${options.preferred === 'jan' ? ' Hermes ME did not treat Jan as an external app; it tried the built-in route first.' : ''}\n\nI also checked optional local fallbacks: Ollama and LM Studio are not available with a usable model. Open Model Hub, press Start Jan TurboQuant, then load a local model. If you want API fallback, choose OpenRouter, Gemini, or NVIDIA from the provider menu; Hermes ME will keep those routes on free-tier models.` },
+      message: { content: `Jan + TurboQuant is the built-in primary engine, but it is not responding on port 1337 right now.${options.preferred === 'jan' ? ' Hermes ME did not treat Jan as an external app; it tried the built-in route first.' : ''}\n\nI also checked optional local fallbacks: Ollama, LM Studio, and OpenCode are not available with a usable model. Open Model Hub, press Start Jan TurboQuant, then load a local model. If you want API fallback, choose OpenRouter, Gemini, or NVIDIA from the provider menu; Hermes ME will keep those routes on free-tier models.` },
       engine: 'None (All Offline)'
     };
   }
@@ -294,10 +320,11 @@ export class LocalAIService {
   // ═══════════════════════════════════════════════════════════════
 
   async getFullEngineStatus() {
-    const [janOnline, ollamaModels, lmStudio] = await Promise.all([
+    const [janOnline, ollamaModels, lmStudio, openCode] = await Promise.all([
       this.checkJanEngine().catch(() => false),
       this.listOllamaModels().catch(() => []),
-      this.checkLMStudio().catch(() => null)
+      this.checkLMStudio().catch(() => null),
+      this.checkOpenCode().catch(() => null)
     ]);
 
     return {
@@ -321,6 +348,13 @@ export class LocalAIService {
         role: 'Optional External',
         online: lmStudio?.online || false,
         port: 1234
+      },
+      openCode: {
+        name: 'OpenCode',
+        role: 'Optional External / OpenAI-compatible',
+        online: openCode?.online || false,
+        url: openCode?.url || this.openCodeUrls[0],
+        models: openCode?.models || []
       }
     };
   }
@@ -386,6 +420,73 @@ export class LocalAIService {
       console.log('LM Studio probe failed:', e.message);
     }
     return null;
+  }
+
+  private getOpenCodeAuthHeaders() {
+    const keys = (this.store.get('api-keys', {}) || {}) as Record<string, string>;
+    const token = process.env.OPENCODE_API_KEY || keys.opencode || keys.openCode || '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  async checkOpenCode() {
+    const headers = this.getOpenCodeAuthHeaders();
+    for (const baseUrl of this.openCodeUrls) {
+      try {
+        const response = await axios.get(`${baseUrl}/models`, { timeout: 2000, headers });
+        if (response.status === 200) {
+          const models = response.data?.data || response.data?.models || [];
+          return { online: true, authRequired: false, url: baseUrl, provider: 'OpenCode', models };
+        }
+      } catch (error: any) {
+        if (error?.response?.status === 401 || error?.response?.status === 403) {
+          return {
+            online: true,
+            authRequired: true,
+            url: baseUrl,
+            provider: 'OpenCode',
+            models: [],
+            error: 'OpenCode endpoint is running but requires an API key/token.'
+          };
+        }
+        // Try next OpenCode-compatible endpoint.
+      }
+    }
+    return null;
+  }
+
+  async listOpenCodeModels() {
+    const status = await this.checkOpenCode();
+    return status?.models || [];
+  }
+
+  async chatWithOpenCode(model: string, messages: any[]) {
+    const status = await this.checkOpenCode();
+    if (!status?.online) {
+      return { message: { content: 'OpenCode is not running on a detected OpenAI-compatible local endpoint. Start OpenCode or set OPENCODE_API_URL.' } };
+    }
+    if (status.authRequired) {
+      return {
+        message: {
+          content: 'OpenCode is running, but it requires a local API key/token. Add it in Settings -> API & Connections as "OpenCode Local Token", or set OPENCODE_API_KEY, then refresh models.'
+        },
+        engine: 'OpenCode (Auth Required)'
+      };
+    }
+    try {
+      const modelIds = (status.models || []).map((m: any) => m.id || m.name).filter(Boolean);
+      const selectedModel = modelIds.includes(model) ? model : modelIds[0] || model || 'local-model';
+      const response = await axios.post(`${status.url}/chat/completions`, {
+        model: selectedModel,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        stream: false
+      }, { timeout: 120000, headers: this.getOpenCodeAuthHeaders() });
+      return {
+        message: { content: response.data?.choices?.[0]?.message?.content || '' },
+        model: selectedModel
+      };
+    } catch (error: any) {
+      return { message: { content: `OpenCode error: ${error.message}` } };
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════

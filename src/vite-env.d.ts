@@ -6,6 +6,8 @@ interface Window {
     listModels: () => Promise<any[]>;
     chat: (data: { model: string, messages: any[], provider?: string }) => Promise<any>;
     checkLMStudio: () => Promise<any>;
+    checkOpenCode: () => Promise<any>;
+    listOpenCodeModels: () => Promise<any[]>;
     checkJan: () => Promise<any>;
     janStatus: () => Promise<{ apiOnline: boolean, installed: boolean, executablePath: string, activeModel: string, models: any[] }>;
     startJan: () => Promise<{ ok: boolean, error?: string, alreadyOnline?: boolean, status?: any }>;
