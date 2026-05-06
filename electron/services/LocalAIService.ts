@@ -117,6 +117,17 @@ export class LocalAIService {
     ];
   }
 
+  private getTurboQuantBackendSearchPaths() {
+    return [
+      path.join(process.cwd(), 'bin', 'jan-runtime', 'backends', 'llamacpp', 'win-cuda', 'bin', 'llama-server.exe'),
+      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'backends', 'llamacpp', 'win-cuda', 'bin', 'llama-server.exe')
+    ];
+  }
+
+  private getTurboQuantBackendPath() {
+    return this.getTurboQuantBackendSearchPaths().find(p => fs.existsSync(p)) || '';
+  }
+
   private getJanRuntimeDiagnostics() {
     const nitroPaths = this.getNitroSearchPaths();
     const janCliPaths = this.getJanCliSearchPaths();
@@ -124,6 +135,7 @@ export class LocalAIService {
     const nitroPath = nitroPaths.find(p => fs.existsSync(p)) || '';
     const janCliPath = janCliPaths.find(p => fs.existsSync(p)) || '';
     const janAppPath = janAppPaths.find(p => fs.existsSync(p) && p.toLowerCase().endsWith('.exe')) || '';
+    const turboQuantBackendPath = this.getTurboQuantBackendPath();
     return {
       nitroPath,
       janCliPath,
@@ -131,8 +143,9 @@ export class LocalAIService {
       janProfileRoot: this.getHermsDeskJanProfileRoot(),
       janDataRoot: this.getHermsDeskJanDataRoot(),
       modelLibraryPath: this.modelsPath,
+      turboQuantBackendPath,
       installed: Boolean(nitroPath || janCliPath || janAppPath),
-      searchedPaths: [...nitroPaths, ...janCliPaths, ...janAppPaths],
+      searchedPaths: [...nitroPaths, ...janCliPaths, ...janAppPaths, ...this.getTurboQuantBackendSearchPaths()],
       missingReason: nitroPath || janCliPath || janAppPath
         ? ''
         : 'No bundled nitro.exe, Jan CLI, or Jan.exe was found inside HermsDesk app bin/resources paths.'
@@ -269,6 +282,7 @@ export class LocalAIService {
       janProfileRoot: runtime.janProfileRoot,
       janDataRoot: runtime.janDataRoot,
       modelLibraryPath: runtime.modelLibraryPath,
+      turboQuantBackendPath: runtime.turboQuantBackendPath,
       searchedPaths: runtime.searchedPaths,
       missingReason: runtime.missingReason,
       activeModel: this.activeJanModel,
@@ -373,18 +387,17 @@ export class LocalAIService {
       '--port',
       '6767',
       '--fit',
-      '--ctx-size',
-      String(policy.ctxSize),
-      '--threads',
-      String(policy.threads),
-      '--n-gpu-layers',
-      String(policy.gpuLayers),
-      '--timeout',
-      String(policy.timeout),
+      `--ctx-size=${policy.ctxSize}`,
+      `--threads=${policy.threads}`,
+      `--n-gpu-layers=${policy.gpuLayers}`,
+      `--timeout=${policy.timeout}`,
       '--detach',
       '--log',
       logPath
     ];
+    if (runtime.turboQuantBackendPath) {
+      args.push('--bin', runtime.turboQuantBackendPath);
+    }
     if (apiKey) args.push('--api-key', apiKey);
 
     const child = spawn(runtime.janCliPath, args, {

@@ -30,6 +30,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "bin/jan-runtime/backends",
+        "to": "bin/jan-runtime/backends",
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   },

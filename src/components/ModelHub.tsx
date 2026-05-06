@@ -36,7 +36,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const [activeDownloads, setActiveDownloads] = useState<{[key: string]: number}>({});
   const [modelsPath, setModelsPath] = useState('');
   const [libraryModels, setLibraryModels] = useState<any[]>([]);
-  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janCliPath?: string, janAppPath?: string, janProfileRoot?: string, janDataRoot?: string, modelLibraryPath?: string, missingReason?: string, activeModel: string, models: any[], turboQuant?: any }>({
+  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janCliPath?: string, janAppPath?: string, janProfileRoot?: string, janDataRoot?: string, modelLibraryPath?: string, turboQuantBackendPath?: string, missingReason?: string, activeModel: string, models: any[], turboQuant?: any }>({
     apiOnline: false,
     installed: false,
     executablePath: '',
@@ -46,6 +46,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     janProfileRoot: '',
     janDataRoot: '',
     modelLibraryPath: '',
+    turboQuantBackendPath: '',
     missingReason: '',
     activeModel: '',
     models: [],
@@ -401,6 +402,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               <div className="grid grid-cols-1 gap-2">
                 <RuntimeLine label="Nitro" value={janStatus.nitroPath || 'Not found'} ok={Boolean(janStatus.nitroPath)} />
                 <RuntimeLine label="Jan CLI" value={janStatus.janCliPath || 'Not found'} ok={Boolean(janStatus.janCliPath)} />
+                <RuntimeLine label="Backend" value={janStatus.turboQuantBackendPath || 'Not found'} ok={Boolean(janStatus.turboQuantBackendPath)} />
                 <RuntimeLine label="API" value={janStatus.apiOnline ? 'Port 6767/1337 online' : 'Port 6767 offline'} ok={janStatus.apiOnline} />
                 <RuntimeLine label="Data" value={janStatus.janDataRoot || 'HermsDesk owned'} ok={Boolean(janStatus.janDataRoot)} />
                 <RuntimeLine label="DFALSH" value={janStatus.turboQuant?.policy ? `${janStatus.turboQuant.policy.ctxSize} ctx / ${janStatus.turboQuant.policy.threads} threads` : 'Armed on load'} ok />
