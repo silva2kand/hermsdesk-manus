@@ -18,6 +18,7 @@ const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }
 
 const connectorId = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
 const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name;
+const preferJanModel = (models: string[]) => models.find(m => /qwen/i.test(m)) || models.find(m => /phi/i.test(m)) || models[0] || 'Auto local model';
 
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
@@ -114,9 +115,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
             if (!isMounted) return;
 
+            const janModels = jan?.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
+
             if (preset?.provider === 'Jan') {
               setProvider('Jan');
-              if (preset.model) setModel(preset.model);
+              const presetModel = preset.model && preset.model !== 'Auto local model' ? preset.model : '';
+              setModel(presetModel || preferJanModel(janModels));
               setEngineStatus(prev => ({
                 ...prev,
                 'Jan + TurboQuant': jan?.apiOnline ? 'online' : jan?.installed ? 'checking' : 'offline',
@@ -124,8 +128,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
               }));
             } else if (jan && jan.apiOnline) {
               setProvider('Jan');
-              const janModels = jan.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
-              if (janModels.length) setModel(janModels[0]);
+              if (janModels.length) setModel(preferJanModel(janModels));
               setEngineStatus(prev => ({ ...prev, 'Jan + TurboQuant': 'online' }));
             } else if (ollama && ollama.length > 0) {
               setProvider('Ollama');
@@ -383,7 +386,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         ...prev,
         Ollama: ollamaModels?.length ? ollamaModels.map((m: any) => m.name) : prev.Ollama,
         'LM Studio': lmStudioStatus?.data?.length ? lmStudioStatus.data.map((m: any) => m.id) : prev['LM Studio'],
-        Jan: ['Auto local model', ...(janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan.filter(m => m !== 'Auto local model'))],
+        Jan: ['Auto local model', ...(() => {
+          const source = janApiModels.length ? janApiModels : libraryModels?.length ? libraryModels.map((m: any) => m.name) : prev.Jan.filter(m => m !== 'Auto local model');
+          const best = preferJanModel(source);
+          return [best, ...source.filter((m: string) => m !== best)].filter((m: string) => m && m !== 'Auto local model');
+        })()],
         OpenCode: openCodeModels.length ? openCodeModels : prev.OpenCode
       }));
 
@@ -395,8 +402,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         addNotice(`Switched to installed Ollama model: ${ollamaNames[0]}`);
       } else if (provider === 'Ollama' && ollamaNames.length === 0 && janStatus?.apiOnline && (janApiModels.length || janNames.length > 0)) {
         setProvider('Jan');
-        setModel(janApiModels[0] || janNames[0]);
-        addNotice(`Ollama has no installed models. Switched to Jan: ${janApiModels[0] || janNames[0]}`);
+        const bestJan = preferJanModel(janApiModels.length ? janApiModels : janNames);
+        setModel(bestJan);
+        addNotice(`Ollama has no installed models. Switched to Jan: ${bestJan}`);
       }
 
       setEngineStatus({

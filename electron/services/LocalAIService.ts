@@ -208,6 +208,18 @@ export class LocalAIService {
     return metrics;
   }
 
+  private chooseBestJanModel(modelIds: string[], requested?: string) {
+    if (requested && modelIds.includes(requested)) return requested;
+    if (this.activeJanModel && modelIds.includes(this.activeJanModel)) return this.activeJanModel;
+    return (
+      modelIds.find(id => /qwen/i.test(id)) ||
+      modelIds.find(id => /phi/i.test(id)) ||
+      modelIds[0] ||
+      requested ||
+      'local-model'
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // BUILT-IN JAN + TURBOQUANT ENGINE (PRIMARY)
   // ═══════════════════════════════════════════════════════════════
@@ -494,18 +506,22 @@ export class LocalAIService {
       if (status.authRequired) {
         throw new Error('Jan local API is running but requires an API key. Save the Jan Local API key in Settings -> API & Connections as Jan + TurboQuant, or set JAN_API_KEY.');
       }
+      const modelIds = (status.models || []).map((m: any) => m.id || m.name || m.model).filter(Boolean);
+      const selectedModel = this.chooseBestJanModel(modelIds, model);
       const response = await axios.post(`${this.janUrl}/chat/completions`, {
-        model: model || this.activeJanModel || 'local-model',
+        model: selectedModel,
         messages: messages.map(m => ({ role: m.role, content: m.content })),
         stream: false
       }, { timeout: 120000, headers: this.getJanAuthHeaders() });
       
       const content = response.data?.choices?.[0]?.message?.content || '';
-      const metrics = this.saveJanMetrics(response.data, model || this.activeJanModel);
+      this.activeJanModel = selectedModel;
+      this.store.set('activeJanModel', selectedModel);
+      const metrics = this.saveJanMetrics(response.data, selectedModel);
       return { 
         message: { content }, 
         engine: 'Jan + TurboQuant',
-        model: model || this.activeJanModel,
+        model: selectedModel,
         metrics
       };
     } catch (error: any) {
