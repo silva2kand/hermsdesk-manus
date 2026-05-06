@@ -53,6 +53,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     turboQuant: null
   });
   const [engineMessage, setEngineMessage] = useState('');
+  const [janStatusChecked, setJanStatusChecked] = useState(false);
   const [otherEngines, setOtherEngines] = useState<{ ollamaOnline: boolean, lmStudioOnline: boolean }>({
     ollamaOnline: false,
     lmStudioOnline: false
@@ -93,8 +94,8 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     if (!window.ipcRenderer) return;
 
     const [ollamaModels, libraryModels] = await Promise.all([
-      window.ipcRenderer.listModels(),
-      window.ipcRenderer.listLibraryModels()
+      window.ipcRenderer.listModels().catch(() => []),
+      window.ipcRenderer.listLibraryModels().catch(() => [])
     ]);
     setOtherEngines(prev => ({ ...prev, ollamaOnline: Array.isArray(ollamaModels) && ollamaModels.length > 0 }));
 
@@ -146,6 +147,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         }
       : status;
     setJanStatus(mergedStatus);
+    setJanStatusChecked(true);
     if (mergedStatus.apiOnline) {
       await fetchLibrary();
     }
@@ -157,36 +159,23 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     let interval: ReturnType<typeof setInterval>;
 
     const init = async () => {
-      if (window.ipcRenderer) {
-        try {
-          const caps = await window.ipcRenderer.scanPC();
-          if (isMounted) setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) });
-          
-          const path = await window.ipcRenderer.getModelsPath();
-          if (isMounted) setModelsPath(path);
-          
-          const status = await window.ipcRenderer.janStatus();
-          const apiModels = status?.apiOnline ? null : await probeJanApiFromRenderer();
-          if (isMounted) {
-            setJanStatus(apiModels ? {
-              ...status,
-              apiOnline: true,
-              installed: true,
-              apiUrl: 'http://127.0.0.1:6767/v1',
-              port: 6767,
-              models: apiModels,
-              activeModel: apiModels[0]?.id || status?.activeModel || '',
-              missingReason: ''
-            } : status);
-          }
-          const lmStudio = await window.ipcRenderer.checkLMStudio();
-          if (isMounted) setOtherEngines(prev => ({ ...prev, lmStudioOnline: Boolean(lmStudio?.online) }));
+      if (!window.ipcRenderer) return;
 
-          await refreshInstalledModels();
-        } catch (e) {
-          console.error('ModelHub init error:', e);
-        }
-      }
+      window.ipcRenderer.scanPC()
+        .then(caps => isMounted && setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) }))
+        .catch(e => console.error('ModelHub PC scan error:', e));
+
+      window.ipcRenderer.getModelsPath()
+        .then(path => isMounted && setModelsPath(path))
+        .catch(e => console.error('ModelHub models path error:', e));
+
+      refreshJanStatus().catch(e => console.error('ModelHub Jan status error:', e));
+
+      window.ipcRenderer.checkLMStudio()
+        .then(lmStudio => isMounted && setOtherEngines(prev => ({ ...prev, lmStudioOnline: Boolean(lmStudio?.online) })))
+        .catch(e => console.error('ModelHub LM Studio check error:', e));
+
+      refreshInstalledModels().catch(e => console.error('ModelHub installed models error:', e));
     };
 
     init();
@@ -425,11 +414,13 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                   <h2 className="text-xl font-black uppercase tracking-tight">Built-in Jan + TurboQuant Engine</h2>
                 </div>
                 <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${janStatus.apiOnline ? 'bg-white/20 text-white' : 'bg-white/20 text-white'}`}>
-                  {janStatus.apiOnline ? 'Online' : janStatus.installed ? 'Runtime Found' : 'Runtime Missing'}
+                  {!janStatusChecked ? 'Checking' : janStatus.apiOnline ? 'Online' : janStatus.installed ? 'Runtime Found' : 'Runtime Missing'}
                 </div>
               </div>
               <p className="text-sm text-white/80 font-medium leading-relaxed mb-4">
-                {janStatus.apiOnline 
+                {!janStatusChecked
+                  ? 'Checking the built-in Jan + TurboQuant runtime and local model server...'
+                  : janStatus.apiOnline 
                   ? 'Jan/TurboQuant engine is active. Your RTX 5000A is optimized for high-speed GGUF inference.' 
                   : janStatus.installed
                     ? 'The built-in Jan + TurboQuant runtime is present. Load a GGUF model to start Jan CLI serve on port 6767, or press Start to open the runtime.'

@@ -50,6 +50,7 @@ function initializeStoreAndServices() {
         'intercom': true, 'paypal-business': true, 'revenuecat': true, 'close': true,
         'xero': true, 'airtable': true, 'dify': true, 'cloudflare': true, 'posthog': true,
         'playwright': true, 'jam': true, 'canva': true, 'webflow': true, 'wix': true,
+        'graphify': true,
         'granola': true, 'fireflies': true, 'tldv': true, 'firecrawl': true,
         'todoist': true, 'zoominfo': true, 'metabase': true, 'explorium': true,
         'serena': true, 'heygen': true, 'context7': true, 'hume': true, 'line': true,

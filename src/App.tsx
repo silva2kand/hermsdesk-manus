@@ -24,6 +24,7 @@ import { ConnectorsManager } from './components/ConnectorsManager';
 import { APIKeyManager } from './components/APIKeyManager';
 import { ProjectsView } from './components/ProjectsView';
 import { WideResearchView } from './components/WideResearchView';
+import { GraphifyView } from './components/GraphifyView';
 import { 
   Rocket, 
   Paperclip, 
@@ -223,7 +224,7 @@ interface Agent {
 }
 
 function App() {
-  const [view, setView] = useState<'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins' | 'agents' | 'computer' | 'profile' | 'settings' | 'usage' | 'tasks' | 'mail' | 'whatsapp' | 'data' | 'browser' | 'personalization' | 'projects' | 'wide-research' | 'shared-tasks' | 'shared-files' | 'websites' | 'apps' | 'domains' | 'connectors' | 'api-keys' | 'integrations'>('landing');
+  const [view, setView] = useState<'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins' | 'agents' | 'computer' | 'profile' | 'settings' | 'usage' | 'tasks' | 'mail' | 'whatsapp' | 'data' | 'browser' | 'personalization' | 'projects' | 'wide-research' | 'graphify' | 'shared-tasks' | 'shared-files' | 'websites' | 'apps' | 'domains' | 'connectors' | 'api-keys' | 'integrations'>('landing');
   const [selectedModel, setSelectedModel] = useState<{provider: string, model: string} | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
@@ -524,6 +525,7 @@ function App() {
           {view === 'personalization' && <SettingsPage />}
           {view === 'projects' && <ProjectsView />}
           {view === 'wide-research' && <WideResearchView />}
+          {view === 'graphify' && <GraphifyView />}
           {view === 'shared-tasks' && <SettingsShell title="Shared Tasks" desc="Create local task handoff files and manage collaboration notes." />}
           {view === 'shared-files' && <SettingsShell title="Shared Files" desc="Choose and review local folders used by shared workflows." />}
           {view === 'websites' && <SettingsShell title="Websites" desc="Open generated sites, saved website projects, and export folders." />}
@@ -535,7 +537,7 @@ function App() {
           {view === 'knowledge' && <Knowledge />}
           
           {/* Fallback for unmapped views to prevent blank screen */}
-          {!['landing', 'chat', 'models', 'skills', 'knowledge', 'memory', 'plugins', 'agents', 'computer', 'settings', 'profile', 'usage', 'tasks', 'mail', 'whatsapp', 'data', 'browser', 'personalization', 'projects', 'wide-research', 'shared-tasks', 'shared-files', 'websites', 'apps', 'domains', 'connectors', 'api-keys', 'integrations'].includes(view) && (
+          {!['landing', 'chat', 'models', 'skills', 'knowledge', 'memory', 'plugins', 'agents', 'computer', 'settings', 'profile', 'usage', 'tasks', 'mail', 'whatsapp', 'data', 'browser', 'personalization', 'projects', 'wide-research', 'graphify', 'shared-tasks', 'shared-files', 'websites', 'apps', 'domains', 'connectors', 'api-keys', 'integrations'].includes(view) && (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in fade-in zoom-in duration-500">
               <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 border border-gray-100 shadow-sm">
                 <Settings className="w-6 h-6 text-gray-400" />

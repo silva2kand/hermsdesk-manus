@@ -42,6 +42,7 @@ export class ToolRegistryService {
     { id: 'opencode', name: 'OpenCode', category: 'llm', description: 'Optional external OpenAI-compatible local route (ports 4096/3456)' },
     { id: 'gmail', name: 'Gmail', category: 'email', description: 'Email access and drafts' },
     { id: 'outlook-mail', name: 'Outlook Mail', category: 'email', description: 'Microsoft Graph and Classic Outlook mail indexing, drafts, and approval-gated actions' },
+    { id: 'graphify', name: 'Graphify', category: 'research', description: 'Local relationship graph builder for agents, tasks, mail intelligence, cases, and evidence' },
     { id: 'github', name: 'GitHub', category: 'custom_api', description: 'Repo and code management' },
     { id: 'file-system', name: 'File System', category: 'storage', description: 'Local file operations (read, write, list)' },
     { id: 'os-control', name: 'OS Control', category: 'os', description: 'Open apps, URLs, and system commands' },

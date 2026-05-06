@@ -1,5 +1,5 @@
 import { 
-  Globe, Mail, Calendar, Github, Layout, MessageSquare, 
+  Globe, Mail, Calendar, Github, Layout, MessageSquare, Share2,
   Database, Briefcase, BarChart3, Video, Music, Smile, 
   Cpu, Zap, Cloud, HardDrive, Monitor, Palette, Search, 
   Terminal, Layers, Activity, Bug, 
@@ -772,6 +772,15 @@ export const connectorsData: Connector[] = [
     icon: Table,
     color: 'bg-indigo-600',
     category: 'Custom MCP'
+  },
+  {
+    id: 'graphify',
+    title: 'Graphify',
+    desc: 'Local relationship graph builder for agents, emails, cases, evidence, suppliers, tasks, and workflows',
+    icon: Share2,
+    color: 'bg-purple-600',
+    category: 'Apps',
+    isNew: true
   },
   {
     id: 'mcp-windows-shell',

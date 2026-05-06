@@ -83,5 +83,17 @@ export const toolDefinitions = [
       },
       required: ['path']
     }
+  },
+  {
+    name: 'graphify',
+    description: 'Create a local relationship graph from agents, tasks, emails, evidence, documents, connectors, or workflow text.',
+    parameters: {
+      type: 'object',
+      properties: {
+        input: { type: 'string', description: 'Lines of relationships such as "Mail ME -> Paperclips Agent".' },
+        title: { type: 'string', description: 'Optional graph title.' }
+      },
+      required: ['input']
+    }
   }
 ];
