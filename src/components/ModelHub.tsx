@@ -36,7 +36,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const [activeDownloads, setActiveDownloads] = useState<{[key: string]: number}>({});
   const [modelsPath, setModelsPath] = useState('');
   const [libraryModels, setLibraryModels] = useState<any[]>([]);
-  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janCliPath?: string, janAppPath?: string, janProfileRoot?: string, janDataRoot?: string, modelLibraryPath?: string, turboQuantBackendPath?: string, missingReason?: string, activeModel: string, models: any[], turboQuant?: any }>({
+  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, apiUrl?: string, port?: number, nitroPath?: string, janCliPath?: string, janAppPath?: string, janProfileRoot?: string, janDataRoot?: string, modelLibraryPath?: string, turboQuantBackendPath?: string, missingReason?: string, activeModel: string, models: any[], turboQuant?: any }>({
     apiOnline: false,
     installed: false,
     executablePath: '',
@@ -75,6 +75,17 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
       } catch (e) {
         console.error('Failed to fetch library models:', e);
       }
+    }
+  };
+
+  const probeJanApiFromRenderer = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:6767/v1/models', { cache: 'no-store' });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return Array.isArray(data?.data) ? data.data : [];
+    } catch {
+      return null;
     }
   };
 
@@ -121,8 +132,21 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const refreshJanStatus = async () => {
     if (!window.ipcRenderer) return;
     const status = await window.ipcRenderer.janStatus();
-    setJanStatus(status);
-    if (status.apiOnline) {
+    const apiModels = status?.apiOnline ? null : await probeJanApiFromRenderer();
+    const mergedStatus = apiModels
+      ? {
+          ...status,
+          apiOnline: true,
+          installed: true,
+          apiUrl: 'http://127.0.0.1:6767/v1',
+          port: 6767,
+          models: apiModels,
+          activeModel: apiModels[0]?.id || status?.activeModel || '',
+          missingReason: ''
+        }
+      : status;
+    setJanStatus(mergedStatus);
+    if (mergedStatus.apiOnline) {
       await fetchLibrary();
     }
   };
@@ -142,7 +166,19 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
           if (isMounted) setModelsPath(path);
           
           const status = await window.ipcRenderer.janStatus();
-          if (isMounted) setJanStatus(status);
+          const apiModels = status?.apiOnline ? null : await probeJanApiFromRenderer();
+          if (isMounted) {
+            setJanStatus(apiModels ? {
+              ...status,
+              apiOnline: true,
+              installed: true,
+              apiUrl: 'http://127.0.0.1:6767/v1',
+              port: 6767,
+              models: apiModels,
+              activeModel: apiModels[0]?.id || status?.activeModel || '',
+              missingReason: ''
+            } : status);
+          }
           const lmStudio = await window.ipcRenderer.checkLMStudio();
           if (isMounted) setOtherEngines(prev => ({ ...prev, lmStudioOnline: Boolean(lmStudio?.online) }));
 
@@ -420,7 +456,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
           </div>
         </div>
 
-        {/* Connect to Other Apps Section */}
+        {/* Engine Connections Section */}
         <div className="p-6 bg-blue-600 rounded-3xl text-white space-y-6 shadow-xl shadow-blue-100 overflow-hidden relative group">
           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
             <Globe className="w-48 h-48" />
@@ -430,13 +466,10 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                 <Share2 className="w-5 h-5 text-white" />
               </div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Local Engine Routes</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight">Engine Connections</h2>
             </div>
             <p className="text-sm text-blue-100 max-w-xl font-medium leading-relaxed">
-              Jan + TurboQuant is the built-in primary route. Ollama and LM Studio are optional external local routes. Use these OpenAI-style endpoints for apps like 
-              <span className="font-bold text-white mx-1">Cursor</span>, 
-              <span className="font-bold text-white mx-1">AnythingLLM</span>, 
-              or <span className="font-bold text-white mx-1">VS Code Extensions</span>.
+              Jan + TurboQuant is built into HermsDesk. Ollama and LM Studio are optional external apps; HermsDesk detects them here when they are actually running.
             </p>
           </div>
 

@@ -3,7 +3,8 @@ import si from 'systeminformation';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import Store from 'electron-store';
 import { providerService } from '../main'
@@ -11,6 +12,7 @@ import { providerService } from '../main'
 const require = createRequire(import.meta.url);
 const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
 const { app } = electron;
+const execFileAsync = promisify(execFile);
 
 export interface Model {
   name: string;
@@ -829,11 +831,67 @@ export class LocalAIService {
   // SYSTEM RESOURCES (Real hardware detection)
   // ═══════════════════════════════════════════════════════════════
 
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs))
+    ]);
+  }
+
+  private async scanNvidiaSmi() {
+    try {
+      const { stdout } = await execFileAsync('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], {
+        timeout: 2500,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024
+      });
+      const line = stdout.split(/\r?\n/).map(value => value.trim()).filter(Boolean)[0];
+      const [name, memoryMb] = line.split(',').map(value => value.trim());
+      if (name && Number(memoryMb)) {
+        return { name, vramGb: Math.round(Number(memoryMb) / 1024) };
+      }
+    } catch {
+      // nvidia-smi is best-effort; CIM below still handles non-NVIDIA systems.
+    }
+    return null;
+  }
+
+  private async scanWindowsHardwareFallback() {
+    const nvidiaGpu = await this.scanNvidiaSmi();
+    const script = `
+$ErrorActionPreference = 'SilentlyContinue'
+$gpu = Get-CimInstance Win32_VideoController | Sort-Object AdapterRAM -Descending | Select-Object -First 1
+$os = Get-CimInstance Win32_OperatingSystem
+[pscustomobject]@{
+  gpu = if ($gpu.Name) { [string]$gpu.Name } else { 'GPU not detected' }
+  vram = if ($gpu.AdapterRAM) { [math]::Round([double]$gpu.AdapterRAM / 1GB) } else { 0 }
+  ram = if ($os.TotalVisibleMemorySize) { [math]::Round([double]$os.TotalVisibleMemorySize / 1MB) } else { 0 }
+  os = "$($os.Caption) $($os.Version)"
+} | ConvertTo-Json -Compress
+`;
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+      timeout: 5000,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024
+    });
+    const parsed = JSON.parse(stdout.trim());
+    return {
+      gpu: nvidiaGpu?.name || parsed.gpu || 'GPU not detected',
+      vram: `${nvidiaGpu?.vramGb || Number(parsed.vram || 0)}GB`,
+      ram: `${Number(parsed.ram || Math.round(os.totalmem() / (1024 * 1024 * 1024)))}GB`,
+      os: parsed.os || `${os.type()} ${os.release()}`,
+      scannedAt: Date.now(),
+      approximate: false
+    };
+  }
+
   async scanPCResources() {
     try {
-      const gpus = await si.graphics();
-      const mem = await si.mem();
-      const osInfo = await si.osInfo();
+      const [gpus, mem, osInfo] = await Promise.all([
+        this.withTimeout(si.graphics(), 3500, 'GPU scan'),
+        this.withTimeout(si.mem(), 2500, 'RAM scan'),
+        this.withTimeout(si.osInfo(), 2500, 'OS scan')
+      ]);
       
       // Prioritize discrete NVIDIA GPUs
       let mainGpu = gpus.controllers.find(c => 
@@ -848,11 +906,12 @@ export class LocalAIService {
         , gpus.controllers[0]);
       }
       
-      const vramGB = mainGpu?.vram ? Math.round(mainGpu.vram / 1024) : 0;
+      const nvidiaGpu = await this.scanNvidiaSmi();
+      const vramGB = nvidiaGpu?.vramGb || (mainGpu?.vram ? Math.round(mainGpu.vram / 1024) : 0);
       const ramGB = Math.round(mem.total / (1024 * 1024 * 1024));
 
       this.pcCache = {
-        gpu: mainGpu?.model || 'Integrated Graphics',
+        gpu: nvidiaGpu?.name || mainGpu?.model || 'Integrated Graphics',
         vram: `${vramGB}GB`,
         ram: `${ramGB}GB`,
         os: `${osInfo.distro} ${osInfo.release}`,
@@ -863,6 +922,12 @@ export class LocalAIService {
       return this.pcCache;
     } catch (e) {
       console.error('ME 1.8: PC Scan failed:', e);
+      try {
+        this.pcCache = await this.scanWindowsHardwareFallback();
+        return this.pcCache;
+      } catch (fallbackError) {
+        console.error('ME 1.8: Windows hardware fallback failed:', fallbackError);
+      }
       return this.pcCache;
     }
   }
