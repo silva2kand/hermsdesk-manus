@@ -36,7 +36,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const [activeDownloads, setActiveDownloads] = useState<{[key: string]: number}>({});
   const [modelsPath, setModelsPath] = useState('');
   const [libraryModels, setLibraryModels] = useState<any[]>([]);
-  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janCliPath?: string, janAppPath?: string, janProfileRoot?: string, janDataRoot?: string, modelLibraryPath?: string, missingReason?: string, activeModel: string, models: any[] }>({
+  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janCliPath?: string, janAppPath?: string, janProfileRoot?: string, janDataRoot?: string, modelLibraryPath?: string, missingReason?: string, activeModel: string, models: any[], turboQuant?: any }>({
     apiOnline: false,
     installed: false,
     executablePath: '',
@@ -48,7 +48,8 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     modelLibraryPath: '',
     missingReason: '',
     activeModel: '',
-    models: []
+    models: [],
+    turboQuant: null
   });
   const [engineMessage, setEngineMessage] = useState('');
   const [otherEngines, setOtherEngines] = useState<{ ollamaOnline: boolean, lmStudioOnline: boolean }>({
@@ -402,6 +403,8 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                 <RuntimeLine label="Jan CLI" value={janStatus.janCliPath || 'Not found'} ok={Boolean(janStatus.janCliPath)} />
                 <RuntimeLine label="API" value={janStatus.apiOnline ? 'Port 6767/1337 online' : 'Port 6767 offline'} ok={janStatus.apiOnline} />
                 <RuntimeLine label="Data" value={janStatus.janDataRoot || 'HermsDesk owned'} ok={Boolean(janStatus.janDataRoot)} />
+                <RuntimeLine label="DFALSH" value={janStatus.turboQuant?.policy ? `${janStatus.turboQuant.policy.ctxSize} ctx / ${janStatus.turboQuant.policy.threads} threads` : 'Armed on load'} ok />
+                <RuntimeLine label="Speed" value={janStatus.turboQuant?.metrics?.tokensPerSecond ? `${Math.round(janStatus.turboQuant.metrics.tokensPerSecond)} tok/s` : 'No run yet'} ok={Boolean(janStatus.turboQuant?.metrics)} />
               </div>
             </div>
             <div className="flex items-center space-x-3 mt-6">

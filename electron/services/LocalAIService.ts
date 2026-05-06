@@ -145,6 +145,56 @@ export class LocalAIService {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
+  private buildDfalshTurboQuantPolicy(modelPath?: string) {
+    const stats = modelPath && fs.existsSync(modelPath) ? fs.statSync(modelPath) : null;
+    const modelGb = stats ? stats.size / (1024 * 1024 * 1024) : 0;
+    const cpuThreads = Math.max(2, Math.min(os.cpus().length || 4, 12));
+    const ramGb = os.totalmem() / (1024 * 1024 * 1024);
+    const vramText = String(this.pcCache.vram || '');
+    const vramGb = Number(vramText.match(/\d+(?:\.\d+)?/)?.[0] || 0);
+    const ctxSize = modelGb >= 24 || ramGb < 32 ? 8192 : modelGb >= 12 ? 16384 : 32768;
+    const timeout = modelGb >= 24 ? 240 : modelGb >= 12 ? 180 : 120;
+    const gpuLayers = vramGb > 0 ? -1 : 0;
+    const policy = {
+      name: 'DFALSH + TurboQuant',
+      mode: 'adaptive-local-inference',
+      modelGb: Number(modelGb.toFixed(2)),
+      ctxSize,
+      threads: cpuThreads,
+      gpuLayers,
+      timeout,
+      fit: true,
+      heuristics: [
+        'auto-fit context to available VRAM',
+        'offload all viable layers to GPU',
+        'bound context for large models to avoid VRAM paging',
+        'pin CPU threads below full system count for UI responsiveness',
+        'persist llama.cpp timings from OpenAI-compatible responses'
+      ]
+    };
+    this.store.set('turboQuant.lastPolicy', { ...policy, updatedAt: new Date().toISOString() });
+    return policy;
+  }
+
+  private saveJanMetrics(responseData: any, model: string) {
+    const timings = responseData?.timings || {};
+    const usage = responseData?.usage || {};
+    const metrics = {
+      model,
+      engine: 'Jan + TurboQuant',
+      policy: this.store.get('turboQuant.lastPolicy', null),
+      updatedAt: new Date().toISOString(),
+      tokensPerSecond: timings.predicted_per_second || timings.prompt_per_second || 0,
+      promptPerSecond: timings.prompt_per_second || 0,
+      completionTokens: usage.completion_tokens || timings.predicted_n || 0,
+      promptTokens: usage.prompt_tokens || timings.prompt_n || 0,
+      totalTokens: usage.total_tokens || 0,
+      rawTimings: timings
+    };
+    this.store.set('turboQuant.lastMetrics', metrics);
+    return metrics;
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // BUILT-IN JAN + TURBOQUANT ENGINE (PRIMARY)
   // ═══════════════════════════════════════════════════════════════
@@ -225,6 +275,10 @@ export class LocalAIService {
       authRequired,
       portOccupiedByOther,
       models,
+      turboQuant: {
+        policy: this.store.get('turboQuant.lastPolicy', null),
+        metrics: this.store.get('turboQuant.lastMetrics', null)
+      },
       externalAccessUrl: this.janUrl
     };
   }
@@ -310,6 +364,7 @@ export class LocalAIService {
     fs.mkdirSync(logDir, { recursive: true });
     const logPath = path.join(logDir, 'turboquant-serve.log');
     const apiKey = process.env.JAN_API_KEY || ((this.store.get('api-keys', {}) || {}) as any)['jan-turboquant'] || '';
+    const policy = this.buildDfalshTurboQuantPolicy(modelPath);
     const args = [
       'serve',
       modelName || path.basename(modelPath),
@@ -318,6 +373,14 @@ export class LocalAIService {
       '--port',
       '6767',
       '--fit',
+      '--ctx-size',
+      String(policy.ctxSize),
+      '--threads',
+      String(policy.threads),
+      '--n-gpu-layers',
+      String(policy.gpuLayers),
+      '--timeout',
+      String(policy.timeout),
       '--detach',
       '--log',
       logPath
@@ -425,10 +488,12 @@ export class LocalAIService {
       }, { timeout: 120000, headers: this.getJanAuthHeaders() });
       
       const content = response.data?.choices?.[0]?.message?.content || '';
+      const metrics = this.saveJanMetrics(response.data, model || this.activeJanModel);
       return { 
         message: { content }, 
         engine: 'Jan + TurboQuant',
-        model: model || this.activeJanModel
+        model: model || this.activeJanModel,
+        metrics
       };
     } catch (error: any) {
       if (error.code === 'ECONNREFUSED') {
