@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { app } from 'electron';
 import Store from 'electron-store';
 import { providerService } from '../main'
 
@@ -34,7 +35,7 @@ export class LocalAIService {
   // Built-in Jan + TurboQuant Engine (PRIMARY)
   private janUrl = 'http://127.0.0.1:6767/v1';
   private activeJanModel = '';
-  private modelsPath = path.join(os.homedir(), 'jan', 'models');
+  private modelsPath = path.join(app.getPath('userData'), 'models');
 
   // Optional External Engines
   private ollamaUrl = 'http://localhost:11434/api';
@@ -60,6 +61,31 @@ export class LocalAIService {
   constructor(sharedStore?: any) {
     this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
     this.activeJanModel = this.store.get('activeJanModel', '') as string;
+    fs.mkdirSync(this.modelsPath, { recursive: true });
+    fs.mkdirSync(this.getHermsDeskJanProfileRoot(), { recursive: true });
+  }
+
+  private getHermsDeskJanProfileRoot() {
+    return path.join(app.getPath('userData'), 'jan-runtime-profile');
+  }
+
+  private getHermsDeskJanDataRoot() {
+    return path.join(this.getHermsDeskJanProfileRoot(), 'Jan', 'data');
+  }
+
+  private getJanProcessEnv() {
+    const profileRoot = this.getHermsDeskJanProfileRoot();
+    const localRoot = path.join(profileRoot, 'Local');
+    fs.mkdirSync(profileRoot, { recursive: true });
+    fs.mkdirSync(localRoot, { recursive: true });
+    fs.mkdirSync(this.getHermsDeskJanDataRoot(), { recursive: true });
+    return {
+      ...process.env,
+      APPDATA: profileRoot,
+      LOCALAPPDATA: localRoot,
+      JAN_DATA_FOLDER: this.getHermsDeskJanDataRoot(),
+      HERMESDESK_JAN_BUILTIN: '1'
+    };
   }
 
   private getNitroSearchPaths() {
@@ -68,19 +94,14 @@ export class LocalAIService {
       path.join(process.cwd(), 'electron', 'bin', 'nitro.exe'),
       path.join(process.cwd(), 'resources', 'bin', 'nitro.exe'),
       path.join(process.resourcesPath || '', 'bin', 'nitro.exe'),
-      path.join(process.resourcesPath || '', 'electron', 'bin', 'nitro.exe'),
-      path.join(os.homedir(), 'jan', 'nitro.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'nitro.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'nitro.exe')
+      path.join(process.resourcesPath || '', 'electron', 'bin', 'nitro.exe')
     ];
   }
 
   private getJanCliSearchPaths() {
     return [
       path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe'),
-      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'resources', 'bin', 'jan.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'resources', 'bin', 'jan.exe')
+      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe')
     ];
   }
 
@@ -90,10 +111,6 @@ export class LocalAIService {
       path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'jan.exe'),
       path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'Jan.exe'),
       path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'jan.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'Jan.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'Jan.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'jan.exe'),
-      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'resources', 'app.asar'),
       path.join(process.cwd(), 'bin', 'Jan.exe'),
       path.join(process.cwd(), 'electron', 'bin', 'Jan.exe'),
       path.join(process.resourcesPath || '', 'bin', 'Jan.exe')
@@ -111,11 +128,14 @@ export class LocalAIService {
       nitroPath,
       janCliPath,
       janAppPath,
+      janProfileRoot: this.getHermsDeskJanProfileRoot(),
+      janDataRoot: this.getHermsDeskJanDataRoot(),
+      modelLibraryPath: this.modelsPath,
       installed: Boolean(nitroPath || janCliPath || janAppPath),
       searchedPaths: [...nitroPaths, ...janCliPaths, ...janAppPaths],
       missingReason: nitroPath || janCliPath || janAppPath
         ? ''
-        : 'No bundled nitro.exe, Jan CLI, or Jan.exe was found in the app bin/resources paths or the user Jan install paths.'
+        : 'No bundled nitro.exe, Jan CLI, or Jan.exe was found inside HermsDesk app bin/resources paths.'
     };
   }
 
@@ -196,6 +216,9 @@ export class LocalAIService {
       nitroPath: runtime.nitroPath,
       janCliPath: runtime.janCliPath,
       janAppPath: runtime.janAppPath,
+      janProfileRoot: runtime.janProfileRoot,
+      janDataRoot: runtime.janDataRoot,
+      modelLibraryPath: runtime.modelLibraryPath,
       searchedPaths: runtime.searchedPaths,
       missingReason: runtime.missingReason,
       activeModel: this.activeJanModel,
@@ -231,7 +254,8 @@ export class LocalAIService {
       const nitro = spawn(runtime.nitroPath, ['--port', '6767'], {
         detached: true,
         stdio: 'ignore',
-        windowsHide: true
+        windowsHide: true,
+        env: this.getJanProcessEnv()
       });
       nitro.unref();
 
@@ -246,11 +270,12 @@ export class LocalAIService {
     }
 
     if (runtime.janAppPath) {
-      console.log(`ME 1.8: Starting Jan desktop runtime from ${runtime.janAppPath}`);
+      console.log(`ME 1.8: Starting bundled Jan desktop runtime from ${runtime.janAppPath}`);
       const jan = spawn(runtime.janAppPath, [], {
         detached: true,
         stdio: 'ignore',
-        windowsHide: false
+        windowsHide: false,
+        env: this.getJanProcessEnv()
       });
       jan.unref();
 
@@ -258,10 +283,10 @@ export class LocalAIService {
         await new Promise(r => setTimeout(r, 1000));
         const newStatus = await this.getJanEngineStatus();
         if (newStatus.apiOnline) {
-          return { ok: true, engine: 'Jan + TurboQuant', message: 'Jan desktop runtime started and API is ready.', status: newStatus };
+          return { ok: true, engine: 'Jan + TurboQuant', message: 'Bundled Jan desktop runtime started and API is ready.', status: newStatus };
         }
       }
-      return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan desktop was launched but its OpenAI-compatible API did not become ready on port 6767. Enable Jan local API/server in Jan settings, or load a GGUF model from Model Hub to start Jan CLI serve.', status: await this.getJanEngineStatus() };
+      return { ok: false, engine: 'Jan + TurboQuant', error: 'Bundled Jan desktop runtime was launched but its OpenAI-compatible API did not become ready on port 6767. Load a GGUF model from Model Hub to start Jan CLI serve inside HermsDesk.', status: await this.getJanEngineStatus() };
     }
 
     return {
@@ -281,7 +306,9 @@ export class LocalAIService {
       return { ok: false, error: `Model file not found: ${modelPath || modelName}` };
     }
 
-    const logPath = path.join(os.tmpdir(), 'hermsdesk-jan-serve.log');
+    const logDir = path.join(this.getHermsDeskJanDataRoot(), 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const logPath = path.join(logDir, 'turboquant-serve.log');
     const apiKey = process.env.JAN_API_KEY || ((this.store.get('api-keys', {}) || {}) as any)['jan-turboquant'] || '';
     const args = [
       'serve',
@@ -301,7 +328,8 @@ export class LocalAIService {
       cwd: path.dirname(runtime.janCliPath),
       detached: true,
       stdio: 'ignore',
-      windowsHide: true
+      windowsHide: true,
+      env: this.getJanProcessEnv()
     });
     child.unref();
 

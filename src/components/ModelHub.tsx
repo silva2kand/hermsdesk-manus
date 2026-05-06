@@ -36,12 +36,16 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const [activeDownloads, setActiveDownloads] = useState<{[key: string]: number}>({});
   const [modelsPath, setModelsPath] = useState('');
   const [libraryModels, setLibraryModels] = useState<any[]>([]);
-  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janAppPath?: string, missingReason?: string, activeModel: string, models: any[] }>({
+  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janCliPath?: string, janAppPath?: string, janProfileRoot?: string, janDataRoot?: string, modelLibraryPath?: string, missingReason?: string, activeModel: string, models: any[] }>({
     apiOnline: false,
     installed: false,
     executablePath: '',
     nitroPath: '',
+    janCliPath: '',
     janAppPath: '',
+    janProfileRoot: '',
+    janDataRoot: '',
+    modelLibraryPath: '',
     missingReason: '',
     activeModel: '',
     models: []
@@ -395,8 +399,9 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               </p>
               <div className="grid grid-cols-1 gap-2">
                 <RuntimeLine label="Nitro" value={janStatus.nitroPath || 'Not found'} ok={Boolean(janStatus.nitroPath)} />
-                <RuntimeLine label="Jan app" value={janStatus.janAppPath || 'Not found'} ok={Boolean(janStatus.janAppPath)} />
+                <RuntimeLine label="Jan CLI" value={janStatus.janCliPath || 'Not found'} ok={Boolean(janStatus.janCliPath)} />
                 <RuntimeLine label="API" value={janStatus.apiOnline ? 'Port 6767/1337 online' : 'Port 6767 offline'} ok={janStatus.apiOnline} />
+                <RuntimeLine label="Data" value={janStatus.janDataRoot || 'HermsDesk owned'} ok={Boolean(janStatus.janDataRoot)} />
               </div>
             </div>
             <div className="flex items-center space-x-3 mt-6">
