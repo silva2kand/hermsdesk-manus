@@ -619,8 +619,31 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     }
 
     const userMessage = { role: 'user', content: outgoing };
+    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement)/i.test(outgoing);
+    let memoryContext: any = null;
+    if (needsMailMemory && window.ipcRenderer?.getEmailIntelligence) {
+      try {
+        const intel = await window.ipcRenderer.getEmailIntelligence();
+        memoryContext = intel?.mailboxMemory || intel?.memory || null;
+      } catch {
+        memoryContext = null;
+      }
+    }
     const chatHistory = [
       { role: 'system', content: systemPrompt },
+      ...(memoryContext ? [{
+        role: 'system',
+        content: `Current local mailbox memory is already indexed. Use this first instead of asking to reread all mail. If the user asks about bills/deadlines/payments, answer from billsToPay/deadlines and say when the index was last updated. Never claim full mailbox access beyond the indexed state.\n\n${JSON.stringify({
+          generatedAt: memoryContext.generatedAt,
+          totalIndexed: memoryContext.totalIndexed,
+          latestReceivedAt: memoryContext.latestReceivedAt,
+          unreadCount: memoryContext.unreadCount,
+          categories: memoryContext.categories,
+          billsToPay: (memoryContext.billsToPay || []).slice(0, 20),
+          deadlines: (memoryContext.deadlines || []).slice(0, 20),
+          urgent: (memoryContext.urgent || []).slice(0, 20)
+        })}`
+      }] : []),
       ...messages,
       userMessage
     ];

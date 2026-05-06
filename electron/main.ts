@@ -233,6 +233,79 @@ function createWindow() {
     eventBus?.log('app', content, type === 'error' ? 'error' : type === 'bug' ? 'warn' : 'info');
   };
 
+  const buildEmailMemory = (messages: any[]) => {
+    const moneyPattern = /(?:£|\$|eur|gbp|usd)\s?\d[\d,]*(?:\.\d{2})?|\b\d[\d,]*(?:\.\d{2})?\s?(?:gbp|usd|eur)\b/i
+    const billPattern = /(bill|invoice|payment due|pay now|statement|arrears|overdue|council tax|utility|renewal|premium|direct debit|balance due)/i
+    const deadlinePattern = /(due|deadline|by|before|expires|renewal|hearing|appointment|court|payment date|final notice)/i
+    const sorted = [...messages].sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+    const categories = sorted.reduce((acc: Record<string, number>, message: any) => {
+      const key = message.categoryId || 'general'
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+    const senderMap = new Map<string, any>()
+    sorted.forEach((message: any) => {
+      const key = (message.senderEmail || message.sender || 'unknown').toLowerCase()
+      const existing = senderMap.get(key) || { sender: message.sender, senderEmail: message.senderEmail, count: 0, latestAt: message.receivedAt, latestSubject: message.subject }
+      existing.count += 1
+      if (String(message.receivedAt || '') > String(existing.latestAt || '')) {
+        existing.latestAt = message.receivedAt
+        existing.latestSubject = message.subject
+      }
+      senderMap.set(key, existing)
+    })
+    const billsToPay = sorted
+      .filter((message: any) => {
+        const text = `${message.subject || ''} ${message.bodyPreview || ''} ${message.categoryLabel || ''}`
+        return billPattern.test(text) || moneyPattern.test(text) || ['council-bills', 'tax-vat-mot', 'insurance'].includes(message.categoryId)
+      })
+      .slice(0, 80)
+      .map((message: any) => ({
+        id: message.id,
+        subject: message.subject,
+        sender: message.sender || message.senderEmail,
+        receivedAt: message.receivedAt,
+        folderName: message.folderName,
+        categoryLabel: message.categoryLabel,
+        unread: Boolean(message.unread),
+        preview: message.bodyPreview
+      }))
+    const deadlines = sorted
+      .filter((message: any) => deadlinePattern.test(`${message.subject || ''} ${message.bodyPreview || ''}`))
+      .slice(0, 80)
+      .map((message: any) => ({
+        id: message.id,
+        subject: message.subject,
+        sender: message.sender || message.senderEmail,
+        receivedAt: message.receivedAt,
+        categoryLabel: message.categoryLabel,
+        preview: message.bodyPreview
+      }))
+    const urgent = sorted
+      .filter((message: any) => message.unread || message.importance === 'high' || message.flagStatus === 'flagged')
+      .slice(0, 80)
+      .map((message: any) => ({
+        id: message.id,
+        subject: message.subject,
+        sender: message.sender || message.senderEmail,
+        receivedAt: message.receivedAt,
+        reason: message.importance === 'high' ? 'high importance' : message.flagStatus === 'flagged' ? 'flagged' : 'unread',
+        categoryLabel: message.categoryLabel
+      }))
+    return {
+      generatedAt: new Date().toISOString(),
+      totalIndexed: sorted.length,
+      latestReceivedAt: sorted[0]?.receivedAt || null,
+      unreadCount: sorted.filter((message: any) => message.unread).length,
+      flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length,
+      categories,
+      topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40),
+      billsToPay,
+      deadlines,
+      urgent
+    }
+  }
+
   const processEmailIntelligence = async (data: any, source = 'mailbox') => {
     const current = workspaceService.getEmailIntelligence?.() || { messages: [], folders: [], summary: {} }
     const statusById = new Map((current.messages || []).map((m: any) => [m.id, m.approvalStatus]))
@@ -253,15 +326,14 @@ function createWindow() {
       const key = folder.id || `${source}:${folder.displayName || 'folder'}`
       foldersByKey.set(key, { ...foldersByKey.get(key), ...folder, source: folder.source || source })
     })
+    const memory = buildEmailMemory(messages)
     const merged = {
       ...data,
       folders: Array.from(foldersByKey.values()),
       messages,
-      summary: messages.reduce((acc: Record<string, number>, item: any) => {
-        const key = item.categoryId || item.source || 'general'
-        acc[key] = (acc[key] || 0) + 1
-        return acc
-      }, {})
+      summary: memory.categories,
+      memory,
+      mailboxMemory: memory
     }
     workspaceService.saveEmailIntelligence(merged)
 

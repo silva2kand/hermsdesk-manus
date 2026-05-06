@@ -75,6 +75,34 @@ export class LocalAIService {
     ];
   }
 
+  private getJanAppSearchPaths() {
+    return [
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'Jan.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'Jan.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'jan', 'jan.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Jan', 'resources', 'app.asar'),
+      path.join(process.cwd(), 'bin', 'Jan.exe'),
+      path.join(process.cwd(), 'electron', 'bin', 'Jan.exe'),
+      path.join(process.resourcesPath || '', 'bin', 'Jan.exe')
+    ];
+  }
+
+  private getJanRuntimeDiagnostics() {
+    const nitroPaths = this.getNitroSearchPaths();
+    const janAppPaths = this.getJanAppSearchPaths();
+    const nitroPath = nitroPaths.find(p => fs.existsSync(p)) || '';
+    const janAppPath = janAppPaths.find(p => fs.existsSync(p) && p.toLowerCase().endsWith('.exe')) || '';
+    return {
+      nitroPath,
+      janAppPath,
+      installed: Boolean(nitroPath || janAppPath),
+      searchedPaths: [...nitroPaths, ...janAppPaths],
+      missingReason: nitroPath || janAppPath
+        ? ''
+        : 'No bundled nitro.exe or Jan.exe was found in the app bin/resources paths or the user Jan install paths.'
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // BUILT-IN JAN + TURBOQUANT ENGINE (PRIMARY)
   // ═══════════════════════════════════════════════════════════════
@@ -121,16 +149,20 @@ export class LocalAIService {
       }
     }
 
-    const executablePath = this.getNitroSearchPaths().find(p => fs.existsSync(p)) || '';
+    const runtime = this.getJanRuntimeDiagnostics();
 
     return {
       engine: 'Jan + TurboQuant',
       role: 'Primary Built-in Engine',
       apiOnline: isOnline,
-      installed: Boolean(executablePath) || isOnline,
+      installed: runtime.installed || isOnline,
       port: 1337,
       apiUrl: this.janUrl,
-      executablePath,
+      executablePath: runtime.nitroPath || runtime.janAppPath,
+      nitroPath: runtime.nitroPath,
+      janAppPath: runtime.janAppPath,
+      searchedPaths: runtime.searchedPaths,
+      missingReason: runtime.missingReason,
       activeModel: this.activeJanModel,
       portOccupiedByOther,
       models,
@@ -148,26 +180,51 @@ export class LocalAIService {
       return { ok: false, engine: 'Jan + TurboQuant', error: 'Port 1337 is occupied by another service. Please free the port so the built-in engine can start.' };
     }
 
-    // Attempt to spawn Nitro binary
-    const searchPaths = this.getNitroSearchPaths();
+    const runtime = this.getJanRuntimeDiagnostics();
+    if (runtime.nitroPath) {
+      console.log(`ME 1.8: Spawning Jan+TurboQuant Nitro from ${runtime.nitroPath}`);
+      const nitro = spawn(runtime.nitroPath, ['--port', '1337'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      nitro.unref();
 
-    for (const nitroPath of searchPaths) {
-      if (fs.existsSync(nitroPath)) {
-        console.log(`ME 1.8: Spawning Jan+TurboQuant Nitro from ${nitroPath}`);
-        const nitro = spawn(nitroPath, ['--port', '1337'], {
-          detached: true,
-          stdio: 'ignore'
-        });
-        nitro.unref();
-        
-        // Wait a moment and recheck
-        await new Promise(r => setTimeout(r, 2000));
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise(r => setTimeout(r, 1000));
         const newStatus = await this.getJanEngineStatus();
-        return { ok: newStatus.apiOnline, engine: 'Jan + TurboQuant', message: newStatus.apiOnline ? 'Built-in engine started successfully.' : 'Engine spawned, still initializing...', status: newStatus };
+        if (newStatus.apiOnline) {
+          return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in Nitro runtime started successfully.', status: newStatus };
+        }
       }
+      return { ok: false, engine: 'Jan + TurboQuant', error: 'Nitro was launched but the Jan-compatible API did not become ready on port 1337.', status: await this.getJanEngineStatus() };
     }
 
-    return { ok: false, engine: 'Jan + TurboQuant', error: 'Nitro binary not found. The built-in engine needs nitro.exe in the bin/ folder or Jan installation directory.' };
+    if (runtime.janAppPath) {
+      console.log(`ME 1.8: Starting Jan desktop runtime from ${runtime.janAppPath}`);
+      const jan = spawn(runtime.janAppPath, [], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: false
+      });
+      jan.unref();
+
+      for (let attempt = 0; attempt < 18; attempt += 1) {
+        await new Promise(r => setTimeout(r, 1000));
+        const newStatus = await this.getJanEngineStatus();
+        if (newStatus.apiOnline) {
+          return { ok: true, engine: 'Jan + TurboQuant', message: 'Jan desktop runtime started and API is ready.', status: newStatus };
+        }
+      }
+      return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan desktop was launched but its OpenAI-compatible API did not become ready on port 1337. Enable Jan local API/server in Jan settings.', status: await this.getJanEngineStatus() };
+    }
+
+    return {
+      ok: false,
+      engine: 'Jan + TurboQuant',
+      error: 'Built-in Jan/TurboQuant runtime files are missing. Add nitro.exe to the app bin/resources folder or install Jan so Jan.exe is available; then press Start Jan TurboQuant.',
+      status: await this.getJanEngineStatus()
+    };
   }
 
   /** Load a model into the built-in Jan + TurboQuant engine */

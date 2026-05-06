@@ -19,6 +19,15 @@ interface LocalModel {
   vramRequired: string;
 }
 
+const RuntimeLine = ({ label, value, ok }: { label: string; value: string; ok: boolean }) => (
+  <div className="flex items-center justify-between gap-3 rounded-xl bg-white/10 border border-white/10 px-3 py-2">
+    <span className="text-[9px] font-black uppercase tracking-widest text-white/70">{label}</span>
+    <span className={`text-[10px] font-bold truncate ${ok ? 'text-white' : 'text-white/60'}`} title={value}>
+      {value}
+    </span>
+  </div>
+);
+
 export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provider: string) => void }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -27,10 +36,13 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const [activeDownloads, setActiveDownloads] = useState<{[key: string]: number}>({});
   const [modelsPath, setModelsPath] = useState('');
   const [libraryModels, setLibraryModels] = useState<any[]>([]);
-  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, activeModel: string, models: any[] }>({
+  const [janStatus, setJanStatus] = useState<{ apiOnline: boolean, installed: boolean, executablePath: string, nitroPath?: string, janAppPath?: string, missingReason?: string, activeModel: string, models: any[] }>({
     apiOnline: false,
     installed: false,
     executablePath: '',
+    nitroPath: '',
+    janAppPath: '',
+    missingReason: '',
     activeModel: '',
     models: []
   });
@@ -282,7 +294,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     setEngineMessage('Starting Jan/TurboQuant engine...');
     const result = await window.ipcRenderer.startJan();
     await refreshJanStatus();
-    setEngineMessage(result.ok ? 'Jan/TurboQuant engine is ready.' : (result.error || 'Jan could not be started.'));
+    setEngineMessage(result.ok ? (result.message || 'Jan/TurboQuant engine is ready.') : (result.error || 'Jan could not be started.'));
   };
 
   const handleDeleteModel = async (modelId: string) => {
@@ -293,11 +305,32 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#fafafa]">
-      <div className="p-8 max-w-5xl mx-auto w-full space-y-8">
+    <div className="flex flex-col h-full bg-[#f7f8fb]">
+      <div className="p-6 max-w-6xl mx-auto w-full space-y-6">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.24em]">HermsDesk Built-In AI</p>
+            <h1 className="text-2xl font-black text-gray-950 tracking-tight mt-1">Jan + TurboQuant Model Hub</h1>
+            <p className="text-sm text-gray-500 mt-1">Built-in Jan is the primary engine. Ollama, LM Studio, and OpenCode are external fallback routes.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={refreshInstalledModels} className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-black hover:bg-gray-50">
+              Refresh
+            </button>
+            <button onClick={handleStartJan} className="px-4 py-2 bg-gray-950 text-white rounded-xl text-xs font-black hover:bg-gray-800">
+              {janStatus.apiOnline ? 'Jan Ready' : 'Start Jan'}
+            </button>
+          </div>
+        </div>
+
+        {engineMessage && (
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-800">
+            {engineMessage}
+          </div>
+        )}
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-8 bg-gray-900 rounded-[40px] text-white space-y-4 shadow-2xl shadow-gray-200 overflow-hidden relative group">
+          <div className="p-6 bg-gray-950 rounded-3xl text-white space-y-4 shadow-xl shadow-gray-200 overflow-hidden relative group">
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:rotate-12 transition-transform duration-700">
               <Cpu className="w-32 h-32" />
             </div>
@@ -330,14 +363,14 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               </div>
             </div>
             <button 
-              onClick={() => window.ipcRenderer?.scanPC()}
-              className="mt-6 w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+              onClick={handleScan}
+              className="mt-6 w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
             >
-              Rescan PC
+              {isScanning ? 'Scanning...' : 'Rescan PC'}
             </button>
           </div>
 
-          <div className={`p-8 rounded-[40px] text-white space-y-4 shadow-2xl transition-all duration-500 relative overflow-hidden group ${janStatus.apiOnline ? 'bg-blue-600 shadow-blue-100' : 'bg-orange-500 shadow-orange-100'}`}>
+          <div className={`p-6 rounded-3xl text-white space-y-4 shadow-xl transition-all duration-500 relative overflow-hidden group ${janStatus.apiOnline ? 'bg-blue-600 shadow-blue-100' : janStatus.installed ? 'bg-amber-500 shadow-amber-100' : 'bg-gray-800 shadow-gray-200'}`}>
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
               <Zap className="w-32 h-32" />
             </div>
@@ -350,7 +383,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                   <h2 className="text-xl font-black uppercase tracking-tight">Built-in Jan + TurboQuant Engine</h2>
                 </div>
                 <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${janStatus.apiOnline ? 'bg-white/20 text-white' : 'bg-white/20 text-white'}`}>
-                  {janStatus.apiOnline ? 'Online' : 'Offline'}
+                  {janStatus.apiOnline ? 'Online' : janStatus.installed ? 'Runtime Found' : 'Runtime Missing'}
                 </div>
               </div>
               <p className="text-sm text-white/80 font-medium leading-relaxed mb-4">
@@ -360,11 +393,16 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                     ? 'The built-in Jan + TurboQuant runtime is present, but its local API is not responding on port 1337. Press Start Jan TurboQuant, then refresh.'
                     : 'The built-in Jan + TurboQuant runtime was not found in the app runtime paths. Place nitro.exe in the app bin folder to enable the primary engine.'}
               </p>
+              <div className="grid grid-cols-1 gap-2">
+                <RuntimeLine label="Nitro" value={janStatus.nitroPath || 'Not found'} ok={Boolean(janStatus.nitroPath)} />
+                <RuntimeLine label="Jan app" value={janStatus.janAppPath || 'Not found'} ok={Boolean(janStatus.janAppPath)} />
+                <RuntimeLine label="API" value={janStatus.apiOnline ? janStatus.executablePath || 'Port 1337 online' : 'Port 1337 offline'} ok={janStatus.apiOnline} />
+              </div>
             </div>
             <div className="flex items-center space-x-3 mt-6">
               <button 
                 onClick={handleStartJan}
-                className="flex-1 py-4 bg-white text-gray-900 rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl shadow-black/10"
+                className="flex-1 py-4 bg-white text-gray-900 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl shadow-black/10"
               >
                 {janStatus.apiOnline ? 'Restart Server' : 'Start Jan TurboQuant'}
               </button>
@@ -373,7 +411,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         </div>
 
         {/* Connect to Other Apps Section */}
-        <div className="p-8 bg-blue-600 rounded-[40px] text-white space-y-6 shadow-2xl shadow-blue-200 overflow-hidden relative group">
+        <div className="p-6 bg-blue-600 rounded-3xl text-white space-y-6 shadow-xl shadow-blue-100 overflow-hidden relative group">
           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
             <Globe className="w-48 h-48" />
           </div>
@@ -439,7 +477,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-black text-gray-900 tracking-tight">TurboQuant Local Model Hub</h1>
+              <h2 className="text-lg font-black text-gray-900 tracking-tight">Download and Load Models</h2>
               <p className="text-sm text-gray-500 font-medium">Jan-powered local engine with TurboQuant optimization for RTX GPUs.</p>
             </div>
           </div>
@@ -713,53 +751,6 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               </div>
             </div>
           )}
-        </div>
-
-        {/* Recommended for Your PC */}
-        <div className="space-y-4">
-          <div className="flex items-center space-x-2 px-1">
-            <Sparkles className="w-4 h-4 text-blue-600" />
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest">Recommended for {pcCapabilities.gpu}</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {recommendedModels.map((m) => (
-              <div key={m.id} className="p-5 bg-white border border-gray-100 rounded-3xl space-y-4 hover:border-blue-200 hover:shadow-xl transition-all group">
-                <div className="flex items-center justify-between">
-                  <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-                    <Box className="w-5 h-5" />
-                  </div>
-                  <div className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[8px] font-black uppercase rounded-full">{m.reason}</div>
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-gray-900">{m.name}</h3>
-                  <div className="flex items-center space-x-3 mt-1 text-[10px] font-bold text-gray-400 uppercase">
-                    <span>{m.size}</span>
-                    <span>/</span>
-                    <span className="text-purple-500">{m.vram} VRAM</span>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => handleDownload(m.id)}
-                  disabled={activeDownloads[m.id] !== undefined}
-                  className="w-full py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black hover:bg-gray-800 transition-all flex items-center justify-center disabled:bg-gray-400"
-                >
-                  {activeDownloads[m.id] !== undefined ? (
-                    <div className="flex items-center space-x-2 w-full px-2">
-                      <div className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
-                        <div className="h-full bg-white transition-all duration-300" style={{ width: `${activeDownloads[m.id]}%` }} />
-                      </div>
-                      <span className="text-[9px]">{activeDownloads[m.id]}%</span>
-                    </div>
-                  ) : (
-                    <>
-                      <Download className="w-3.5 h-3.5 mr-2" />
-                      Download
-                    </>
-                  )}
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Local Inventory */}

@@ -486,6 +486,15 @@ export const connectorsData: Connector[] = [
 
   // Custom API
   {
+    id: 'jan-turboquant',
+    title: 'Jan + TurboQuant',
+    desc: 'Built-in primary local AI engine exposed inside HermsDesk on port 1337',
+    icon: Cpu,
+    color: 'bg-gray-950',
+    category: 'Custom API',
+    connected: true
+  },
+  {
     id: 'ollama',
     title: 'Ollama',
     desc: 'Connect to local Ollama API',
@@ -500,6 +509,15 @@ export const connectorsData: Connector[] = [
     desc: 'Connect to local LM Studio server',
     icon: Monitor,
     color: 'bg-blue-700',
+    category: 'Custom API',
+    connected: true
+  },
+  {
+    id: 'opencode',
+    title: 'OpenCode',
+    desc: 'Use a local OpenAI-compatible OpenCode endpoint when a token is saved',
+    icon: Terminal,
+    color: 'bg-slate-900',
     category: 'Custom API',
     connected: true
   },

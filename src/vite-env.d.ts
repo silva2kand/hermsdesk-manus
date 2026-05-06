@@ -10,7 +10,7 @@ interface Window {
     listOpenCodeModels: () => Promise<any[]>;
     checkJan: () => Promise<any>;
     janStatus: () => Promise<{ apiOnline: boolean, installed: boolean, executablePath: string, activeModel: string, models: any[] }>;
-    startJan: () => Promise<{ ok: boolean, error?: string, alreadyOnline?: boolean, status?: any }>;
+    startJan: () => Promise<{ ok: boolean, message?: string, error?: string, alreadyOnline?: boolean, status?: any }>;
     loadJanModel: (model: { name: string, path?: string }) => Promise<{ ok: boolean, model?: string, warning?: string, error?: string, status?: any }>;
     scanPC: () => Promise<{ gpu: string, vram: string, ram: string, os: string, approximate?: boolean }>;
     searchHF: (query: string) => Promise<any[]>;

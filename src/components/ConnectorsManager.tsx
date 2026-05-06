@@ -39,8 +39,8 @@ const StatusPill = ({ label, ok }: { label: string; ok: boolean }) => (
 
 const ConnectorItem = ({ connector, isConnected, status, onToggle }: { connector: Connector, isConnected: boolean, status?: any, onToggle: () => void }) => {
   const enabled = isConnected !== false;
-  const authRequired = ['gmail', 'google-calendar', 'google-drive', 'outlook-mail', 'outlook-calendar', 'github', 'slack', 'notion', 'stripe', 'xero', 'whatsapp'].includes(connector.id);
-  const localReal = ['my-browser', 'ollama', 'lm-studio', 'jan-turboquant', 'mcp-filesystem', 'mcp-windows-shell'].includes(connector.id);
+  const authRequired = ['gmail', 'google-calendar', 'google-drive', 'outlook-mail', 'outlook-calendar', 'github', 'slack', 'notion', 'stripe', 'xero', 'whatsapp', 'opencode'].includes(connector.id);
+  const localReal = ['my-browser', 'ollama', 'lm-studio', 'opencode', 'jan-turboquant', 'mcp-filesystem', 'mcp-windows-shell'].includes(connector.id);
   const statusLabel = status?.detail || (!enabled
     ? 'Disabled'
     : authRequired

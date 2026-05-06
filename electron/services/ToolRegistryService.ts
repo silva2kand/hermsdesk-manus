@@ -25,12 +25,12 @@ export interface Connector {
 
 // Which tools each agent is allowed to use
 const AGENT_TOOL_MAP: Record<string, string[]> = {
-  'hermes-full':      ['file-system', 'os-control', 'ollama', 'github', 'terminal'],
-  'paperclip-full':   ['file-system', 'gmail', 'google-drive'],
-  'solicitor-agent':  ['file-system', 'google-search'],
-  'accountant-agent': ['file-system', 'stripe', 'xero'],
-  'space-agent-full': ['os-control', 'google-search', 'terminal'],
-  'openclaw-full':    ['os-control', 'terminal', 'file-system']
+  'hermes-full':      ['jan-turboquant', 'file-system', 'os-control', 'github', 'terminal', 'google-search'],
+  'paperclip-full':   ['jan-turboquant', 'file-system', 'outlook-mail', 'gmail', 'google-drive'],
+  'solicitor-agent':  ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search'],
+  'accountant-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'stripe', 'xero'],
+  'space-agent-full': ['jan-turboquant', 'os-control', 'google-search', 'terminal'],
+  'openclaw-full':    ['jan-turboquant', 'os-control', 'terminal', 'file-system']
 };
 
 export class ToolRegistryService {
@@ -39,7 +39,9 @@ export class ToolRegistryService {
     { id: 'ollama', name: 'Ollama', category: 'llm', description: 'Optional external LLM engine (port 11434)' },
     { id: 'lm-studio', name: 'LM Studio', category: 'llm', description: 'Optional external model server (port 1234)' },
     { id: 'jan-turboquant', name: 'Jan + TurboQuant', category: 'llm', description: 'Built-in primary engine (port 1337)' },
+    { id: 'opencode', name: 'OpenCode', category: 'llm', description: 'Optional external OpenAI-compatible local route (ports 4096/3456)' },
     { id: 'gmail', name: 'Gmail', category: 'email', description: 'Email access and drafts' },
+    { id: 'outlook-mail', name: 'Outlook Mail', category: 'email', description: 'Microsoft Graph and Classic Outlook mail indexing, drafts, and approval-gated actions' },
     { id: 'github', name: 'GitHub', category: 'custom_api', description: 'Repo and code management' },
     { id: 'file-system', name: 'File System', category: 'storage', description: 'Local file operations (read, write, list)' },
     { id: 'os-control', name: 'OS Control', category: 'os', description: 'Open apps, URLs, and system commands' },
@@ -70,7 +72,7 @@ export class ToolRegistryService {
   async getConnectors(): Promise<Record<string, boolean>> {
     const connectors = this.store.get('connectors', {}) as Record<string, boolean>;
     const defaults: Record<string, boolean> = {
-      'my-browser': true, 'ollama': true, 'lm-studio': true, 'jan-turboquant': true,
+      'my-browser': true, 'ollama': true, 'lm-studio': true, 'opencode': true, 'jan-turboquant': true,
       'google-gemini': true, 'openrouter': true, 'instagram': true,
       'meta-ads': true, 'gmail': true, 'google-calendar': true, 'google-drive': true,
       'outlook-mail': true, 'outlook-calendar': true, 'github': true, 'slack': true,
@@ -97,6 +99,7 @@ export class ToolRegistryService {
       { id: 'jan-turboquant', name: 'Jan + TurboQuant', enabled: enabled['jan-turboquant'] ?? true, status: 'available', type: 'local-engine' },
       { id: 'ollama', name: 'Ollama', enabled: enabled['ollama'] ?? true, status: 'available', type: 'local-engine' },
       { id: 'lm-studio', name: 'LM Studio', enabled: enabled['lm-studio'] ?? true, status: 'available', type: 'local-engine' },
+      { id: 'opencode', name: 'OpenCode', enabled: enabled['opencode'] ?? true, status: 'needs-auth', type: 'local-engine' },
       { id: 'openrouter', name: 'OpenRouter', enabled: enabled['openrouter'] ?? true, status: 'needs-auth', type: 'cloud-api' },
       { id: 'google-gemini', name: 'Google Gemini', enabled: enabled['google-gemini'] ?? true, status: 'available', type: 'cloud-api' },
       { id: 'github', name: 'GitHub', enabled: enabled['github'] ?? true, status: 'needs-auth', type: 'oauth' },

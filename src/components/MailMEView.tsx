@@ -20,6 +20,7 @@ export const MailMEView = () => {
   const [graphLogin, setGraphLogin] = useState<any>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [mailSyncState, setMailSyncState] = useState<any>(null);
+  const [mailMemory, setMailMemory] = useState<any>(null);
   const [batchIndexing, setBatchIndexing] = useState(false);
 
   React.useEffect(() => {
@@ -81,6 +82,8 @@ export const MailMEView = () => {
   const refreshMailSyncState = async () => {
     const state = await (window.ipcRenderer as any)?.getMailSyncState?.();
     if (state) setMailSyncState(state);
+    const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
+    if (intel?.mailboxMemory || intel?.memory) setMailMemory(intel.mailboxMemory || intel.memory);
   };
 
   const startGraphLogin = async () => {
@@ -128,9 +131,38 @@ export const MailMEView = () => {
     try {
       const result = await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000, reset });
       setMailSyncState(result?.state || null);
+      const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
+      if (intel?.mailboxMemory || intel?.memory) setMailMemory(intel.mailboxMemory || intel.memory);
       showNotice(`Indexed ${result?.batchCount || result?.messages?.length || 0} real Graph emails${result?.complete ? '; mailbox complete.' : '; more batches remain.'}`);
     } catch (error: any) {
       showNotice(error?.message || 'Could not index Microsoft Graph mailbox.');
+    } finally {
+      setBatchIndexing(false);
+    }
+  };
+
+  const indexUntilComplete = async () => {
+    if (!(window.ipcRenderer as any)?.syncEmailBatch) return;
+    setBatchIndexing(true);
+    try {
+      let complete = false;
+      let totalThisRun = 0;
+      let safety = 0;
+      let latestState: any = null;
+      while (!complete && safety < 80) {
+        const result = await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000 });
+        totalThisRun += result?.batchCount || result?.messages?.length || 0;
+        complete = Boolean(result?.complete || result?.state?.complete || (result?.batchCount || 0) === 0);
+        latestState = result?.state || latestState;
+        setMailSyncState(latestState);
+        safety += 1;
+        if ((result?.batchCount || 0) === 0) break;
+      }
+      const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
+      if (intel?.mailboxMemory || intel?.memory) setMailMemory(intel.mailboxMemory || intel.memory);
+      showNotice(`Mailbox index run processed ${totalThisRun.toLocaleString()} emails${complete ? '; index is complete/up to date.' : '; paused at safety limit, run again to continue.'}`);
+    } catch (error: any) {
+      showNotice(error?.message || 'Could not complete mailbox indexing.');
     } finally {
       setBatchIndexing(false);
     }
@@ -344,6 +376,13 @@ export const MailMEView = () => {
               {batchIndexing ? 'Indexing...' : 'Index next 1,000'}
             </button>
             <button
+              onClick={indexUntilComplete}
+              disabled={!graphStatus?.connected || batchIndexing}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all disabled:bg-gray-300"
+            >
+              Index until complete
+            </button>
+            <button
               onClick={resetGraphIndex}
               disabled={!graphStatus?.connected || batchIndexing}
               className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all disabled:text-gray-300"
@@ -359,6 +398,35 @@ export const MailMEView = () => {
           <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected ? 'Crawling' : 'Connect Graph'} />
           <IndexStat label="Updated" value={mailSyncState?.updatedAt ? new Date(mailSyncState.updatedAt).toLocaleString() : 'Not started'} />
         </div>
+
+        {mailMemory && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <IndexStat label="Indexed memory" value={(mailMemory.totalIndexed || 0).toLocaleString()} />
+            <IndexStat label="Unread" value={(mailMemory.unreadCount || 0).toLocaleString()} />
+            <IndexStat label="Possible bills" value={(mailMemory.billsToPay?.length || 0).toLocaleString()} />
+            <IndexStat label="Deadlines" value={(mailMemory.deadlines?.length || 0).toLocaleString()} />
+          </div>
+        )}
+
+        {mailMemory?.billsToPay?.length > 0 && (
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Latest possible bills / payments</p>
+              <span className="text-[9px] font-bold text-blue-600">from indexed memory</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {mailMemory.billsToPay.slice(0, 6).map((item: any) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 text-left">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-gray-900 truncate">{item.subject || '(No subject)'}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{item.sender} · {item.receivedAt ? new Date(item.receivedAt).toLocaleString() : ''}</p>
+                  </div>
+                  <span className="text-[9px] font-black text-blue-700 uppercase shrink-0">{item.categoryLabel || 'Mail'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {mailSyncState?.lastError && (
           <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-[10px] font-bold text-red-700">
