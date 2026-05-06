@@ -61,10 +61,10 @@ export const MailMEView = () => {
     if (!window.ipcRenderer?.listClassicOutlookMessages) return;
     setLoadingOutlook(true);
     try {
-      const result = await window.ipcRenderer.listClassicOutlookMessages(12);
+      const result = await window.ipcRenderer.listClassicOutlookMessages(1000);
       if (Array.isArray(result)) {
         setClassicOutlookMessages(result);
-        showNotice(`Read ${result.length} recent classic Outlook messages locally.`);
+        showNotice(`Read ${result.length} recent classic Outlook messages across local folders.`);
       } else {
         showNotice(result.error || 'Could not read classic Outlook messages.');
       }

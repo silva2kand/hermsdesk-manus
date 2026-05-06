@@ -60,6 +60,10 @@ interface Window {
     listMicrosoftGraphMessages: (limit?: number) => Promise<any[]>;
     listMicrosoftGraphFolders: () => Promise<any[]>;
     syncEmailIntelligence: (limitPerFolder?: number) => Promise<any>;
+    syncEmailBatch: (options?: any) => Promise<any>;
+    getMailSyncState: () => Promise<any>;
+    resetMailSyncState: () => Promise<any>;
+    runMicrosoftGraphMailAction: (action: any) => Promise<any>;
     disconnectMicrosoftGraph: () => Promise<{ ok: boolean }>;
     getSilvaMemory: () => Promise<string>;
     saveSilvaMemory: (memory: string) => Promise<boolean>;

@@ -299,13 +299,14 @@ export class DesktopIntegrationService {
     }
 
     return {
-      ok: rootExists && pythonExists && launcherExists && missingModels.length === 0 && Boolean((python as any)?.tts),
+      ok: rootExists && (pythonExists || process.platform === 'win32'),
       root: VOICE_STACK_ROOT,
       rootExists,
       pythonExists,
       launcherExists,
       python,
       missingModels,
+      fallback: 'Windows SAPI speech fallback is available when premium Silva Voice Stack packages/models are missing.',
       recommendedAction: missingModels.length
         ? 'Run Build Voice Stack, then add/download the missing Kokoro/Piper voice model files listed here.'
         : 'Run Build Voice Stack to refresh Python packages and restart the server.'
@@ -313,8 +314,77 @@ export class DesktopIntegrationService {
   }
 
   async buildVoiceStackNeeds() {
-    if (!fs.existsSync(VOICE_STACK_ROOT)) {
-      return { ok: false, error: `Voice Stack folder not found: ${VOICE_STACK_ROOT}` };
+    if (!fs.existsSync(VOICE_STACK_ROOT)) fs.mkdirSync(VOICE_STACK_ROOT, { recursive: true });
+    const packageFile = path.join(VOICE_STACK_ROOT, 'pyproject.toml');
+    const serverDir = path.join(VOICE_STACK_ROOT, 'silva_voice');
+    const serverFile = path.join(serverDir, 'server.py');
+    if (!fs.existsSync(serverDir)) fs.mkdirSync(serverDir, { recursive: true });
+    if (!fs.existsSync(packageFile)) {
+      fs.writeFileSync(packageFile, `[project]
+name = "silva-voice"
+version = "0.1.0"
+dependencies = ["fastapi", "uvicorn", "pyttsx3"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["silva_voice*"]
+`, 'utf8');
+    }
+    const initFile = path.join(serverDir, '__init__.py');
+    if (!fs.existsSync(initFile)) fs.writeFileSync(initFile, '', 'utf8');
+    if (!fs.existsSync(serverFile)) {
+      fs.writeFileSync(serverFile, `from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import pyttsx3
+
+app = FastAPI(title="Silva Voice Stack")
+
+class SpeakRequest(BaseModel):
+    text: str
+    voice: str | None = None
+    language: str | None = None
+    accent: str | None = None
+    rate: float | None = 1
+
+@app.get("/")
+def home():
+    return {"ok": True, "mode": "windows-sapi-fallback", "name": "Silva Voice Stack"}
+
+@app.get("/tts/profiles")
+def profiles():
+    return {"profiles": ["tamil-jaffna", "tamil-india", "english-uk", "english-us"], "fallback": "Windows installed voices"}
+
+@app.get("/tts/accents")
+def accents():
+    return {"accents": ["jaffna", "india", "uk", "us"], "fallback": True}
+
+@app.post("/tts/synthesize")
+@app.post("/api/speak")
+@app.post("/speak")
+@app.post("/api/tts")
+@app.post("/tts")
+@app.post("/v1/audio/speech")
+def speak(payload: SpeakRequest):
+    engine = pyttsx3.init()
+    if payload.rate:
+        try:
+            engine.setProperty("rate", int(175 * float(payload.rate)))
+        except Exception:
+            pass
+    engine.say(payload.text)
+    engine.runAndWait()
+    return JSONResponse({"ok": True, "mode": "windows-sapi-fallback", "voice": payload.voice, "language": payload.language})
+`, 'utf8');
+    }
+    if (!fs.existsSync(VOICE_STACK_LAUNCHER)) {
+      fs.writeFileSync(VOICE_STACK_LAUNCHER, `@echo off
+cd /d "%~dp0"
+if not exist "venv_311\\Scripts\\python.exe" py -3.11 -m venv venv_311
+"venv_311\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel
+"venv_311\\Scripts\\python.exe" -m pip install -e .
+"venv_311\\Scripts\\python.exe" -m uvicorn silva_voice.server:app --host 127.0.0.1 --port 7100
+`, 'utf8');
     }
 
     const repairScript = path.join(VOICE_STACK_ROOT, 'repair_voice_stack.ps1');
@@ -454,10 +524,26 @@ Pause
       }
     }
 
+    if (process.platform === 'win32') {
+      try {
+        const escaped = cleanText.replace(/'/g, "''");
+        await this.runPowerShellText(`
+Add-Type -AssemblyName System.Speech
+$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$speaker.Rate = 0
+$speaker.Volume = 100
+$speaker.Speak('${escaped}')
+`, 300000);
+        return { ok: true, mode: 'windows-sapi-fallback', voice, language };
+      } catch (error: any) {
+        lastError = `${lastError || ''} ${error?.message || error}`.trim();
+      }
+    }
+
     return {
       ok: false,
       url: 'http://localhost:7100/',
-      error: `Silva Voice Stack did not accept known speak endpoints. Last error: ${lastError || 'offline'}`
+      error: `Silva Voice Stack did not accept known speak endpoints and Windows speech fallback failed. Last error: ${lastError || 'offline'}`
     };
   }
 
@@ -490,36 +576,52 @@ $inbox = $ns.GetDefaultFolder(6)
   }
 
   async listClassicOutlookMessages(limit = 15) {
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 15, 50));
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 15, 2000));
     const script = `
 $ErrorActionPreference = 'Stop'
 $outlook = New-Object -ComObject Outlook.Application
 $ns = $outlook.GetNamespace('MAPI')
-$inbox = $ns.GetDefaultFolder(6)
-$items = $inbox.Items
-$items.Sort('[ReceivedTime]', $true)
 $messages = @()
-$seen = 0
-for ($i = 1; $i -le $items.Count -and $messages.Count -lt ${safeLimit}; $i++) {
-  $item = $items.Item($i)
-  if ($null -eq $item) { continue }
-  if ([string]$item.MessageClass -notlike 'IPM.Note*') { continue }
-  $body = [string]$item.Body
-  $body = ($body -replace '\\s+', ' ').Trim()
-  if ($body.Length -gt 700) { $body = $body.Substring(0, 700) }
-  $messages += [pscustomobject]@{
-    id = [string]$item.EntryID
-    subject = [string]$item.Subject
-    sender = [string]$item.SenderName
-    senderEmail = [string]$item.SenderEmailAddress
-    receivedAt = $item.ReceivedTime.ToString('o')
-    unread = [bool]$item.UnRead
-    hasAttachments = [bool]($item.Attachments.Count -gt 0)
-    bodyPreview = $body
-  }
-  $seen++
+$folders = New-Object System.Collections.ArrayList
+function Add-Folders($folder) {
+  [void]$folders.Add($folder)
+  foreach ($child in $folder.Folders) { Add-Folders $child }
 }
-$messages | ConvertTo-Json -Compress -Depth 4
+foreach ($root in $ns.Folders) { Add-Folders $root }
+
+foreach ($folder in $folders) {
+  try {
+    $items = $folder.Items
+    $items.Sort('[ReceivedTime]', $true)
+    $folderRead = 0
+    for ($i = 1; $i -le $items.Count -and $folderRead -lt 250; $i++) {
+      $item = $items.Item($i)
+      if ($null -eq $item) { continue }
+      if ([string]$item.MessageClass -notlike 'IPM.Note*') { continue }
+      $body = [string]$item.Body
+      $body = ($body -replace '\\s+', ' ').Trim()
+      if ($body.Length -gt 700) { $body = $body.Substring(0, 700) }
+      $messages += [pscustomobject]@{
+        id = [string]$item.EntryID
+        folderName = [string]$folder.FolderPath
+        subject = [string]$item.Subject
+        sender = [string]$item.SenderName
+        senderEmail = [string]$item.SenderEmailAddress
+        receivedAt = $item.ReceivedTime.ToString('o')
+        unread = [bool]$item.UnRead
+        hasAttachments = [bool]($item.Attachments.Count -gt 0)
+        bodyPreview = $body
+      }
+      $folderRead++
+    }
+  } catch {
+    continue
+  }
+}
+$messages |
+  Sort-Object {[datetime]$_.receivedAt} -Descending |
+  Select-Object -First ${safeLimit} |
+  ConvertTo-Json -Compress -Depth 4
 `;
     try {
       const result = await this.runPowerShellJson(script);

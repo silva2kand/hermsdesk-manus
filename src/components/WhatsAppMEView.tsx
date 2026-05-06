@@ -52,6 +52,18 @@ export const WhatsAppMEView = () => {
 
   useEffect(() => {
     refresh();
+    const onSilvaEvent = (_: any, event: any) => {
+      if (event?.source === 'whatsapp' || event?.payload?.channel === 'whatsapp') {
+        refresh();
+        if (event?.type === 'channel.message.out' && event?.payload?.draftId) {
+          showNotice(event?.payload?.status === 'ready' ? 'Agent WhatsApp reply draft is ready.' : 'WhatsApp draft updated from agent output.');
+        }
+      }
+    };
+    window.ipcRenderer?.on?.('silva:event', onSilvaEvent);
+    return () => {
+      window.ipcRenderer?.off?.('silva:event', onSilvaEvent);
+    };
   }, []);
 
   const saveDraft = async (status: 'drafted' | 'opened' = 'drafted') => {

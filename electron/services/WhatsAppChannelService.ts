@@ -165,6 +165,8 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
       text: message
     }, sessionId);
 
+    this.monitorAgentRepliesForDraft(draft.id, tasks, route, sessionId);
+
     return { ok: true, sessionId, route, tasks, draft };
   }
 
@@ -198,6 +200,54 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
     };
     this.store.set('whatsAppDrafts', [next, ...drafts].slice(0, 150));
     return next;
+  }
+
+  private updateDraft(draftId: string, updates: any) {
+    const drafts = this.store.get('whatsAppDrafts', []) || [];
+    const next = drafts.map((draft: any) => draft.id === draftId ? {
+      ...draft,
+      ...updates,
+      updatedAt: Date.now()
+    } : draft);
+    this.store.set('whatsAppDrafts', next);
+    return next.find((draft: any) => draft.id === draftId);
+  }
+
+  private monitorAgentRepliesForDraft(draftId: string, tasks: any[], route: any, sessionId: string) {
+    let checks = 0;
+    const timer = setInterval(() => {
+      checks += 1;
+      const finished = tasks.filter(task => ['done', 'failed', 'cancelled'].includes(task?.status));
+      const replies = finished.map(task => {
+        const final = [...(task.history || [])].reverse().find((item: any) => item.role === 'assistant')?.content;
+        return `${route.broadcast ? `${task.assignedAgentId}:\n` : ''}${final || `Task ${task.status}. Review Live Operations for details.`}`;
+      }).filter(Boolean);
+
+      if (replies.length > 0) {
+        const message = route.broadcast
+          ? replies.join('\n\n---\n\n')
+          : replies[0];
+        const draft = this.updateDraft(draftId, {
+          message,
+          status: 'drafted',
+          agentRepliesReady: replies.length,
+          label: route.broadcast ? 'WhatsApp broadcast agent replies' : `WhatsApp reply - ${route.routeLabel}`
+        });
+        this.eventBus?.emit('channel.message.out', 'whatsapp', {
+          sessionId,
+          channel: 'whatsapp',
+          draftId,
+          manualSendOnly: true,
+          text: message,
+          draft,
+          status: finished.length === tasks.length ? 'ready' : 'partial'
+        }, sessionId);
+      }
+
+      if (finished.length === tasks.length || checks >= 36) {
+        clearInterval(timer);
+      }
+    }, 5000);
   }
 
   private async getProcessStatus() {

@@ -113,9 +113,9 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const syncMail = async () => {
     setSyncing(true);
     try {
-      const data = await window.ipcRenderer?.syncEmailIntelligence?.(20);
+      const data = await window.ipcRenderer?.syncEmailBatch?.({ batchSize: 1000 });
       if (data) setEmailIntel(data);
-      setNotice(`Synced ${data?.messages?.length || 0} mail items across ${data?.folders?.length || 0} folders.`);
+      setNotice(`Indexed ${data?.batchCount || data?.messages?.length || 0} Graph mail items. Total indexed: ${data?.state?.totalIndexed || data?.messages?.length || 0}.`);
     } catch (error: any) {
       setNotice(error?.message || 'Connect Microsoft Graph before syncing mail.');
     } finally {

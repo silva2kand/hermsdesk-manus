@@ -27,6 +27,7 @@ export const AgentWindow: React.FC<AgentWindowProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'reasoning' | 'chat'>('reasoning');
   const [logs, setLogs] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -37,19 +38,29 @@ export const AgentWindow: React.FC<AgentWindowProps> = ({
     }
   }, [logs]);
 
-  // Listen for agent-specific logs from the backend
+  // Listen for agent-specific logs from the Electron backend.
   useEffect(() => {
-    const handleLog = (event: any) => {
-      const { agentId, log } = event.detail;
-      if (agentId === agent.id) {
-        setLogs(prev => [...prev, { ...log, id: Date.now() }]);
-        if (log.content.includes('completed') || log.content.includes('failed')) {
-          setIsProcessing(false);
-        }
+    const handleIpcLog = (_: any, data: any) => {
+      if (data?.agentId !== agent.id) return;
+      const entry = {
+        id: `${Date.now()}-${Math.random()}`,
+        type: data.type || 'info',
+        content: data.content || data.status || 'Agent update',
+        time: data.time || new Date().toLocaleTimeString(),
+        taskId: data.taskId
+      };
+      setLogs(prev => [...prev, entry]);
+      if (['info', 'result', 'error'].includes(entry.type) && entry.content && !/^Engine: /.test(entry.content)) {
+        setChatMessages(prev => [...prev, { ...entry, role: entry.type === 'error' ? 'error' : 'agent' }]);
+      }
+      if (/complete|failed|cancelled|stopped|exhausted/i.test(entry.content)) {
+        setIsProcessing(false);
       }
     };
-    window.addEventListener('agent-log', handleLog as any);
-    return () => window.removeEventListener('agent-log', handleLog as any);
+    window.ipcRenderer?.on?.('agent:update', handleIpcLog);
+    return () => {
+      window.ipcRenderer?.off?.('agent:update', handleIpcLog);
+    };
   }, [agent.id]);
 
   const handleSendMessage = async () => {
@@ -65,6 +76,13 @@ export const AgentWindow: React.FC<AgentWindowProps> = ({
       type: 'user', 
       content: userMessage, 
       time: new Date().toLocaleTimeString() 
+    }]);
+    setChatMessages(prev => [...prev, {
+      id: `${Date.now()}-user`,
+      role: 'user',
+      type: 'user',
+      content: userMessage,
+      time: new Date().toLocaleTimeString()
     }]);
 
     try {
@@ -176,6 +194,29 @@ export const AgentWindow: React.FC<AgentWindowProps> = ({
                   Hello! I am the {agent.name}. I am currently monitoring your {agent.type} tasks in the background. How can I help you?
                 </p>
               </div>
+              {chatMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "p-3 border rounded-2xl text-xs leading-relaxed",
+                    message.role === 'user'
+                      ? "bg-gray-900 text-white border-gray-900 rounded-tr-none ml-10"
+                      : message.role === 'error'
+                        ? "bg-red-50 text-red-700 border-red-100 rounded-tl-none mr-10"
+                        : "bg-white text-gray-800 border-gray-100 rounded-tl-none mr-10"
+                  )}
+                >
+                  <div className="text-[8px] font-black uppercase tracking-widest opacity-60 mb-1">
+                    {message.role === 'user' ? 'You' : agent.name} · {message.time}
+                  </div>
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                </div>
+              ))}
+              {isProcessing && (
+                <div className="p-3 bg-white border border-gray-100 rounded-2xl rounded-tl-none mr-12">
+                  <p className="text-xs font-bold text-gray-500">Working...</p>
+                </div>
+              )}
             </div>
             <div className="p-4 bg-white border-t border-gray-100">
               <div className="relative">

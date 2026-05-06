@@ -331,7 +331,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     try {
       const status = await integrationService.getClassicOutlookStatus().catch(() => null)
       if (status?.ok) {
-        const messages = await integrationService.listClassicOutlookMessages(50)
+        const messages = await integrationService.listClassicOutlookMessages(1000)
         if (Array.isArray(messages)) {
           await processEmailIntelligence({
             syncedAt: new Date().toISOString(),
@@ -339,8 +339,8 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
             messages: messages.map((message: any) => ({
               ...message,
               id: `classic:${message.id}`,
-              folderId: 'classic-outlook-inbox',
-              folderName: 'Classic Outlook Inbox',
+              folderId: `classic:${message.folderName || 'mailbox'}`,
+              folderName: message.folderName || 'Classic Outlook Mailbox',
               categoryId: 'classic-outlook',
               categoryLabel: 'Classic Outlook',
               agentId: 'paperclip-full',
@@ -599,8 +599,8 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
         messages: messages.map((message: any) => ({
           ...message,
           id: `classic:${message.id}`,
-          folderId: 'classic-outlook-inbox',
-          folderName: 'Classic Outlook Inbox',
+          folderId: `classic:${message.folderName || 'mailbox'}`,
+          folderName: message.folderName || 'Classic Outlook Mailbox',
           categoryId: 'classic-outlook',
           categoryLabel: 'Classic Outlook',
           agentId: 'paperclip-full',
