@@ -92,39 +92,54 @@ export class LocalAIService {
     };
   }
 
+  private getRuntimeRoots() {
+    const roots = [
+      process.cwd(),
+      path.dirname(process.execPath || ''),
+      process.resourcesPath || '',
+      path.join(path.dirname(process.execPath || ''), 'resources'),
+      path.join(app.getAppPath?.() || '', '..'),
+      path.join(os.homedir(), 'WorkSpace', 'hermsdeskapp'),
+      path.join(os.homedir(), 'WorkSpace', 'hermsdeskapp', 'release', 'win-unpacked'),
+      path.join(os.homedir(), 'WorkSpace', 'hermsdeskapp', 'release', 'win-unpacked', 'resources')
+    ].filter(Boolean);
+    return [...new Set(roots.map(root => path.resolve(root)))];
+  }
+
+  private runtimePath(...parts: string[]) {
+    return this.getRuntimeRoots().map(root => path.join(root, ...parts));
+  }
+
   private getNitroSearchPaths() {
     return [
-      path.join(process.cwd(), 'bin', 'nitro.exe'),
-      path.join(process.cwd(), 'electron', 'bin', 'nitro.exe'),
-      path.join(process.cwd(), 'resources', 'bin', 'nitro.exe'),
-      path.join(process.resourcesPath || '', 'bin', 'nitro.exe'),
-      path.join(process.resourcesPath || '', 'electron', 'bin', 'nitro.exe')
+      ...this.runtimePath('bin', 'nitro.exe'),
+      ...this.runtimePath('electron', 'bin', 'nitro.exe'),
+      ...this.runtimePath('resources', 'bin', 'nitro.exe')
     ];
   }
 
   private getJanCliSearchPaths() {
     return [
-      path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe'),
-      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe')
+      ...this.runtimePath('bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe'),
+      ...this.runtimePath('resources', 'bin', 'jan-runtime', 'app', 'resources', 'bin', 'jan.exe')
     ];
   }
 
   private getJanAppSearchPaths() {
     return [
-      path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'Jan.exe'),
-      path.join(process.cwd(), 'bin', 'jan-runtime', 'app', 'jan.exe'),
-      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'Jan.exe'),
-      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'app', 'jan.exe'),
-      path.join(process.cwd(), 'bin', 'Jan.exe'),
-      path.join(process.cwd(), 'electron', 'bin', 'Jan.exe'),
-      path.join(process.resourcesPath || '', 'bin', 'Jan.exe')
+      ...this.runtimePath('bin', 'jan-runtime', 'app', 'Jan.exe'),
+      ...this.runtimePath('bin', 'jan-runtime', 'app', 'jan.exe'),
+      ...this.runtimePath('resources', 'bin', 'jan-runtime', 'app', 'Jan.exe'),
+      ...this.runtimePath('resources', 'bin', 'jan-runtime', 'app', 'jan.exe'),
+      ...this.runtimePath('bin', 'Jan.exe'),
+      ...this.runtimePath('electron', 'bin', 'Jan.exe')
     ];
   }
 
   private getTurboQuantBackendSearchPaths() {
     return [
-      path.join(process.cwd(), 'bin', 'jan-runtime', 'backends', 'llamacpp', 'win-cuda', 'bin', 'llama-server.exe'),
-      path.join(process.resourcesPath || '', 'bin', 'jan-runtime', 'backends', 'llamacpp', 'win-cuda', 'bin', 'llama-server.exe')
+      ...this.runtimePath('bin', 'jan-runtime', 'backends', 'llamacpp', 'win-cuda', 'bin', 'llama-server.exe'),
+      ...this.runtimePath('resources', 'bin', 'jan-runtime', 'backends', 'llamacpp', 'win-cuda', 'bin', 'llama-server.exe')
     ];
   }
 
@@ -149,7 +164,8 @@ export class LocalAIService {
       modelLibraryPath: this.modelsPath,
       turboQuantBackendPath,
       installed: Boolean(nitroPath || janCliPath || janAppPath),
-      searchedPaths: [...nitroPaths, ...janCliPaths, ...janAppPaths, ...this.getTurboQuantBackendSearchPaths()],
+      searchedPaths: [...new Set([...nitroPaths, ...janCliPaths, ...janAppPaths, ...this.getTurboQuantBackendSearchPaths()])],
+      runtimeRoots: this.getRuntimeRoots(),
       missingReason: nitroPath || janCliPath || janAppPath
         ? ''
         : 'No bundled nitro.exe, Jan CLI, or Jan.exe was found inside HermsDesk app bin/resources paths.'

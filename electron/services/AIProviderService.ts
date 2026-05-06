@@ -40,13 +40,32 @@ export class AIProviderService {
     return this.modelsPath;
   }
 
+  private getModelLibraryPaths() {
+    const candidates = [
+      this.modelsPath,
+      path.join(app.getPath('appData'), 'hermsdeskapp', 'models'),
+      path.join(app.getPath('appData'), 'HermsDesk', 'models'),
+      path.join(app.getPath('appData'), 'aion-os', 'models'),
+      path.join(process.cwd(), 'models')
+    ];
+    return [...new Set(candidates.map(folder => path.resolve(folder)))];
+  }
+
   async listLibraryModels() {
-    const files = await fs.promises.readdir(this.modelsPath, { withFileTypes: true });
-    return Promise.all(files
-      .filter(file => file.isFile() && /\.(gguf|bin|safetensors)$/i.test(file.name))
-      .map(async file => {
-        const fullPath = path.join(this.modelsPath, file.name);
+    const allModels: any[] = [];
+    const seen = new Set<string>();
+    for (const libraryPath of this.getModelLibraryPaths()) {
+      if (!fs.existsSync(libraryPath)) continue;
+      const files = await fs.promises.readdir(libraryPath, { withFileTypes: true });
+      const models = await Promise.all(files
+        .filter(file => file.isFile() && /\.(gguf|bin|safetensors)$/i.test(file.name))
+        .map(async file => {
+        const fullPath = path.join(libraryPath, file.name);
         const stats = await fs.promises.stat(fullPath);
+        if (stats.size < 1024 * 1024) return null;
+        const key = path.resolve(fullPath).toLowerCase();
+        if (seen.has(key)) return null;
+        seen.add(key);
         const metadata = this.store.get(`models.${file.name}`, {}) as any;
         const name = metadata.name || file.name.replace(/\.(gguf|bin|safetensors)$/i, '');
 
@@ -60,9 +79,16 @@ export class AIProviderService {
           description: metadata.description || 'Downloaded model in the Aion local library',
           quantization: metadata.quantization || this.detectQuantization(file.name),
           tags: metadata.tags || ['Library', 'Jan', 'TurboQuant'],
-          vramRequired: metadata.vramRequired || 'Auto'
+          vramRequired: metadata.vramRequired || 'Auto',
+          libraryPath
         };
       }));
+      allModels.push(...models.filter(Boolean));
+    }
+    return allModels.sort((a, b) => {
+      const score = (model: any) => /qwen/i.test(model.name) ? 0 : /phi/i.test(model.name) ? 1 : 2;
+      return score(a) - score(b) || String(a.name).localeCompare(String(b.name));
+    });
   }
 
   async deleteLibraryModel(modelId: string) {
