@@ -582,6 +582,36 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   ipcMain.handle('ai:load-jan-model', (_, model) => aiService.loadJanModel(model))
   ipcMain.handle('ai:scan-pc', () => aiService.scanPCResources())
   ipcMain.handle('ai:get-resource-usage', () => aiService.getResourceUsage())
+  ipcMain.handle('ai:model-hub-diagnostics', async () => {
+    const settle = async <T,>(task: Promise<T>, fallback: T) => {
+      try {
+        return await task
+      } catch (error: any) {
+        const message = error?.message || String(error)
+        if (Array.isArray(fallback)) return [] as T
+        if (fallback && typeof fallback === 'object') return { ...(fallback as any), error: message }
+        return { error: message } as T
+      }
+    }
+    const [pc, jan, library, ollama, lmStudio, openCode] = await Promise.all([
+      settle(aiService.scanPCResources(), null),
+      settle(aiService.getJanEngineStatus(), null),
+      settle(providerService.listLibraryModels(), []),
+      settle(aiService.listModels(), []),
+      settle(aiService.checkLMStudio(), null),
+      settle(aiService.checkOpenCode(), null)
+    ])
+    return {
+      pc,
+      jan,
+      library,
+      ollama,
+      lmStudio,
+      openCode,
+      modelsPath: providerService.getModelsPath(),
+      checkedAt: new Date().toISOString()
+    }
+  })
 
   // ME 1.8 — Full engine status (all engines) and smart routing
   ipcMain.handle('ai:engine-status', async () => {

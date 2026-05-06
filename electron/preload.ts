@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   listOpenCodeModels: () => ipcRenderer.invoke('ai:list-opencode-models'),
   checkJan: () => ipcRenderer.invoke('ai:check-jan'),
   janStatus: () => ipcRenderer.invoke('ai:jan-status'),
+  modelHubDiagnostics: () => ipcRenderer.invoke('ai:model-hub-diagnostics'),
   startJan: () => ipcRenderer.invoke('ai:start-jan'),
   loadJanModel: (model: { name: string, path?: string }) => ipcRenderer.invoke('ai:load-jan-model', model),
   scanPC: () => ipcRenderer.invoke('ai:scan-pc'),

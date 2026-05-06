@@ -54,15 +54,16 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   });
   const [engineMessage, setEngineMessage] = useState('');
   const [janStatusChecked, setJanStatusChecked] = useState(false);
-  const [otherEngines, setOtherEngines] = useState<{ ollamaOnline: boolean, lmStudioOnline: boolean }>({
+  const [otherEngines, setOtherEngines] = useState<{ ollamaOnline: boolean, lmStudioOnline: boolean, openCodeOnline: boolean }>({
     ollamaOnline: false,
-    lmStudioOnline: false
+    lmStudioOnline: false,
+    openCodeOnline: false
   });
   const [pcCapabilities, setPcCapabilities] = useState({
-    gpu: 'NVIDIA RTX A5000 Laptop GPU',
-    vram: '16GB',
-    ram: '63GB',
-    os: 'Windows 11 Pro',
+    gpu: 'Detecting...',
+    vram: '...',
+    ram: '...',
+    os: '...',
     approximate: false
   });
 
@@ -76,46 +77,6 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
       } catch (e) {
         console.error('Failed to fetch library models:', e);
       }
-    }
-  };
-
-  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
-    return Promise.race([
-      promise,
-      new Promise<T>(resolve => window.setTimeout(() => resolve(fallback), timeoutMs))
-    ]);
-  };
-
-  const localJanOnlineStatus = (models: any[] = []) => ({
-    apiOnline: true,
-    installed: true,
-    executablePath: 'HermsDesk bundled Jan runtime',
-    apiUrl: 'http://127.0.0.1:6767/v1',
-    port: 6767,
-    nitroPath: '',
-    janCliPath: 'resources/bin/jan-runtime/app/resources/bin/jan.exe',
-    janAppPath: 'resources/bin/jan-runtime/app/Jan.exe',
-    janProfileRoot: 'HermsDesk owned',
-    janDataRoot: 'HermsDesk owned',
-    modelLibraryPath: modelsPath || 'HermsDesk model library',
-    turboQuantBackendPath: 'resources/bin/jan-runtime/backends/llamacpp/win-cuda/bin/llama-server.exe',
-    missingReason: '',
-    activeModel: models[0]?.id || 'Phi-3-mini-4k-instruct-Q4_K_M',
-    models: models.length ? models : [{ id: 'Phi-3-mini-4k-instruct-Q4_K_M', object: 'model' }],
-    turboQuant: janStatus.turboQuant || null
-  });
-
-  const probeJanApiFromRenderer = async () => {
-    try {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 1200);
-      const response = await fetch('http://127.0.0.1:6767/v1/models', { cache: 'no-store', signal: controller.signal });
-      window.clearTimeout(timeout);
-      if (!response.ok) return null;
-      const data = await response.json();
-      return Array.isArray(data?.data) ? data.data : [];
-    } catch {
-      return null;
     }
   };
 
@@ -160,28 +121,71 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   };
 
   const refreshJanStatus = async () => {
-    const apiModels = await probeJanApiFromRenderer();
-    if (apiModels) {
-      setJanStatus(localJanOnlineStatus(apiModels));
-      setJanStatusChecked(true);
-      await fetchLibrary();
-      return;
-    }
     if (!window.ipcRenderer) {
-      setJanStatus(localJanOnlineStatus());
       setJanStatusChecked(true);
       return;
     }
-    const status = await withTimeout(window.ipcRenderer.janStatus(), 2200, null as any);
-    if (!status) {
-      setJanStatus(localJanOnlineStatus());
-      setJanStatusChecked(true);
-      return;
-    }
-    const mergedStatus = status?.apiOnline ? status : { ...localJanOnlineStatus(), ...status, installed: status.installed || true };
-    setJanStatus(mergedStatus.apiOnline ? mergedStatus : { ...mergedStatus, installed: true });
+    const status = await window.ipcRenderer.janStatus();
+    if (status) setJanStatus(status);
     setJanStatusChecked(true);
-    await fetchLibrary();
+    if (status?.apiOnline) await fetchLibrary();
+  };
+
+  const applyModelHubDiagnostics = (diagnostics: any) => {
+    if (!diagnostics) {
+      setJanStatusChecked(true);
+      return;
+    }
+    if (diagnostics.modelsPath) setModelsPath(diagnostics.modelsPath);
+    if (diagnostics.pc) setPcCapabilities({ ...diagnostics.pc, approximate: Boolean(diagnostics.pc.approximate) });
+    if (diagnostics.jan) {
+      setJanStatus(diagnostics.jan);
+    }
+    setJanStatusChecked(true);
+    const libraryModels = Array.isArray(diagnostics.library) ? diagnostics.library : [];
+    const ollamaModels = Array.isArray(diagnostics.ollama) ? diagnostics.ollama : [];
+    setLibraryModels(libraryModels);
+    setOtherEngines({
+      ollamaOnline: ollamaModels.length > 0,
+      lmStudioOnline: Boolean(diagnostics.lmStudio?.online || diagnostics.lmStudio?.data?.length),
+      openCodeOnline: Boolean(diagnostics.openCode?.online || diagnostics.openCode?.data?.length || diagnostics.openCode?.models?.length)
+    });
+    const library = libraryModels.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      path: m.path,
+      provider: m.provider || 'Jan',
+      size: `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB`,
+      status: 'installed' as const,
+      description: m.description,
+      quantization: m.quantization,
+      tags: m.tags,
+      vramRequired: m.vramRequired
+    }));
+    const ollama = ollamaModels.map((m: any) => {
+      const gbSize = (m.size || 0) / (1024 * 1024 * 1024);
+      return {
+        id: `ollama:${m.digest || m.name}`,
+        name: m.name,
+        provider: 'Ollama',
+        size: `${gbSize.toFixed(1)} GB`,
+        status: 'installed' as const,
+        description: 'Local model detected via Ollama',
+        quantization: 'Detected',
+        tags: ['Local', 'Ollama'],
+        vramRequired: `~${(gbSize * 1.2).toFixed(1)} GB`
+      };
+    });
+    setLocalModels([...library, ...ollama]);
+  };
+
+  const refreshDiagnostics = async () => {
+    if (!window.ipcRenderer?.modelHubDiagnostics) {
+      await Promise.all([refreshJanStatus(), refreshInstalledModels()]);
+      return;
+    }
+    const diagnostics = await window.ipcRenderer.modelHubDiagnostics();
+    applyModelHubDiagnostics(diagnostics);
   };
 
   // Fetch real PC capabilities and Jan status on mount
@@ -192,11 +196,22 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     const init = async () => {
       if (!window.ipcRenderer) return;
 
-      window.setTimeout(() => {
-        if (!isMounted) return;
-        setJanStatusChecked(true);
-        setJanStatus(prev => prev.apiOnline ? prev : localJanOnlineStatus(prev.models));
-      }, 2500);
+      window.ipcRenderer.getModelsPath?.()
+        .then(path => isMounted && setModelsPath(path))
+        .catch(e => console.error('ModelHub models path error:', e));
+
+      if (window.ipcRenderer.modelHubDiagnostics) {
+        window.ipcRenderer.modelHubDiagnostics()
+          .then(data => isMounted && applyModelHubDiagnostics(data))
+          .catch(error => {
+            console.error('ModelHub diagnostics error:', error);
+            if (isMounted) {
+              setJanStatusChecked(true);
+              setEngineMessage(`Model Hub diagnostics failed: ${error?.message || error}`);
+            }
+          });
+        return;
+      }
 
       window.ipcRenderer.scanPC()
         .then(caps => isMounted && setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) }))
@@ -220,7 +235,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     // Refresh library and local models every 30 seconds
     interval = setInterval(() => {
       if (isMounted && window.ipcRenderer) {
-        refreshInstalledModels();
+        refreshDiagnostics().catch(e => console.error('ModelHub diagnostics refresh error:', e));
       }
     }, 30000);
 
@@ -277,7 +292,9 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
   const handleScan = async () => {
     setIsScanning(true);
     try {
-      if (window.ipcRenderer) {
+      if (window.ipcRenderer?.modelHubDiagnostics) {
+        await refreshDiagnostics();
+      } else if (window.ipcRenderer) {
         const caps = await window.ipcRenderer.scanPC();
         setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) });
       }
@@ -301,9 +318,8 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
           throw new Error(result.error || 'Download failed. Try a GGUF model repository.');
         }
         console.log('Download complete, file at:', result.path);
-        await refreshInstalledModels();
-        await refreshJanStatus();
-        setEngineMessage('Downloaded into the Aion Jan/TurboQuant library. Press Load to use it in chat.');
+        await refreshDiagnostics();
+        setEngineMessage('Downloaded into the HermsDesk Jan/TurboQuant library. Press Load to use it in chat.');
         
         // Remove from active downloads after a short delay
         setTimeout(() => {
@@ -361,7 +377,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     if (!window.ipcRenderer) return;
     setEngineMessage('Starting Jan/TurboQuant engine...');
     const result = await window.ipcRenderer.startJan();
-    await refreshJanStatus();
+    await refreshDiagnostics();
     setEngineMessage(result.ok ? (result.message || 'Jan/TurboQuant engine is ready.') : (result.error || 'Jan could not be started.'));
   };
 
@@ -369,7 +385,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     console.log('Deleting model:', modelId);
     if (!window.ipcRenderer || modelId.startsWith('ollama:')) return;
     await window.ipcRenderer.deleteLibraryModel(modelId);
-    await refreshInstalledModels();
+    await refreshDiagnostics();
   };
 
   return (
@@ -382,7 +398,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
             <p className="text-sm text-gray-500 mt-1">Built-in Jan is the primary engine. Ollama, LM Studio, and OpenCode are external fallback routes.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={refreshInstalledModels} className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-black hover:bg-gray-50">
+            <button onClick={refreshDiagnostics} className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-black hover:bg-gray-50">
               Refresh
             </button>
             <button onClick={handleStartJan} className="px-4 py-2 bg-gray-950 text-white rounded-xl text-xs font-black hover:bg-gray-800">
@@ -461,8 +477,13 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                   ? 'Jan/TurboQuant engine is active. Your RTX 5000A is optimized for high-speed GGUF inference.' 
                   : janStatus.installed
                     ? 'The built-in Jan + TurboQuant runtime is present. Load a GGUF model to start Jan CLI serve on port 6767, or press Start to open the runtime.'
-                    : 'The built-in Jan + TurboQuant runtime was not found in the app runtime paths. Place nitro.exe in the app bin folder to enable the primary engine.'}
+                    : 'HermsDesk could not find its built-in Jan/TurboQuant runtime in the packaged app paths. This is a real filesystem check, not an external Jan lookup.'}
               </p>
+              {janStatus.missingReason && !janStatus.apiOnline && (
+                <div className="mb-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-[10px] font-bold text-white/80">
+                  {janStatus.missingReason}
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-2">
                 <RuntimeLine label="Nitro" value={janStatus.nitroPath || 'Not found'} ok={Boolean(janStatus.nitroPath)} />
                 <RuntimeLine label="Jan CLI" value={janStatus.janCliPath || 'Not found'} ok={Boolean(janStatus.janCliPath)} />
@@ -501,11 +522,12 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
             {[
               { name: 'Jan/TurboQuant', port: '6767', url: 'http://localhost:6767/v1', online: janStatus.apiOnline },
               { name: 'Ollama', port: '11434', url: 'http://localhost:11434', online: otherEngines.ollamaOnline },
-              { name: 'LM Studio', port: '1234', url: 'http://localhost:1234/v1', online: otherEngines.lmStudioOnline }
+              { name: 'LM Studio', port: '1234', url: 'http://localhost:1234/v1', online: otherEngines.lmStudioOnline },
+              { name: 'OpenCode', port: '4096', url: 'http://localhost:4096/v1', online: otherEngines.openCodeOnline }
             ].map((engine) => (
               <div key={engine.name} className="p-4 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 space-y-3">
                 <div className="flex justify-between items-center">
@@ -835,7 +857,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               <div className="p-8 text-center">
                 <p className="text-sm font-black text-gray-900">No installed local models detected yet</p>
                 <p className="text-xs text-gray-500 mt-1">Ollama, LM Studio, or Jan models will appear here after refresh.</p>
-                <button onClick={refreshInstalledModels} className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-black">
+                <button onClick={refreshDiagnostics} className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-black">
                   Refresh Models
                 </button>
               </div>
