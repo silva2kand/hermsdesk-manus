@@ -1,4 +1,9 @@
-import { BrowserWindow, shell } from 'electron';
+import type { BrowserWindow } from 'electron';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
+const { shell } = electron;
 
 export type AutomationEvent = {
   id: string;

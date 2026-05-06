@@ -2,7 +2,11 @@ import axios from 'axios';
 import Store from 'electron-store';
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, shell } from 'electron';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
+const { app, shell } = electron;
 
 export interface HFModel {
   id: string;

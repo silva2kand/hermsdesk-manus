@@ -1,6 +1,11 @@
-import { BrowserWindow, app, nativeImage } from 'electron';
+import type { BrowserWindow as BrowserWindowType } from 'electron';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
+
+const require = createRequire(import.meta.url);
+const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
+const { app, nativeImage, BrowserWindow } = electron;
 
 export type BrowserOperatorEvent = {
   id: string;
@@ -25,9 +30,9 @@ type BrowserSession = {
 const MAX_EVENTS = 100;
 
 export class BrowserOperatorService {
-  private operatorWindow: BrowserWindow | null = null;
-  private operatorWindows: Map<string, BrowserWindow> = new Map();
-  private appWindow: BrowserWindow | null = null;
+  private operatorWindow: BrowserWindowType | null = null;
+  private operatorWindows: Map<string, BrowserWindowType> = new Map();
+  private appWindow: BrowserWindowType | null = null;
   private screenshotDir: string;
   private eventBus: any = null;
 
@@ -36,7 +41,7 @@ export class BrowserOperatorService {
     if (!fs.existsSync(this.screenshotDir)) fs.mkdirSync(this.screenshotDir, { recursive: true });
   }
 
-  setWindow(win: BrowserWindow | null) {
+  setWindow(win: BrowserWindowType | null) {
     this.appWindow = win;
   }
 

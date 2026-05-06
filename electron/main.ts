@@ -1,7 +1,12 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage } from 'electron'
+import type { BrowserWindow as BrowserWindowType, Tray as TrayType } from 'electron'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Store from 'electron-store'
+
+const require = createRequire(import.meta.url)
+const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage } = electron
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -146,8 +151,8 @@ process.env.DIST = path.join(__dirname, '../dist')
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
 
 
-let win: BrowserWindow | null
-let tray: Tray | null
+let win: BrowserWindowType | null
+let tray: TrayType | null
 let isQuitting = false
 
 function showMainWindow() {
@@ -220,7 +225,7 @@ function createWindow() {
     }
   })
 
-  win.on('close', (event) => {
+  win.on('close', (event: any) => {
     if (!isQuitting && process.platform !== 'darwin') {
       event.preventDefault()
       win?.hide()
@@ -896,7 +901,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
-  win.webContents.on('context-menu', (_, params) => {
+  win.webContents.on('context-menu', (_: any, params: any) => {
     Menu.buildFromTemplate([
       { label: 'Chat Lab', click: () => win?.webContents.send('app:navigate', 'chat') },
       { label: 'Model Hub', click: () => win?.webContents.send('app:navigate', 'models') },
@@ -917,7 +922,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
 
   if (process.env.VITE_DEV_SERVER_URL) {
     console.log('Loading dev server URL:', process.env.VITE_DEV_SERVER_URL)
-    win.loadURL(process.env.VITE_DEV_SERVER_URL).catch(e => {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL).catch((e: any) => {
       console.error('Failed to load dev server URL:', e)
       // Retry logic if connection refused
       if (e.code === 'ERR_CONNECTION_REFUSED') {
@@ -931,7 +936,7 @@ Strict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or ch
   }
 
   // Handle connection failures and retry
-  win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL) => {
+  win.webContents.on('did-fail-load', (_: any, errorCode: any, errorDescription: any, validatedURL: any) => {
     if (process.env.VITE_DEV_SERVER_URL && validatedURL === process.env.VITE_DEV_SERVER_URL) {
       console.log(`Failed to load ${validatedURL}: ${errorDescription} (${errorCode}). Retrying in 1s...`)
       setTimeout(() => {

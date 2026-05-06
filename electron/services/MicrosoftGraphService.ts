@@ -1,6 +1,10 @@
 import Store from 'electron-store';
 import axios from 'axios';
-import { shell } from 'electron';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
+const { shell } = electron;
 
 const DEFAULT_CLIENT_ID = 'a18c5868-9960-4962-b106-1c77a2d07327';
 const DEFAULT_TENANT_ID = '39f9740f-7162-4ff5-93ea-149c79ee1b7a';

@@ -1,9 +1,13 @@
-import { shell, dialog, app } from 'electron';
+import { createRequire } from 'node:module';
 import fs from 'fs';
 import path from 'path';
 import Store from 'electron-store';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+
+const require = createRequire(import.meta.url);
+const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
+const { shell, dialog, app } = electron;
 
 const execAsync = promisify(exec);
 

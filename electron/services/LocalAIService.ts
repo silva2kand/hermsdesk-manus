@@ -4,9 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { app } from 'electron';
+import { createRequire } from 'node:module';
 import Store from 'electron-store';
 import { providerService } from '../main'
+
+const require = createRequire(import.meta.url);
+const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
+const { app } = electron;
 
 export interface Model {
   name: string;
