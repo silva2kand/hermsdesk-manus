@@ -71,10 +71,21 @@ export class EmailIndexService {
     
     // Update global metadata
     const accounts = this.store.get('accounts', {}) as Record<string, AccountSyncState>;
-    if (accounts[accountId]) {
-      accounts[accountId].totalIndexed = merged.length;
-      accounts[accountId].lastSyncedAt = new Date().toISOString();
-      this.store.set('accounts', accounts);
+    if (!accounts[accountId]) {
+      // Auto-register if missing
+      this.registerAccount({
+        accountId,
+        email: accountId.replace(/^classic-/, ''),
+        displayName: accountId.startsWith('classic-') ? `Classic: ${accountId.replace(/^classic-/, '')}` : accountId
+      });
+    }
+    
+    // Refresh accounts after possible registration
+    const updatedAccounts = this.store.get('accounts', {}) as Record<string, AccountSyncState>;
+    if (updatedAccounts[accountId]) {
+      updatedAccounts[accountId].totalIndexed = merged.length;
+      updatedAccounts[accountId].lastSyncedAt = new Date().toISOString();
+      this.store.set('accounts', updatedAccounts);
     }
     
     return merged.length;

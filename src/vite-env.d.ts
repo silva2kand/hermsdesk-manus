@@ -62,6 +62,8 @@ interface Window {
     startMicrosoftGraphLogin: () => Promise<any>;
     completeMicrosoftGraphLogin: () => Promise<any>;
     setMicrosoftGraphSecret?: (secret: string) => Promise<any>;
+    setMicrosoftGraphConfig?: (config: any) => Promise<any>;
+    getMicrosoftGraphConfig?: () => Promise<any>;
     getMicrosoftGraphStatus: (accountId?: string) => Promise<any>;
     getMicrosoftMailboxSettings: (accountId?: string) => Promise<any>;
     listMicrosoftGraphMessages: (arg?: any) => Promise<any[]>;

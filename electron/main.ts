@@ -46,8 +46,10 @@ import { EventBusService } from './services/EventBusService'
 import { SilvaWebResearchService } from './services/SilvaWebResearchService'
 import { WhatsAppChannelService } from './services/WhatsAppChannelService'
 import { EmailIndexService } from './services/EmailIndexService'
+import { TinyFishService } from './services/TinyFishService'
 
 let emailIndexService: any;
+let tinyFish: any;
 
 function initializeStoreAndServices() {
    try {
@@ -108,6 +110,7 @@ function initializeStoreAndServices() {
   eventBus = new EventBusService(store)
   webResearchService = new SilvaWebResearchService(eventBus)
   whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus)
+  tinyFish = new TinyFishService(store)
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      store = { get: (key: string, def: any) => def, set: () => {}, delete: () => {} };
@@ -283,7 +286,10 @@ function createWindow() {
     return merged
   }
 
+  let isSyncingMail = false;
   const syncAllMailAutomatically = async () => {
+    if (isSyncingMail) return;
+    isSyncingMail = true;
     try {
       const accounts = emailIndexService.getAllAccounts()
       for (const account of accounts) {
@@ -297,19 +303,26 @@ function createWindow() {
     } catch (error: any) { appLog('error', `Mail ME Graph auto-sync failed: ${error?.message || error}`) }
     try {
       const status = await integrationService.getClassicOutlookStatus().catch(() => null)
-      if (status?.ok) {
+      if (status?.ok && Array.isArray(status.accounts)) {
+        appLog('info', `Mail ME Classic Outlook: detected ${status.accounts.length} accounts.`);
+        // Early registration based on detected accounts in status
+        for (const acc of status.accounts) {
+          const accId = `classic-${acc.displayName}`;
+          if (!emailIndexService.getAccountMetadata(accId)) {
+            emailIndexService.registerAccount({
+              accountId: accId,
+              email: acc.displayName.includes('@') ? acc.displayName : `${acc.displayName.replace(/\s+/g, '.')}.local`,
+              displayName: `Classic: ${acc.displayName}`
+            });
+          }
+        }
+
         const messages = await integrationService.listClassicOutlookMessages(2000)
         if (Array.isArray(messages) && messages.length > 0) {
+          appLog('info', `Mail ME Classic Outlook: found ${messages.length} messages.`);
           const accountsInBatch = new Set(messages.map((m: any) => m.accountId));
           for (const accId of accountsInBatch) {
             const accMessages = messages.filter((m: any) => m.accountId === accId);
-            if (!emailIndexService.getAccountMetadata(accId)) {
-               emailIndexService.registerAccount({
-                 accountId: accId,
-                 email: accId.replace('classic-', ''),
-                 displayName: `Classic: ${accId.replace('classic-', '')}`
-               });
-            }
             await emailIndexService.saveEmails(accId, accMessages.map((m: any) => ({
               ...m,
               categoryId: 'classic',
@@ -322,6 +335,8 @@ function createWindow() {
             folders: Array.from(accountsInBatch).map(id => ({ id, displayName: id, syncedCount: messages.filter((m: any) => m.accountId === id).length })),
             messages
           }, 'Classic Outlook', { taskLimit: 20 });
+        } else {
+           appLog('info', `Mail ME Classic Outlook: no messages found in recent scan.`);
         }
       }
     } catch (error: any) { appLog('error', `Mail ME Classic Outlook auto-sync failed: ${error?.message || error}`) }
@@ -329,6 +344,7 @@ function createWindow() {
     const stats = emailIndexService.getGlobalStats();
     appLog('info', `Intelligence Hub Status: ${stats.totalIndexed} emails read and organized across ${stats.totalAccounts} accounts.`);
     win?.webContents.send('mail:intelligence-summary', stats);
+    isSyncingMail = false;
   }
 
   schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
@@ -467,15 +483,24 @@ function createWindow() {
     if (result?.ok === false) return result;
     const messages = Array.isArray(result?.messages) ? result.messages : [];
     const accountsInBatch = new Set(messages.map((m: any) => m.accountId || 'classic-outlook'));
+
+    // Register accounts if they were found in status but not yet in index
+    const status = await integrationService.getClassicOutlookStatus().catch(() => null);
+    if (status?.ok && Array.isArray(status.accounts)) {
+      for (const acc of status.accounts) {
+        const accId = `classic-${acc.displayName}`;
+        if (!emailIndexService.getAccountMetadata(accId)) {
+          emailIndexService.registerAccount({
+            accountId: accId,
+            email: acc.displayName.includes('@') ? acc.displayName : `${acc.displayName.replace(/\s+/g, '.')}.local`,
+            displayName: `Classic: ${acc.displayName}`
+          });
+        }
+      }
+    }
+
     for (const accId of accountsInBatch) {
       const accountMessages = messages.filter((m: any) => (m.accountId || 'classic-outlook') === accId);
-      if (!emailIndexService.getAccountMetadata(accId as string)) {
-        emailIndexService.registerAccount({
-          accountId: accId as string,
-          email: String(accId).replace(/^classic-/, ''),
-          displayName: `Classic: ${String(accId).replace(/^classic-/, '')}`
-        });
-      }
       await emailIndexService.saveEmails(accId as string, accountMessages);
     }
     const processed = await processEmailIntelligence({
@@ -570,6 +595,11 @@ function createWindow() {
     return { ok: true };
   })
   ipcMain.handle('microsoft:graph-set-secret', (_, secret) => microsoftGraph.setSecret(secret))
+  ipcMain.handle('microsoft:graph-set-config', (_, config) => microsoftGraph.setConfig(config))
+  ipcMain.handle('microsoft:graph-get-config', () => microsoftGraph.getConfig())
+  ipcMain.handle('tinyfish:run-agent', (_, options) => tinyFish.runAgent(options))
+  ipcMain.handle('tinyfish:set-api-key', (_, key) => tinyFish.setApiKey(key))
+  ipcMain.handle('tinyfish:get-status', (_, sessionId) => tinyFish.getSessionStatus(sessionId))
   ipcMain.handle('microsoft:graph-mail-action', async (_, arg) => {
     const accountId = arg?.accountId;
     const action = arg?.action || arg;
@@ -706,7 +736,7 @@ function createWindow() {
   ipcMain.handle('artifacts:create-purchase-protection', (_, { title, brief }) => artifactService.createPurchaseProtectionPack(title, brief))
   ipcMain.handle('artifacts:reveal-root', () => artifactService.revealRoot())
 
-  setTimeout(syncAllMailAutomatically, 5000)
+  setTimeout(syncAllMailAutomatically, 60000)
   setInterval(syncAllMailAutomatically, 10 * 60 * 1000)
 
   win.webContents.on('did-finish-load', () => { win?.webContents.send('main-process-message', (new Date).toLocaleString()) })

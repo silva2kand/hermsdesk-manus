@@ -703,7 +703,7 @@ foreach ($root in $ns.Folders) {
 } | ConvertTo-Json -Compress -Depth 4
 `;
     try {
-      return await this.runPowerShellJson(script);
+      return await this.runPowerShellJson(script, 300000); // 5 min timeout
     } catch (error: any) {
       return { ok: false, error: error.message || 'Classic Outlook is not available.' };
     }
@@ -721,8 +721,12 @@ $messages = @()
 $folders = New-Object System.Collections.ArrayList
 function Add-Folders($folder) {
   try {
+    // ONLY scan folders named 'Inbox' for the automatic/quick pass
+    if ($folder.Name -ne 'Inbox') { 
+       foreach ($child in $folder.Folders) { Add-Folders $child }
+       return 
+    }
     if ($folder.DefaultItemType -eq 0) { [void]$folders.Add($folder) }
-    foreach ($child in $folder.Folders) { Add-Folders $child }
   } catch {}
 }
 foreach ($root in $ns.Folders) { Add-Folders $root }
@@ -730,26 +734,31 @@ foreach ($root in $ns.Folders) { Add-Folders $root }
 foreach ($folder in $folders) {
   try {
     $items = $folder.Items
-    if ('${dateFilter}') {
-      $items = $items.Restrict("${dateFilter}")
-    }
+    if ($items.Count -eq 0) { continue }
+    if ('${dateFilter}') { $items = $items.Restrict("${dateFilter}") }
     $items.Sort('[ReceivedTime]', $true)
+    
     $folderRead = 0
-    for ($i = 1; $i -le $items.Count -and $folderRead -lt 500; $i++) {
+    $maxItemsPerFolder = if ($folders.Count -gt 20) { 30 } else { 100 }
+    
+    for ($i = 1; $i -le $items.Count -and $folderRead -lt $maxItemsPerFolder; $i++) {
       $item = $items.Item($i)
-      if ($null -eq $item) { continue }
-      if ([string]$item.MessageClass -notlike 'IPM.Note*') { continue }
+      if ($null -eq $item -or [string]$item.MessageClass -notlike 'IPM.Note*') { continue }
+      
       $body = [string]$item.Body
+      if ($body.Length -gt 500) { $body = $body.Substring(0, 500) }
       $body = ($body -replace '\\s+', ' ').Trim()
-      if ($body.Length -gt 700) { $body = $body.Substring(0, 700) }
       
       $path = [string]$folder.FolderPath
-      $parts = [regex]::Split($path, '\\\\') | Where-Object { $_ -ne '' }
-      $account = if ($parts.Length -gt 0) { $parts[0] } else { $ns.CurrentProfileName }
+      $accountName = "Unknown"
+      try { $accountName = $folder.Store.DisplayName } catch {
+         $parts = [regex]::Split($path, '\\\\') | Where-Object { $_ -ne '' }
+         if ($parts.Length -gt 0) { $accountName = $parts[0] }
+      }
 
       $messages += [pscustomobject]@{
         id = [string]$item.EntryID
-        accountId = "classic-$account"
+        accountId = "classic-$accountName"
         folderName = $path
         subject = [string]$item.Subject
         sender = [string]$item.SenderName
@@ -761,9 +770,7 @@ foreach ($folder in $folders) {
       }
       $folderRead++
     }
-  } catch {
-    continue
-  }
+  } catch { continue }
 }
 $messages |
   Sort-Object {[datetime]$_.receivedAt} -Descending |
@@ -771,7 +778,7 @@ $messages |
   ConvertTo-Json -Compress -Depth 4
 `;
     try {
-      const result = await this.runPowerShellJson(script);
+      const result = await this.runPowerShellJson(script, 300000); // 5 min timeout
       if (!result) return [];
       return Array.isArray(result) ? result : [result];
     } catch (error: any) {
@@ -878,7 +885,7 @@ foreach ($folder in $folders) {
 } | ConvertTo-Json -Compress -Depth 6
 `;
     try {
-      return await this.runPowerShellJson(script, 180000, 50);
+      return await this.runPowerShellJson(script, 300000, 50); // 5 min timeout
     } catch (error: any) {
       return { ok: false, error: error.message || 'Could not page Classic Outlook mailbox.' };
     }

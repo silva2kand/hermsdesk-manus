@@ -15,6 +15,7 @@ const DEFAULT_SCOPES = [
   'User.ReadWrite',
   'Mail.Read',
   'Mail.ReadWrite',
+  'Mail.ReadWrite.Shared',
   'MailboxSettings.Read'
 ];
 
@@ -41,6 +42,10 @@ export class MicrosoftGraphService {
 
   private get authority() {
     return `https://login.microsoftonline.com/${this.tenantId}`;
+  }
+
+  private authorityFor(tenantId?: string) {
+    return `https://login.microsoftonline.com/${tenantId || this.tenantId}`;
   }
 
   private form(data: Record<string, string>) {
@@ -84,7 +89,9 @@ export class MicrosoftGraphService {
     this.store.set('microsoftGraphDeviceCode', {
       device_code: response.data.device_code,
       expires_at: Date.now() + Number(response.data.expires_in || 900) * 1000,
-      interval: Number(response.data.interval || 5)
+      interval: Number(response.data.interval || 5),
+      clientId: this.clientId,
+      tenantId: this.tenantId
     });
 
     await shell.openExternal(response.data.verification_uri);
@@ -114,13 +121,13 @@ export class MicrosoftGraphService {
       try {
         const tokenBody: Record<string, string> = {
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-          client_id: this.clientId,
+          client_id: pending.clientId || this.clientId,
           device_code: pending.device_code
         };
         const secret = this.store.get('microsoftGraph.clientSecret', '') as string;
         if (secret) tokenBody.client_secret = secret;
         const response = await axios.post(
-          `${this.authority}/oauth2/v2.0/token`,
+          `${this.authorityFor(pending.tenantId)}/oauth2/v2.0/token`,
           this.form(tokenBody),
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 }
         );
@@ -154,7 +161,9 @@ export class MicrosoftGraphService {
           return {
             ok: false,
             code: 'client_secret_required',
-            error: 'Microsoft accepted the device code, but this Azure app registration requires a client secret. Click Set Secret, save the app client secret, then start Microsoft login again. Or enable public client/device-code flows on the Azure app registration.'
+            clientId: pending.clientId || this.clientId,
+            tenantId: pending.tenantId || this.tenantId,
+            error: 'Microsoft accepted the device code, but this Azure app registration is not enabled as a public desktop/client app, so Microsoft requires a client secret. Use Configure Azure to confirm Client ID/Tenant, then either click Set Secret and start login again, or in Azure enable Allow public client flows for this app registration.'
           };
         }
         return { ok: false, error: description };
@@ -455,7 +464,34 @@ export class MicrosoftGraphService {
 
   setSecret(secret: string) {
     this.store.set('microsoftGraph.clientSecret', String(secret || '').trim());
+    this.store.delete('microsoftGraphDeviceCode');
     return { ok: true };
+  }
+
+  setConfig(config: { clientId?: string; tenantId?: string }) {
+    const settings = this.store.get('microsoftGraph', {}) as any;
+    if (config.clientId) {
+      settings.clientId = String(config.clientId).trim();
+      this.clientId = settings.clientId;
+    }
+    if (config.tenantId) {
+      settings.tenantId = String(config.tenantId).trim();
+      this.tenantId = settings.tenantId;
+    }
+    this.store.set('microsoftGraph', settings);
+    this.store.delete('microsoftGraphDeviceCode');
+    return { ok: true };
+  }
+
+  getConfig() {
+    const secret = this.store.get('microsoftGraph.clientSecret', '') as string;
+    return {
+      ok: true,
+      clientId: this.clientId,
+      tenantId: this.tenantId,
+      hasSecret: Boolean(String(secret || '').trim()),
+      authority: this.authority
+    };
   }
 
   getAccountMetadata(accountId?: string) {

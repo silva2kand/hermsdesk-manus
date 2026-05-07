@@ -18,6 +18,7 @@ export const MailMEView = () => {
   const [graphStatus, setGraphStatus] = useState<any>(null);
   const [graphMessages, setGraphMessages] = useState<any[]>([]);
   const [graphLogin, setGraphLogin] = useState<any>(null);
+  const [graphConfig, setGraphConfig] = useState<any>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [mailSyncState, setMailSyncState] = useState<any>(null);
   const [mailMemory, setMailMemory] = useState<any>(null);
@@ -77,6 +78,8 @@ export const MailMEView = () => {
   const refreshGraphStatus = async () => {
     const status = await window.ipcRenderer?.getMicrosoftGraphStatus?.();
     if (status) setGraphStatus(status);
+    const config = await (window.ipcRenderer as any)?.getMicrosoftGraphConfig?.().catch(() => null);
+    if (config) setGraphConfig(config);
   };
 
   const refreshMailSyncState = async () => {
@@ -328,6 +331,7 @@ export const MailMEView = () => {
                   const s = window.prompt('Enter Microsoft App Client Secret (if required)', '');
                   if (s !== null) {
                     await (window.ipcRenderer as any)?.setMicrosoftGraphSecret?.(s);
+                    await refreshGraphStatus();
                     showNotice('Microsoft client secret saved locally. Start Microsoft login again to use it.');
                     setGraphLogin(null);
                   }
@@ -335,6 +339,21 @@ export const MailMEView = () => {
                 className="text-[9px] font-black text-blue-600 hover:underline uppercase tracking-widest"
               >
                 Set Secret
+              </button>
+              <button
+                onClick={async () => {
+                  const cid = window.prompt('Enter Azure App Client ID', '');
+                  if (cid === null) return;
+                  const tid = window.prompt('Enter Azure Tenant ID (use "common" or "consumers" for personal)', '');
+                  if (tid === null) return;
+                  await (window.ipcRenderer as any)?.setMicrosoftGraphConfig?.({ clientId: cid, tenantId: tid });
+                  await refreshGraphStatus();
+                  showNotice('Azure App Registration updated. Login will use new IDs.');
+                  setGraphLogin(null);
+                }}
+                className="ml-2 text-[9px] font-black text-gray-500 hover:underline uppercase tracking-widest"
+              >
+                Configure Azure
               </button>
             </div>
           </div>
@@ -374,6 +393,13 @@ export const MailMEView = () => {
             <p className="text-[10px] font-bold text-blue-700">Enter this Microsoft code:</p>
             <p className="text-2xl font-black tracking-widest text-blue-900 mt-1">{graphLogin.userCode}</p>
             <p className="text-[10px] text-blue-700 mt-2">{graphLogin.message}</p>
+          </div>
+        )}
+
+        {graphConfig && (
+          <div className="p-3 bg-gray-50 border border-gray-100 rounded-2xl text-[10px] text-gray-600">
+            <span className="font-black text-gray-800">Graph app config:</span> Client ID {graphConfig.clientId || 'not set'} · Tenant {graphConfig.tenantId || 'not set'} · Secret {graphConfig.hasSecret ? 'saved' : 'not saved'}.
+            <span className="block mt-1">The Microsoft page only asks for the short code. HermesDesk uses this Client ID/Tenant during token exchange after you approve the code.</span>
           </div>
         )}
 
@@ -574,6 +600,54 @@ export const MailMEView = () => {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="p-6 bg-white border border-gray-100 rounded-3xl space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-100">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-gray-900">TinyFish AI Web Agents</h3>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Advanced web automation and research. Bypasses bot detection to extract high-quality legal, tax, and corporate data.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={async () => {
+                const key = window.prompt('Enter TinyFish AI API Key', '');
+                if (key !== null) {
+                  await (window.ipcRenderer as any)?.setTinyFishApiKey?.(key);
+                  showNotice('TinyFish API key saved locally.');
+                }
+              }}
+              className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all"
+            >
+              Set API Key
+            </button>
+            <button
+              onClick={async () => {
+                const url = window.prompt('Target URL (e.g., https://www.gov.uk/search)', '');
+                if (!url) return;
+                const task = window.prompt('Instruction for the agent (e.g., Extract latest VAT updates)', '');
+                if (!task) return;
+                showNotice('TinyFish Agent starting... this may take a few minutes.');
+                const result = await (window.ipcRenderer as any)?.runTinyFishAgent?.({ url, task });
+                if (result?.ok) {
+                  showNotice(`Agent run complete. Result: ${result.result?.slice(0, 100)}...`);
+                } else {
+                  showNotice(`Agent failed: ${result?.error}`);
+                }
+              }}
+              className="px-4 py-2 bg-orange-600 text-white rounded-xl text-xs font-bold hover:bg-orange-700 transition-all"
+            >
+              Run Web Agent
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Workflow Emails */}
