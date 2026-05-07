@@ -223,9 +223,12 @@ interface Agent {
   group?: string;
 }
 
+type AppView = 'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins' | 'agents' | 'computer' | 'profile' | 'settings' | 'usage' | 'tasks' | 'mail' | 'whatsapp' | 'data' | 'browser' | 'personalization' | 'projects' | 'wide-research' | 'graphify' | 'shared-tasks' | 'shared-files' | 'websites' | 'apps' | 'domains' | 'connectors' | 'api-keys' | 'integrations';
+
 function App() {
-  const [view, setView] = useState<'landing' | 'chat' | 'models' | 'skills' | 'knowledge' | 'memory' | 'plugins' | 'agents' | 'computer' | 'profile' | 'settings' | 'usage' | 'tasks' | 'mail' | 'whatsapp' | 'data' | 'browser' | 'personalization' | 'projects' | 'wide-research' | 'graphify' | 'shared-tasks' | 'shared-files' | 'websites' | 'apps' | 'domains' | 'connectors' | 'api-keys' | 'integrations'>('landing');
-  const [selectedModel, setSelectedModel] = useState<{provider: string, model: string} | null>(null);
+  const [view, setView] = useState<AppView>('landing');
+  const [visitedViews, setVisitedViews] = useState<Set<AppView>>(() => new Set(['landing']));
+  const [selectedModel, setSelectedModel] = useState<{provider: string, model: string} | null>({ provider: 'Jan', model: 'Auto local model' });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
@@ -243,6 +246,34 @@ function App() {
     version: a.id === 'hermes-full' ? '1.2.0' : a.id === 'openclaw-full' ? '2.1.1' : '1.0.0',
     type: a.group === 'Hermes' ? (a.id === 'hermes-full' ? 'coding' : a.id === 'solicitor-agent' ? 'legal' : 'accounting') : (a.id === 'openclaw-full' ? 'security' : 'research')
   })) as any);
+
+  const changeView = (nextView: string) => {
+    const typedView = nextView as AppView;
+    setView(typedView);
+    setVisitedViews(prev => {
+      const next = new Set(prev);
+      next.add(typedView);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    window.ipcRenderer?.getModelPreset?.()
+      .then(preset => {
+        if (!isMounted) return;
+        if (preset?.provider === 'Jan') {
+          setSelectedModel({ provider: 'Jan', model: preset.model || 'Auto local model' });
+          return;
+        }
+        setSelectedModel({ provider: 'Jan', model: 'Auto local model' });
+        window.ipcRenderer?.saveModelPreset?.({ provider: 'Jan', model: 'Auto local model' }).catch(() => {});
+      })
+      .catch(() => {
+        if (isMounted) setSelectedModel({ provider: 'Jan', model: 'Auto local model' });
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
@@ -372,7 +403,7 @@ function App() {
     window.ipcRenderer.on('agent:update', handleAgentUpdate);
 
     const handleNavigate = (_: any, nextView: string) => {
-      setView(nextView as any);
+      changeView(nextView);
     };
     window.ipcRenderer.on('app:navigate', handleNavigate);
 
@@ -396,7 +427,7 @@ function App() {
   const startTask = (prompt: string, agentic: boolean = false) => {
     setTaskPrompt(prompt);
     setIsAgenticTask(agentic);
-    setView('chat');
+      changeView('chat');
   };
 
   const activeAgents = agents.filter(a => activeAgentWindows.includes(a.id) || minimizedAgents.includes(a.id));
@@ -406,7 +437,7 @@ function App() {
       {/* Sidebar */}
       <Sidebar 
         currentView={view} 
-        onViewChange={(v) => setView(v as any)}
+        onViewChange={changeView}
         onOpenSettings={() => openSettings('General')}
         onAgentAction={handleAgentAction}
         agents={agents}
@@ -422,7 +453,7 @@ function App() {
           >
             <div className="flex items-center space-x-2" style={{ WebkitAppRegion: 'no-drag' } as any}>
               <button
-                onClick={() => setView(view === 'landing' ? 'agents' : 'models')}
+                onClick={() => changeView(view === 'landing' ? 'agents' : 'models')}
                 className="flex items-center space-x-2 px-3 py-1.5 hover:bg-gray-50 rounded-xl transition-all border border-transparent hover:border-gray-100"
                 title={view === 'landing' ? 'Open agents' : 'Open Model Hub'}
               >
@@ -467,7 +498,7 @@ function App() {
                 <button onClick={() => showToast(selectedModel ? `Using ${selectedModel.provider}: ${selectedModel.model}` : 'No model selected yet')} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="Task Details">
                   <Info className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => { setTaskPrompt(''); setView('landing'); showToast('Task cleared'); }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded-md transition-all" title="Delete">
+                <button onClick={() => { setTaskPrompt(''); changeView('landing'); showToast('Task cleared'); }} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded-md transition-all" title="Delete">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => setIsConsoleOpen(true)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all" title="More">
@@ -481,59 +512,66 @@ function App() {
         {/* Content Area */}
         <main className="flex-1 overflow-y-auto">
           <MainErrorBoundary>
-          {view === 'landing' && (
+          {visitedViews.has('landing') && (
+            <div className={view === 'landing' ? 'block h-full' : 'hidden'}>
             <LandingPage 
-              onOpenConnectors={() => setView('connectors')} 
-              onOpenComputer={() => setView('computer')} 
-              onNavigate={(nextView: string) => setView(nextView as any)}
+              onOpenConnectors={() => changeView('connectors')}
+              onOpenComputer={() => changeView('computer')}
+              onNavigate={changeView}
               onStartTask={startTask} 
             />
+            </div>
           )}
-          {view === 'chat' && (
+          {visitedViews.has('chat') && (
+            <div className={view === 'chat' ? 'block h-full' : 'hidden'}>
             <ChatInterface 
               initialModel={selectedModel} 
               initialPrompt={taskPrompt} 
               isAgentic={isAgenticTask}
-              onNavigate={(nextView) => setView(nextView as any)}
+              onNavigate={changeView}
             />
+            </div>
           )}
-          {view === 'models' && (
+          {visitedViews.has('models') && (
+            <div className={view === 'models' ? 'block h-full' : 'hidden'}>
             <ModelHub 
               onLoadModel={(m, p) => {
                 if (m && p) {
                   setSelectedModel({ model: m, provider: p });
-                  setView('chat');
+                  window.ipcRenderer?.saveModelPreset?.({ provider: p, model: m }).catch(() => {});
+                  changeView('chat');
                 } else {
                   console.error('ModelHub returned invalid model or provider');
                 }
               }} 
             />
+            </div>
           )}
-          {view === 'skills' && <Skills />}
-          {view === 'memory' && <Memory />}
-          {view === 'plugins' && <Plugins />}
-          {view === 'computer' && <MyComputer />}
-          {view === 'agents' && <AgentsMonitor agents={agents} onAgentAction={handleAgentAction} />}
+          {visitedViews.has('skills') && <div className={view === 'skills' ? 'block h-full' : 'hidden'}><Skills /></div>}
+          {visitedViews.has('memory') && <div className={view === 'memory' ? 'block h-full' : 'hidden'}><Memory /></div>}
+          {visitedViews.has('plugins') && <div className={view === 'plugins' ? 'block h-full' : 'hidden'}><Plugins /></div>}
+          {visitedViews.has('computer') && <div className={view === 'computer' ? 'block h-full' : 'hidden'}><MyComputer /></div>}
+          {visitedViews.has('agents') && <div className={view === 'agents' ? 'block h-full' : 'hidden'}><AgentsMonitor agents={agents} onAgentAction={handleAgentAction} /></div>}
           {view === 'settings' && <SettingsPage />}
           {view === 'profile' && <SettingsPage />}
           {view === 'usage' && <SettingsShell title="Usage" desc="Local usage, engine activity, and workspace metrics." />}
           {view === 'tasks' && <SettingsSurface><ScheduledTasksView /></SettingsSurface>}
-          {view === 'mail' && <SettingsSurface><MailMEView /></SettingsSurface>}
-          {view === 'whatsapp' && <WhatsAppMEView />}
+          {visitedViews.has('mail') && <div className={view === 'mail' ? 'block h-full' : 'hidden'}><SettingsSurface><MailMEView /></SettingsSurface></div>}
+          {visitedViews.has('whatsapp') && <div className={view === 'whatsapp' ? 'block h-full' : 'hidden'}><WhatsAppMEView /></div>}
           {view === 'data' && <SettingsSurface><DataControlsView /></SettingsSurface>}
           {view === 'browser' && <SettingsSurface><DataControlsView mode="cloud" /></SettingsSurface>}
           {view === 'personalization' && <SettingsPage />}
-          {view === 'projects' && <ProjectsView />}
-          {view === 'wide-research' && <WideResearchView />}
-          {view === 'graphify' && <GraphifyView />}
+          {visitedViews.has('projects') && <div className={view === 'projects' ? 'block h-full' : 'hidden'}><ProjectsView /></div>}
+          {visitedViews.has('wide-research') && <div className={view === 'wide-research' ? 'block h-full' : 'hidden'}><WideResearchView /></div>}
+          {visitedViews.has('graphify') && <div className={view === 'graphify' ? 'block h-full' : 'hidden'}><GraphifyView /></div>}
           {view === 'shared-tasks' && <SettingsShell title="Shared Tasks" desc="Create local task handoff files and manage collaboration notes." />}
           {view === 'shared-files' && <SettingsShell title="Shared Files" desc="Choose and review local folders used by shared workflows." />}
           {view === 'websites' && <SettingsShell title="Websites" desc="Open generated sites, saved website projects, and export folders." />}
           {view === 'apps' && <SettingsShell title="Apps" desc="Track local app builds, installers, and launch shortcuts." />}
           {view === 'domains' && <SettingsShell title="Purchased Domains" desc="Store domain records and connect them to deployments." />}
-          {view === 'connectors' && <SettingsSurface><ConnectorsManager onAddCustomAPI={() => setView('api-keys')} /></SettingsSurface>}
+          {view === 'connectors' && <SettingsSurface><ConnectorsManager onAddCustomAPI={() => changeView('api-keys')} /></SettingsSurface>}
           {view === 'api-keys' && <SettingsSurface><APIKeyManager /></SettingsSurface>}
-          {view === 'integrations' && <SettingsSurface><ConnectorsManager onAddCustomAPI={() => setView('api-keys')} /></SettingsSurface>}
+          {view === 'integrations' && <SettingsSurface><ConnectorsManager onAddCustomAPI={() => changeView('api-keys')} /></SettingsSurface>}
           {view === 'knowledge' && <Knowledge />}
           
           {/* Fallback for unmapped views to prevent blank screen */}
@@ -547,7 +585,7 @@ function App() {
                 The <strong className="text-gray-900 uppercase">{view}</strong> route has no production module wired yet. ME will not pretend this is connected.
               </p>
               <button 
-                onClick={() => setView('landing')}
+                onClick={() => changeView('landing')}
                 className="mt-6 px-4 py-2 bg-black text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:scale-105 transition-transform"
               >
                 Return to Dashboard

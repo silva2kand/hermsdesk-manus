@@ -505,7 +505,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
           </div>
         </div>
 
-        {/* Engine Connections Section */}
+        {/* Optional Engine Connections Section */}
         <div className="p-6 bg-blue-600 rounded-3xl text-white space-y-6 shadow-xl shadow-blue-100 overflow-hidden relative group">
           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-700">
             <Globe className="w-48 h-48" />
@@ -515,16 +515,15 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
               <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                 <Share2 className="w-5 h-5 text-white" />
               </div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Engine Connections</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight">Optional External Engine Connections</h2>
             </div>
             <p className="text-sm text-blue-100 max-w-xl font-medium leading-relaxed">
-              Jan + TurboQuant is built into HermsDesk. Ollama and LM Studio are optional external apps; HermsDesk detects them here when they are actually running.
+              Jan + TurboQuant is the built-in HermsDesk engine above. This area only checks optional external apps and OpenAI-compatible routes when they are actually running.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
             {[
-              { name: 'Jan/TurboQuant', port: '6767', url: 'http://localhost:6767/v1', online: janStatus.apiOnline },
               { name: 'Ollama', port: '11434', url: 'http://localhost:11434', online: otherEngines.ollamaOnline },
               { name: 'LM Studio', port: '1234', url: 'http://localhost:1234/v1', online: otherEngines.lmStudioOnline },
               { name: 'OpenCode', port: '4096', url: 'http://localhost:4096/v1', online: otherEngines.openCodeOnline }
@@ -856,7 +855,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
             {localModels.length === 0 && (
               <div className="p-8 text-center">
                 <p className="text-sm font-black text-gray-900">No installed local models detected yet</p>
-                <p className="text-xs text-gray-500 mt-1">Ollama, LM Studio, or Jan models will appear here after refresh.</p>
+                <p className="text-xs text-gray-500 mt-1">Built-in Jan/TurboQuant library models appear here first; optional Ollama/LM Studio models appear only when those apps are running.</p>
                 <button onClick={refreshDiagnostics} className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-black">
                   Refresh Models
                 </button>

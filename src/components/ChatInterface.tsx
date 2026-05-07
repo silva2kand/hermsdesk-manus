@@ -19,6 +19,7 @@ const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }
 const connectorId = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
 const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name;
 const preferJanModel = (models: string[]) => models.find(m => /qwen/i.test(m)) || models.find(m => /phi/i.test(m)) || models[0] || 'Auto local model';
+const providerLabel = (name: string) => name === 'Jan' ? 'Jan + TurboQuant (built-in)' : name;
 
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
@@ -100,7 +101,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             setProvider(initialModel.provider);
             setModel(initialModel.model);
           } else {
-            const preset = await window.ipcRenderer.getModelPreset?.().catch(() => ({ provider: 'Jan', model: 'Auto local model' }));
+            const savedPreset = await window.ipcRenderer.getModelPreset?.().catch(() => ({ provider: 'Jan', model: 'Auto local model' }));
+            const sessionProviderChanged = window.sessionStorage.getItem('hermsdesk.provider.changed') === 'true';
+            const preset = sessionProviderChanged ? savedPreset : { provider: 'Jan', model: 'Auto local model' };
             if (preset?.provider) {
               setProvider(preset.provider);
               setModel(preset.model || 'Auto local model');
@@ -895,12 +898,13 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
               value={provider}
               onChange={(e) => {
                 const newProvider = e.target.value;
+                window.sessionStorage.setItem('hermsdesk.provider.changed', 'true');
                 setProvider(newProvider);
                 setModel(providerModels[newProvider]?.[0] || '');
               }}
             >
               {Object.keys(providerModels).map(p => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p} value={p}>{providerLabel(p)}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
