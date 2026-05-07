@@ -453,8 +453,9 @@ include = ["silva_voice*"]
     const initFile = path.join(serverDir, '__init__.py');
     if (!fs.existsSync(initFile)) fs.writeFileSync(initFile, '', 'utf8');
     
-    // Always update server script to latest logic
-    fs.writeFileSync(serverFile, `from fastapi import FastAPI, Request
+    if (!fs.existsSync(serverFile)) {
+      // Only write default if it doesn't exist
+      fs.writeFileSync(serverFile, `from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import pyttsx3
@@ -520,6 +521,7 @@ async def speak(payload: SpeakRequest):
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 `, 'utf8');
+    }
 
     if (!fs.existsSync(VOICE_STACK_LAUNCHER)) {
       fs.writeFileSync(VOICE_STACK_LAUNCHER, `@echo off
@@ -596,19 +598,21 @@ $speaker.Speak('${escaped}')
     const cleanText = String(text || '').trim();
     if (!cleanText) return { ok: false, error: 'No text to speak.' };
 
-    const voice = options.voice || 'tamil-jaffna';
-    const language = options.language || 'ta-LK';
+    const voice = options.voice || 'en-gb-default';
+    const language = options.language || 'en';
+    // Map user-friendly voice names to valid accent_id values the server recognizes
+    const accentMap: Record<string, string> = {
+      'tamil-jaffna': 'ta-default', 'tamil': 'ta-default', 'ta': 'ta-default',
+      'english-uk': 'en-gb-default', 'en-gb': 'en-gb-default',
+      'english-us': 'en-us-default', 'en-us': 'en-us-default',
+      'english-india': 'en-in-default', 'en-in': 'en-in-default',
+      'english-us-sapi': 'en-us-sapi',
+    };
+    const rawAccentId = options.accent_id || options.accentId || voice;
+    const accent_id = accentMap[rawAccentId] || rawAccentId;
     const payload = {
       text: cleanText,
-      voice,
-      language,
-      locale: language,
-      accent: options.accent || 'jaffna',
-      accent_id: options.accent_id || options.accentId || voice,
-      style: options.style || 'professional',
-      rate: options.rate || 1,
-      pitch: options.pitch || 1,
-      format: options.format || 'mp3'
+      accent_id,
     };
 
     const endpoints = ['/tts/synthesize', '/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
@@ -628,9 +632,18 @@ $speaker.Speak('${escaped}')
         if (contentType.includes('audio') || response.data?.byteLength > 1024) {
           const ext = contentType.includes('wav') ? 'wav' : 'mp3';
           const audioPath = path.join(app.getPath('temp'), `hermes-voice-${Date.now()}.${ext}`);
-          fs.writeFileSync(audioPath, Buffer.from(response.data));
-          await shell.openPath(audioPath);
-        return { ok: true, mode: 'silva-premium-audio-file', endpoint, voice, language, path: audioPath };
+          const buffer = Buffer.from(response.data);
+          
+          if (buffer.length < 100) {
+            throw new Error(`Voice server returned empty audio (${buffer.length} bytes). Check model files.`);
+          }
+          
+          fs.writeFileSync(audioPath, buffer);
+          // Use direct powershell playback for more reliability without opening a player window
+          const psPlay = `$p = New-Object System.Media.SoundPlayer("${audioPath.replace(/\\/g, '\\\\')}"); $p.PlaySync()`;
+          this.runPowerShellText(psPlay).catch(e => console.error('Direct audio playback failed:', e));
+          
+          return { ok: true, mode: 'silva-premium-audio-file', endpoint, voice, language, path: audioPath, size: buffer.length };
         }
 
         const body = Buffer.from(response.data).toString('utf8');
@@ -664,18 +677,28 @@ $ErrorActionPreference = 'Stop'
 $outlook = New-Object -ComObject Outlook.Application
 $ns = $outlook.GetNamespace('MAPI')
 $accounts = @()
-foreach ($account in $ns.Accounts) {
-  $accounts += [pscustomobject]@{
-    displayName = [string]$account.DisplayName
-    smtpAddress = [string]$account.SmtpAddress
-  }
+$totalCount = 0
+function Get-MailCount($folder) {
+  $c = 0
+  try {
+    if ($folder.DefaultItemType -eq 0) { $c += $folder.Items.Count }
+    foreach ($sub in $folder.Folders) { $c += Get-MailCount $sub }
+  } catch {}
+  return $c
 }
-$inbox = $ns.GetDefaultFolder(6)
+foreach ($root in $ns.Folders) {
+  $c = Get-MailCount $root
+  $accounts += [pscustomobject]@{
+    displayName = [string]$root.Name
+    smtpAddress = ""
+    itemCount = $c
+  }
+  $totalCount += $c
+}
 [pscustomobject]@{
   ok = $true
   profile = [string]$ns.CurrentProfileName
-  inboxName = [string]$inbox.Name
-  itemCount = [int]$inbox.Items.Count
+  itemCount = $totalCount
   accounts = $accounts
 } | ConvertTo-Json -Compress -Depth 4
 `;

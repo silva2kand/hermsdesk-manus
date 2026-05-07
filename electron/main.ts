@@ -462,24 +462,62 @@ function createWindow() {
   ipcMain.handle('microsoft:graph-list-accounts', () => emailIndexService.getAllAccounts())
   ipcMain.handle('microsoft:graph-search-index', (_, { query, accountId }) => emailIndexService.searchEmails(query, accountId))
   ipcMain.handle('microsoft:graph-mailbox-settings', (_, accountId) => microsoftGraph.getMailboxSettings(accountId))
-  ipcMain.handle('microsoft:graph-messages', (_, { accountId, limit }) => microsoftGraph.listMessages(accountId, limit))
+  ipcMain.handle('microsoft:graph-messages', (_, arg) => {
+    const payload = typeof arg === 'object' && arg !== null ? arg : { limit: arg };
+    return microsoftGraph.listMessages(payload.accountId, payload.limit)
+  })
   ipcMain.handle('microsoft:graph-folders', (_, accountId) => microsoftGraph.listMailFolders(accountId))
-  ipcMain.handle('microsoft:graph-sync-email-intelligence', async (_, { accountId, limitPerFolder }) => { 
+  ipcMain.handle('microsoft:graph-sync-email-intelligence', async (_, arg) => {
+    const payload = typeof arg === 'object' && arg !== null ? arg : { limitPerFolder: arg };
     // Legacy sync call fallback
-    const d = await microsoftGraph.syncEmailIntelligenceBatch(accountId, { batchSize: limitPerFolder || 100 }); 
+    const d = await microsoftGraph.syncEmailIntelligenceBatch(payload.accountId, { batchSize: payload.limitPerFolder || 100 });
+    if (d?.ok === false) return d;
     return processEmailIntelligence(d, 'Microsoft Graph') 
   })
-  ipcMain.handle('microsoft:graph-sync-email-batch', async (_, { accountId, options }) => { 
-    const d = await microsoftGraph.syncEmailIntelligenceBatch(accountId, options || { batchSize: 500 }); 
+  ipcMain.handle('microsoft:graph-sync-email-batch', async (_, arg) => {
+    // Frontend may pass { batchSize, reset } directly without accountId
+    let resolvedAccountId: string | undefined = undefined;
+    let opts: any = { batchSize: 500 };
+    if (typeof arg === 'string') {
+      resolvedAccountId = arg;
+    } else if (arg && typeof arg === 'object') {
+      if (typeof arg.accountId === 'string') {
+        resolvedAccountId = arg.accountId;
+      }
+      if (arg.batchSize || arg.reset !== undefined) {
+        opts = { batchSize: arg.batchSize || arg.options?.batchSize || 500, reset: arg.reset ?? arg.options?.reset };
+      } else if (arg.options) {
+        opts = arg.options;
+      }
+    }
+    // Auto-resolve accountId from stored tokens if not provided
+    if (!resolvedAccountId) {
+      const tokens = store.get('microsoftGraphTokens', {}) as Record<string, any>;
+      resolvedAccountId = Object.keys(tokens)[0];
+    }
+    if (!resolvedAccountId) {
+      return { ok: false, error: 'No Microsoft Graph account connected. Please complete login first.' };
+    }
+    const d = await microsoftGraph.syncEmailIntelligenceBatch(resolvedAccountId, opts);
+    if (d?.ok === false) return d;
     return processEmailIntelligence(d, 'Microsoft Graph') 
   })
   ipcMain.handle('microsoft:graph-mail-sync-state', (_, accountId) => microsoftGraph.getAccountMetadata(accountId))
   ipcMain.handle('microsoft:graph-reset-mail-sync', (_, accountId) => {
-    const stateKey = `mailSyncState_${accountId}`;
+    let resolvedAccountId = typeof accountId === 'string' ? accountId : '';
+    if (!resolvedAccountId) {
+      const tokens = store.get('microsoftGraphTokens', {}) as Record<string, any>;
+      resolvedAccountId = Object.keys(tokens)[0] || '';
+    }
+    if (!resolvedAccountId) return { ok: false, error: 'No Microsoft Graph account connected.' };
+    const stateKey = `mailSyncState_${resolvedAccountId}`;
     store.delete(stateKey);
     return { ok: true };
   })
-  ipcMain.handle('microsoft:graph-mail-action', async (_, { accountId, action }) => {
+  ipcMain.handle('microsoft:graph-set-secret', (_, secret) => microsoftGraph.setSecret(secret))
+  ipcMain.handle('microsoft:graph-mail-action', async (_, arg) => {
+    const accountId = arg?.accountId;
+    const action = arg?.action || arg;
     const id = `mail-action-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     if (!action?.approved) { 
       eventBus?.emit('mail.action.proposed', 'mail-me', { actionId: id, action, accountId }); 
@@ -503,9 +541,59 @@ function createWindow() {
   ipcMain.handle('ai:save-api-key', (_, { provider, key }) => providerService.saveAPIKey(provider, key))
   ipcMain.handle('ai:get-api-keys', () => providerService.getAPIKeys())
   ipcMain.handle('ai:get-connector-statuses', async () => {
-    const [routes, keys, graph, outlook, jan, ollama, lm, openCode, browser] = await Promise.all([toolRegistry.getConnectors(), providerService.getAPIKeys(), microsoftGraph.getStatus().catch(() => ({})), integrationService.getClassicOutlookStatus().catch(() => ({})), aiService.getJanEngineStatus().catch(() => ({})), aiService.listOllamaModels().catch(() => []), aiService.checkLMStudio().catch(() => null), aiService.checkOpenCode().catch(() => null), browserOperator.getState()])
+    const [routes, keys, graph, outlook, jan, ollama, lm, openCode, browser] = await Promise.all([
+      toolRegistry.getConnectors().catch(() => ({})),
+      providerService.getAPIKeys().catch(() => ({})),
+      microsoftGraph.getAccountStatus().catch(() => ({ connected: false })),
+      integrationService.getClassicOutlookStatus().catch(() => ({})),
+      aiService.getJanEngineStatus().catch(() => ({})),
+      aiService.listOllamaModels().catch(() => []),
+      aiService.checkLMStudio().catch(() => null),
+      aiService.checkOpenCode().catch(() => null),
+      Promise.resolve(browserOperator.getState()).catch(() => ({}))
+    ])
     const known = Array.from(new Set([...Object.keys(routes || {}), 'jan-turboquant', 'ollama', 'lm-studio', 'opencode', 'my-browser', 'outlook-mail', 'outlook-calendar', 'google-gemini', 'openrouter', 'nvidia', 'huggingface']))
-    return Object.fromEntries(known.map(id => [id, { id, status: 'verified', liveVerified: true }])) // Minimal status for UI
+    const apiKeyProvider: Record<string, string> = {
+      'google-gemini': 'gemini',
+      openrouter: 'openrouter',
+      nvidia: 'nvidia',
+      huggingface: 'huggingface',
+      opencode: 'opencode'
+    };
+    const makeStatus = (id: string) => {
+      const routeEnabled = routes?.[id] !== false;
+      const apiKeySaved = Boolean(apiKeyProvider[id] && keys?.[apiKeyProvider[id]]);
+      const oauthConnected = (
+        (['outlook-mail', 'outlook-calendar'].includes(id) && Boolean(graph.connected)) ||
+        (id === 'classic-outlook' && Boolean(outlook.ok))
+      );
+      const liveVerified = (
+        (id === 'jan-turboquant' && Boolean(jan.apiOnline)) ||
+        (id === 'ollama' && Array.isArray(ollama) && ollama.length > 0) ||
+        (id === 'lm-studio' && Boolean(lm?.online || lm?.data)) ||
+        (id === 'opencode' && Boolean(openCode?.online) && !openCode?.authRequired) ||
+        (id === 'my-browser' && Boolean(browser?.online)) ||
+        oauthConnected
+      );
+      return {
+        id,
+        routeEnabled,
+        apiKeySaved,
+        oauthConnected,
+        liveVerified,
+        status: !routeEnabled ? 'disabled' : liveVerified ? 'live verified' : apiKeySaved ? 'api key saved' : oauthConnected ? 'oauth connected' : 'route only',
+        detail: id === 'jan-turboquant'
+          ? (jan.apiOnline ? `Jan + TurboQuant API verified at ${jan.apiUrl || 'localhost:6767/v1'}` : jan.installed ? 'Bundled Jan runtime found; start/load a GGUF model' : 'Bundled Jan runtime missing')
+          : ['outlook-mail', 'outlook-calendar'].includes(id)
+            ? (graph.connected ? `Microsoft Graph connected: ${graph.profile?.mail || graph.profile?.userPrincipalName || graph.accountId || 'account'}` : 'Microsoft Graph OAuth not connected')
+            : id === 'my-browser'
+              ? (browser?.online ? `Browser Operator open: ${browser.url || 'active session'}` : 'Browser Operator not opened yet')
+              : apiKeyProvider[id]
+                ? (apiKeySaved ? `${apiKeyProvider[id]} API key saved locally` : `${apiKeyProvider[id]} API key missing`)
+                : 'Route enabled only. Add OAuth/API/MCP server before private data access works.'
+      };
+    };
+    return Object.fromEntries(known.map(id => [id, makeStatus(id)]))
   })
   ipcMain.handle('app:open-external', (_, n) => integrationService.openExternalApp(n))
   ipcMain.handle('tools:get-all', () => toolRegistry.getTools())

@@ -65,6 +65,12 @@ export class MicrosoftGraphService {
     return tokens[accountId] || null;
   }
 
+  private resolveAccountId(accountId?: string) {
+    if (accountId) return accountId;
+    const tokens = this.store.get('microsoftGraphTokens', {}) as Record<string, GraphToken>;
+    return Object.keys(tokens)[0] || '';
+  }
+
   async startDeviceLogin() {
     const response = await axios.post(
       `${this.authority}/oauth2/v2.0/devicecode`,
@@ -103,16 +109,19 @@ export class MicrosoftGraphService {
       return { ok: false, error: 'Microsoft login code expired. Start login again.' };
     }
 
-    const deadline = Date.now() + 120000;
+    const deadline = Date.now() + 300000; // 5 minutes
     while (Date.now() < deadline) {
       try {
+        const tokenBody: Record<string, string> = {
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          client_id: this.clientId,
+          device_code: pending.device_code
+        };
+        const secret = this.store.get('microsoftGraph.clientSecret', '') as string;
+        if (secret) tokenBody.client_secret = secret;
         const response = await axios.post(
           `${this.authority}/oauth2/v2.0/token`,
-          this.form({
-            grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-            client_id: this.clientId,
-            device_code: pending.device_code
-          }),
+          this.form(tokenBody),
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 }
         );
         
@@ -152,14 +161,18 @@ export class MicrosoftGraphService {
     if (Date.now() < token.expires_at) return token.access_token;
     if (!token.refresh_token) throw new Error(`Microsoft refresh token missing for ${accountId}. Connect again.`);
 
+    const secret = this.store.get('microsoftGraph.clientSecret', '') as string;
+    const formData: Record<string, string> = {
+      grant_type: 'refresh_token',
+      client_id: this.clientId,
+      refresh_token: token.refresh_token,
+      scope: DEFAULT_SCOPES.join(' ')
+    };
+    if (secret) formData.client_secret = secret;
+
     const response = await axios.post(
       `${this.authority}/oauth2/v2.0/token`,
-      this.form({
-        grant_type: 'refresh_token',
-        client_id: this.clientId,
-        refresh_token: token.refresh_token,
-        scope: DEFAULT_SCOPES.join(' ')
-      }),
+      this.form(formData),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 }
     );
     return this.saveToken(accountId, response.data).access_token;
@@ -213,14 +226,17 @@ export class MicrosoftGraphService {
     return this.graphGet('/me?$select=id,displayName,userPrincipalName,mail', undefined, accessToken);
   }
 
-  async getAccountStatus(accountId: string) {
-    const token = this.getStoredToken(accountId);
-    if (!token) return { connected: false, accountId };
+  async getAccountStatus(accountId?: string) {
+    let id = this.resolveAccountId(accountId);
+    if (!id) return { connected: false };
+
+    const token = this.getStoredToken(id);
+    if (!token) return { connected: false, accountId: id };
     try {
-      const profile = await this.graphGet('/me?$select=id,displayName,userPrincipalName,mail', accountId);
-      return { connected: true, accountId, profile };
+      const profile = await this.graphGet('/me?$select=id,displayName,userPrincipalName,mail', id);
+      return { connected: true, accountId: id, profile };
     } catch (error: any) {
-      return { connected: false, accountId, error: error.message };
+      return { connected: false, accountId: id, error: error.message };
     }
   }
 
@@ -233,13 +249,17 @@ export class MicrosoftGraphService {
     return results;
   }
 
-  async getMailboxSettings(accountId: string) {
-    return this.graphGet('/me/mailboxSettings', accountId);
+  async getMailboxSettings(accountId?: string) {
+    const id = this.resolveAccountId(accountId);
+    if (!id) throw new Error('No Microsoft Graph account connected.');
+    return this.graphGet('/me/mailboxSettings', id);
   }
 
-  async listMessages(accountId: string, limit = 15) {
+  async listMessages(accountId?: string, limit = 15) {
+    const id = this.resolveAccountId(accountId);
+    if (!id) throw new Error('No Microsoft Graph account connected.');
     const top = Math.max(1, Math.min(Number(limit) || 15, 50));
-    const data = await this.graphGet(`/me/messages?$top=${top}&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,webLink`, accountId);
+    const data = await this.graphGet(`/me/messages?$top=${top}&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,webLink`, id);
     return (data.value || []).map((m: any) => ({
       id: m.id,
       subject: m.subject,
@@ -253,12 +273,14 @@ export class MicrosoftGraphService {
     }));
   }
 
-  async listMailFolders(accountId: string) {
+  async listMailFolders(accountId?: string) {
+    const id = this.resolveAccountId(accountId);
+    if (!id) throw new Error('No Microsoft Graph account connected.');
     const folders: any[] = [];
     const readPage = async (urlOrPath: string) => {
       const data = urlOrPath.startsWith('http')
-        ? await this.graphGetUrl(urlOrPath, accountId)
-        : await this.graphGet(urlOrPath, accountId);
+        ? await this.graphGetUrl(urlOrPath, id)
+        : await this.graphGet(urlOrPath, id);
       folders.push(...(data.value || []));
       if (data['@odata.nextLink']) await readPage(data['@odata.nextLink']);
     };
@@ -288,11 +310,13 @@ export class MicrosoftGraphService {
     return { id: 'general', label: 'General', agentId: 'paperclip-full', keywords: [] };
   }
 
-  async syncEmailIntelligenceBatch(accountId: string, options: { batchSize?: number; reset?: boolean } = {}) {
+  async syncEmailIntelligenceBatch(accountId?: string, options: { batchSize?: number; reset?: boolean } = {}) {
+    const id = this.resolveAccountId(accountId);
+    if (!id) return { ok: false, error: 'No Microsoft Graph account connected. Please complete login first.', messages: [], syncedCount: 0, totalIndexed: 0, complete: false };
     const batchSize = Math.max(25, Math.min(Number(options.batchSize) || 500, 2000));
-    const folders = await this.listMailFolders(accountId);
+    const folders = await this.listMailFolders(id);
     
-    const stateKey = `mailSyncState_${accountId}`;
+    const stateKey = `mailSyncState_${id}`;
     let state = this.store.get(stateKey, {
       complete: false,
       folderCursors: {},
@@ -315,12 +339,12 @@ export class MicrosoftGraphService {
         const pageTop = Math.min(50, remaining);
         const initialPath = `/me/mailFolders/${encodeURIComponent(folder.id)}/messages?$top=${pageTop}&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,isRead,hasAttachments,bodyPreview,webLink,flag,importance,categories`;
         const data = state.folderCursors[folder.id]
-          ? await this.graphGetUrl(state.folderCursors[folder.id]!, accountId)
-          : await this.graphGet(initialPath, accountId);
+          ? await this.graphGetUrl(state.folderCursors[folder.id]!, id)
+          : await this.graphGet(initialPath, id);
           
         const messages = (data.value || []).map((m: any) => {
           const base = this.normalizeGraphMessage(m, folder);
-          return { ...base, accountId };
+          return { ...base, accountId: id };
         });
         
         routed.push(...messages);
@@ -328,23 +352,36 @@ export class MicrosoftGraphService {
         state.folderCursors[folder.id] = data['@odata.nextLink'] || null;
         state.folderCompleted[folder.id] = !data['@odata.nextLink'];
       } catch (error: any) {
-        console.error(`Sync error for account ${accountId} folder ${folder.displayName}:`, error);
+        state.lastError = `${folder.displayName}: ${error?.response?.data?.error?.message || error?.message || String(error)}`;
+        console.error(`Sync error for account ${id} folder ${folder.displayName}:`, error);
       }
     }
 
     const complete = folders.length > 0 && folders.every(folder => state.folderCompleted[folder.id]);
+    if (this.indexService && routed.length > 0) {
+      const mergedTotal = await this.indexService.saveEmails(id, routed);
+      state.totalIndexed = mergedTotal;
+    } else {
+      state.totalIndexed += routed.length;
+    }
+    const globalStats = this.indexService?.getGlobalStats?.() || {};
     state.complete = complete;
-    state.totalIndexed += routed.length;
+    state.accountId = id;
+    state.lastBatchCount = routed.length;
+    state.lastSyncedAt = new Date().toISOString();
+    state.updatedAt = state.lastSyncedAt;
+    state.totalAccounts = globalStats.totalAccounts || (id ? 1 : 0);
+    state.globalTotalIndexed = globalStats.totalIndexed || state.totalIndexed || 0;
+    if (routed.length > 0 && !complete) delete state.lastError;
     this.store.set(stateKey, state);
 
-    if (this.indexService && routed.length > 0) {
-      await this.indexService.saveEmails(accountId, routed);
-    }
-
     return {
-      accountId,
+      ok: true,
+      accountId: id,
       syncedCount: routed.length,
+      batchCount: routed.length,
       totalIndexed: state.totalIndexed,
+      state,
       complete,
       messages: routed
     };
@@ -377,13 +414,17 @@ export class MicrosoftGraphService {
     };
   }
 
-  async markMessageRead(accountId: string, messageId: string, isRead = true) {
-    const result = await this.graphPatch(`/me/messages/${encodeURIComponent(messageId)}`, { isRead }, accountId);
+  async markMessageRead(accountId: string | undefined, messageId: string, isRead = true) {
+    const id = this.resolveAccountId(accountId);
+    if (!id) throw new Error('No Microsoft Graph account connected.');
+    const result = await this.graphPatch(`/me/messages/${encodeURIComponent(messageId)}`, { isRead }, id);
     return { ok: true, action: isRead ? 'mark-read' : 'mark-unread', messageId, result };
   }
 
-  async createReplyDraft(accountId: string, messageId: string, comment = '') {
-    const draft = await this.graphPost(`/me/messages/${encodeURIComponent(messageId)}/createReply`, {}, accountId);
+  async createReplyDraft(accountId: string | undefined, messageId: string, comment = '') {
+    const id = this.resolveAccountId(accountId);
+    if (!id) throw new Error('No Microsoft Graph account connected.');
+    const draft = await this.graphPost(`/me/messages/${encodeURIComponent(messageId)}/createReply`, {}, id);
     if (comment && draft?.id) {
       const body = {
         body: {
@@ -391,15 +432,50 @@ export class MicrosoftGraphService {
           content: String(comment)
         }
       };
-      await this.graphPatch(`/me/messages/${encodeURIComponent(draft.id)}`, body, accountId);
+      await this.graphPatch(`/me/messages/${encodeURIComponent(draft.id)}`, body, id);
     }
     return { ok: true, action: 'create-reply-draft', sourceMessageId: messageId, draftId: draft?.id, draft };
   }
 
-  disconnect(accountId: string) {
+  disconnect(accountId?: string) {
+    const id = this.resolveAccountId(accountId);
     const tokens = this.store.get('microsoftGraphTokens', {}) as Record<string, GraphToken>;
-    delete tokens[accountId];
+    if (id) delete tokens[id];
     this.store.set('microsoftGraphTokens', tokens);
     return { ok: true };
+  }
+
+  setSecret(secret: string) {
+    this.store.set('microsoftGraph.clientSecret', secret);
+    return { ok: true };
+  }
+
+  getAccountMetadata(accountId?: string) {
+    let id = this.resolveAccountId(accountId);
+    const globalStats = this.indexService?.getGlobalStats?.() || {};
+    if (!id) {
+      return {
+        complete: false,
+        totalIndexed: globalStats.totalIndexed || 0,
+        totalAccounts: globalStats.totalAccounts || 0,
+        accounts: globalStats.accounts || []
+      };
+    }
+    const stateKey = `mailSyncState_${id}`;
+    const state = this.store.get(stateKey, null) as any;
+    return {
+      accountId: id,
+      complete: Boolean(state?.complete),
+      folderCursors: state?.folderCursors || {},
+      folderCompleted: state?.folderCompleted || {},
+      totalIndexed: state?.totalIndexed || this.indexService?.getAccountMetadata?.(id)?.totalIndexed || 0,
+      lastBatchCount: state?.lastBatchCount || 0,
+      lastSyncedAt: state?.lastSyncedAt || this.indexService?.getAccountMetadata?.(id)?.lastSyncedAt || '',
+      updatedAt: state?.updatedAt || state?.lastSyncedAt || '',
+      lastError: state?.lastError || '',
+      totalAccounts: globalStats.totalAccounts || 1,
+      globalTotalIndexed: globalStats.totalIndexed || state?.totalIndexed || 0,
+      accounts: globalStats.accounts || []
+    };
   }
 }

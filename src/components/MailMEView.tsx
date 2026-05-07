@@ -96,21 +96,38 @@ export const MailMEView = () => {
     }
   };
 
-  const completeGraphLogin = async () => {
-    setLoadingGraph(true);
+  const completeGraphLogin = async (silent = false) => {
+    if (!silent) setLoadingGraph(true);
     try {
       const result = await window.ipcRenderer?.completeMicrosoftGraphLogin?.();
       if (result?.ok) {
         setGraphLogin(null);
         await refreshGraphStatus();
-        showNotice(`Microsoft Graph connected: ${result.profile?.mail || result.profile?.userPrincipalName || result.profile?.displayName}`);
+        if (!silent) showNotice(`Microsoft Graph connected: ${result.profile?.mail || result.profile?.userPrincipalName || result.profile?.displayName}`);
+        return true;
       } else {
-        showNotice(result?.error || 'Microsoft sign-in is not complete yet.');
+        // If it's a real error (not pending), show it
+        if (!silent && result?.error && !/pending|sign-in is not complete/i.test(result.error)) {
+          showNotice(result.error);
+        }
+        return false;
       }
     } finally {
-      setLoadingGraph(false);
+      if (!silent) setLoadingGraph(false);
     }
   };
+
+  // Auto-complete login loop
+  React.useEffect(() => {
+    let timer: any;
+    if (graphLogin?.userCode) {
+      timer = setInterval(async () => {
+        const success = await completeGraphLogin(true);
+        if (success) clearInterval(timer);
+      }, 5000);
+    }
+    return () => clearInterval(timer);
+  }, [graphLogin]);
 
   const readGraphInbox = async () => {
     setLoadingGraph(true);
@@ -125,11 +142,19 @@ export const MailMEView = () => {
     }
   };
 
+  // Auto-sync trigger
+  React.useEffect(() => {
+    if (graphStatus?.connected && (mailSyncState?.totalIndexed === 0) && !batchIndexing) {
+      indexGraphBatch();
+    }
+  }, [graphStatus?.connected, mailSyncState?.totalIndexed]);
+
   const indexGraphBatch = async (reset = false) => {
     if (!(window.ipcRenderer as any)?.syncEmailBatch) return;
     setBatchIndexing(true);
     try {
       const result = await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000, reset });
+      if (result?.ok === false) throw new Error(result.error || 'Microsoft Graph mailbox indexing failed.');
       setMailSyncState(result?.state || null);
       const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
       if (intel?.mailboxMemory || intel?.memory) setMailMemory(intel.mailboxMemory || intel.memory);
@@ -151,6 +176,7 @@ export const MailMEView = () => {
       let latestState: any = null;
       while (!complete && safety < 80) {
         const result = await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000 });
+        if (result?.ok === false) throw new Error(result.error || 'Microsoft Graph mailbox indexing failed.');
         totalThisRun += result?.batchCount || result?.messages?.length || 0;
         complete = Boolean(result?.complete || result?.state?.complete || (result?.batchCount || 0) === 0);
         latestState = result?.state || latestState;
@@ -175,7 +201,8 @@ export const MailMEView = () => {
   };
 
   const copyEmail = () => {
-    navigator.clipboard.writeText('no-mail-connected@me.local');
+    const email = graphStatus?.connected ? (graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName) : 'no-mail-connected@me.local';
+    navigator.clipboard.writeText(email);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -252,7 +279,7 @@ export const MailMEView = () => {
           </button>
         </div>
         <div className="bg-white/80 p-3 rounded-xl border border-blue-100/50 flex items-center justify-center">
-          <code className="text-sm font-black text-blue-700">no-mail-connected@me.local</code>
+          <code className="text-sm font-black text-blue-700">{graphStatus?.connected ? (graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName) : 'no-mail-connected@me.local'}</code>
         </div>
       </div>
 
@@ -281,9 +308,20 @@ export const MailMEView = () => {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-black text-gray-900">Microsoft Graph Mailbox</h3>
-            <p className="text-[11px] text-gray-500 mt-1">
-              Uses your app registration: delegated `Mail.Read`, `Mail.ReadWrite`, `MailboxSettings.Read`, `offline_access`. No client secret.
-            </p>
+            <div className="flex items-center space-x-2 mt-1">
+              <p className="text-[11px] text-gray-500">
+                Uses delegated permissions.
+              </p>
+              <button
+                onClick={() => {
+                  const s = window.prompt('Enter Microsoft App Client Secret (if required)', '');
+                  if (s !== null) (window.ipcRenderer as any)?.setMicrosoftGraphSecret?.(s);
+                }}
+                className="text-[9px] font-black text-blue-600 hover:underline uppercase tracking-widest"
+              >
+                Set Secret
+              </button>
+            </div>
           </div>
           <div className="flex items-center space-x-2">
             {!graphStatus?.connected && (
@@ -296,11 +334,12 @@ export const MailMEView = () => {
             )}
             {graphLogin?.userCode && (
               <button
-                onClick={completeGraphLogin}
+                onClick={() => completeGraphLogin(false)}
                 disabled={loadingGraph}
-                className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300"
+                className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300 flex items-center space-x-2"
               >
-                Complete Login
+                {loadingGraph && <RefreshCw className="w-3 h-3 animate-spin" />}
+                <span>{loadingGraph ? 'Verifying...' : 'Complete Login'}</span>
               </button>
             )}
             {graphStatus?.connected && (
@@ -326,6 +365,25 @@ export const MailMEView = () => {
         {graphStatus?.connected && (
           <div className="p-3 bg-green-50 border border-green-100 rounded-2xl text-[10px] font-bold text-green-700">
             Connected: {graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName || graphStatus.profile?.displayName}
+          </div>
+        )}
+
+        {classicOutlookStatus?.ok && classicOutlookStatus.accounts && (
+          <div className="mt-4 p-4 bg-gray-50 border border-gray-100 rounded-2xl">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Outlook Connected Accounts ({classicOutlookStatus.accounts.length})</h4>
+            <div className="space-y-2">
+              {classicOutlookStatus.accounts.map((acc: any, i: number) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                    <span className="text-[11px] font-bold text-gray-700">{acc.displayName}</span>
+                  </div>
+                  {acc.itemCount !== undefined && (
+                    <span className="text-[10px] font-black text-gray-400">{acc.itemCount.toLocaleString()} items</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -395,15 +453,15 @@ export const MailMEView = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <IndexStat label="Total indexed" value={(mailSyncState?.totalIndexed || 0).toLocaleString()} />
           <IndexStat label="Last batch" value={(mailSyncState?.lastBatchCount || 0).toLocaleString()} />
-          <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected ? 'Crawling' : 'Connect Graph'} />
-          <IndexStat label="Updated" value={mailSyncState?.updatedAt ? new Date(mailSyncState.updatedAt).toLocaleString() : 'Not started'} />
+          <IndexStat label="Accounts" value={(mailSyncState?.totalAccounts || 0).toString()} />
+          <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected ? 'Crawling' : 'Sync Pending'} />
         </div>
 
         {mailMemory && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <IndexStat label="Indexed memory" value={(mailMemory.totalIndexed || 0).toLocaleString()} />
+            <IndexStat label="Memory items" value={(mailMemory.totalIndexed || 0).toLocaleString()} />
             <IndexStat label="Unread" value={(mailMemory.unreadCount || 0).toLocaleString()} />
-            <IndexStat label="Possible bills" value={(mailMemory.billsToPay?.length || 0).toLocaleString()} />
+            <IndexStat label="Bills/Payments" value={(mailMemory.billsToPay?.length || 0).toLocaleString()} />
             <IndexStat label="Deadlines" value={(mailMemory.deadlines?.length || 0).toLocaleString()} />
           </div>
         )}
