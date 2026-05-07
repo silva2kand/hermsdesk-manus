@@ -77,6 +77,7 @@ export class MicrosoftGraphService {
   }
 
   async startDeviceLogin() {
+    this.store.delete('microsoftGraphDeviceCode');
     const response = await axios.post(
       `${this.authority}/oauth2/v2.0/devicecode`,
       this.form({
@@ -157,6 +158,14 @@ export class MicrosoftGraphService {
           continue;
         }
         const description = error.response?.data?.error_description || error.message;
+        if (code === 'invalid_grant' || /expired|inactivity/i.test(description)) {
+          this.store.delete('microsoftGraphDeviceCode');
+          return {
+            ok: false,
+            code: 'device_code_expired',
+            error: 'Microsoft rejected this device code because it expired. Start Microsoft login again and complete the new code.'
+          };
+        }
         if (/AADSTS7000218|client_secret|client_assertion/i.test(description)) {
           return {
             ok: false,
