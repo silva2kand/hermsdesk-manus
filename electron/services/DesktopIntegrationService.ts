@@ -720,8 +720,10 @@ $ns = $outlook.GetNamespace('MAPI')
 $messages = @()
 $folders = New-Object System.Collections.ArrayList
 function Add-Folders($folder) {
-  [void]$folders.Add($folder)
-  foreach ($child in $folder.Folders) { Add-Folders $child }
+  try {
+    if ($folder.DefaultItemType -eq 0) { [void]$folders.Add($folder) }
+    foreach ($child in $folder.Folders) { Add-Folders $child }
+  } catch {}
 }
 foreach ($root in $ns.Folders) { Add-Folders $root }
 
@@ -741,9 +743,9 @@ foreach ($folder in $folders) {
       $body = ($body -replace '\\s+', ' ').Trim()
       if ($body.Length -gt 700) { $body = $body.Substring(0, 700) }
       
-      # Extract Account Name from FolderPath (e.g. \\email@domain.com\Inbox -> email@domain.com)
       $path = [string]$folder.FolderPath
-      $account = $path.Split('\\')[2]
+      $parts = [regex]::Split($path, '\\\\') | Where-Object { $_ -ne '' }
+      $account = if ($parts.Length -gt 0) { $parts[0] } else { $ns.CurrentProfileName }
 
       $messages += [pscustomobject]@{
         id = [string]$item.EntryID
@@ -826,8 +828,8 @@ foreach ($folder in $folders) {
       $body = [string]$item.Body
       $body = ($body -replace '\\s+', ' ').Trim()
       if ($body.Length -gt 700) { $body = $body.Substring(0, 700) }
-      $parts = $path.Split('\\')
-      $account = if ($parts.Length -gt 2) { $parts[2] } else { $ns.CurrentProfileName }
+      $parts = [regex]::Split($path, '\\\\') | Where-Object { $_ -ne '' }
+      $account = if ($parts.Length -gt 0) { $parts[0] } else { $ns.CurrentProfileName }
       $messages += [pscustomobject]@{
         id = [string]$item.EntryID
         accountId = "classic-$account"
