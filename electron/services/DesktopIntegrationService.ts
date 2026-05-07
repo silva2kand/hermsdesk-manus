@@ -716,9 +716,12 @@ foreach ($root in $ns.Folders) {
   async listClassicOutlookMessages(limit = 100, since?: string) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 5000));
     const dateFilter = since ? `[ReceivedTime] > '${new Date(since).toLocaleString('en-GB')}'` : '';
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermsdesk-outlook-list-'));
+    const outputPath = path.join(tempDir, 'messages.json');
     
     const script = `
 $ErrorActionPreference = 'Stop'
+$outputPath = ${this.psString(outputPath)}
 $outlook = New-Object -ComObject Outlook.Application
 $ns = $outlook.GetNamespace('MAPI')
 $messages = @()
@@ -776,17 +779,21 @@ foreach ($folder in $folders) {
     }
   } catch { continue }
 }
-$messages |
+$payload = @($messages |
   Sort-Object {[datetime]$_.receivedAt} -Descending |
-  Select-Object -First ${safeLimit} |
-  ConvertTo-Json -Compress -Depth 4
+  Select-Object -First ${safeLimit})
+$payload | ConvertTo-Json -Compress -Depth 4 | Set-Content -LiteralPath $outputPath -Encoding UTF8
 `;
     try {
-      const result = await this.runPowerShellJson(script, 300000); // 5 min timeout
+      await this.runPowerShellText(script, 300000); // 5 min timeout
+      const raw = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8').trim() : '';
+      const result = raw ? JSON.parse(raw) : [];
       if (!result) return [];
       return Array.isArray(result) ? result : [result];
     } catch (error: any) {
       return { ok: false, error: error.message || 'Could not read classic Outlook inbox.' };
+    } finally {
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
     }
   }
 
