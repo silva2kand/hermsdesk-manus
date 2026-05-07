@@ -260,7 +260,18 @@ export class MicrosoftGraphService {
     if (!token) return { connected: false, accountId: id };
     try {
       const profile = await this.graphGet('/me?$select=id,displayName,userPrincipalName,mail', id);
-      return { connected: true, accountId: id, profile };
+      try {
+        const mailbox = await this.graphGet('/me/mailFolders/inbox?$select=id,displayName,totalItemCount,unreadItemCount', id);
+        return { connected: true, mailboxConnected: true, accountId: id, profile, mailbox };
+      } catch (mailError: any) {
+        return {
+          connected: true,
+          mailboxConnected: false,
+          accountId: id,
+          profile,
+          mailboxError: mailError?.response?.data?.error?.message || mailError?.message || 'Microsoft Graph profile signed in, but mailbox access failed.'
+        };
+      }
     } catch (error: any) {
       return { connected: false, accountId: id, error: error.message };
     }

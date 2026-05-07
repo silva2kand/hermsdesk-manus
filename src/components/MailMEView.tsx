@@ -25,6 +25,7 @@ export const MailMEView = () => {
   const [batchIndexing, setBatchIndexing] = useState(false);
   const totalIndexed = Math.max(Number(mailSyncState?.totalIndexed || 0), Number(mailSyncState?.globalTotalIndexed || 0), Number(mailMemory?.totalIndexed || 0));
   const totalAccounts = Math.max(Number(mailSyncState?.totalAccounts || 0), Number(classicOutlookStatus?.accounts?.length || 0));
+  const totalAvailable = Math.max(Number(mailSyncState?.totalAvailable || 0), Number(classicOutlookStatus?.itemCount || 0));
 
   React.useEffect(() => {
     const loadSettings = async () => {
@@ -151,13 +152,13 @@ export const MailMEView = () => {
 
   // Auto-sync trigger
   React.useEffect(() => {
-    if (graphStatus?.connected && (mailSyncState?.totalIndexed === 0) && !batchIndexing) {
+    if (graphStatus?.mailboxConnected && (mailSyncState?.totalIndexed === 0) && !batchIndexing) {
       indexGraphBatch();
     }
-  }, [graphStatus?.connected, mailSyncState?.totalIndexed]);
+  }, [graphStatus?.mailboxConnected, mailSyncState?.totalIndexed]);
 
   const indexGraphBatch = async (reset = false) => {
-    const canUseGraph = Boolean(graphStatus?.connected && (window.ipcRenderer as any)?.syncEmailBatch);
+    const canUseGraph = Boolean(graphStatus?.mailboxConnected && (window.ipcRenderer as any)?.syncEmailBatch);
     const canUseClassic = Boolean(classicOutlookStatus?.ok && (window.ipcRenderer as any)?.syncClassicOutlookBatch);
     if (!canUseGraph && !canUseClassic) return;
     setBatchIndexing(true);
@@ -178,7 +179,7 @@ export const MailMEView = () => {
   };
 
   const indexUntilComplete = async () => {
-    const canUseGraph = Boolean(graphStatus?.connected && (window.ipcRenderer as any)?.syncEmailBatch);
+    const canUseGraph = Boolean(graphStatus?.mailboxConnected && (window.ipcRenderer as any)?.syncEmailBatch);
     const canUseClassic = Boolean(classicOutlookStatus?.ok && (window.ipcRenderer as any)?.syncClassicOutlookBatch);
     if (!canUseGraph && !canUseClassic) return;
     setBatchIndexing(true);
@@ -193,7 +194,7 @@ export const MailMEView = () => {
           : await (window.ipcRenderer as any).syncClassicOutlookBatch({ batchSize: 1000 });
         if (result?.ok === false) throw new Error(result.error || 'Microsoft Graph mailbox indexing failed.');
         totalThisRun += result?.batchCount || result?.messages?.length || 0;
-        complete = Boolean(result?.complete || result?.state?.complete || (result?.batchCount || 0) === 0);
+        complete = Boolean(result?.complete || result?.state?.complete || (totalAvailable > 0 && totalThisRun + totalIndexed >= totalAvailable) || (result?.batchCount || 0) === 0);
         latestState = result?.state || latestState;
         setMailSyncState(latestState);
         safety += 1;
@@ -210,7 +211,7 @@ export const MailMEView = () => {
   };
 
   const resetGraphIndex = async () => {
-    if (graphStatus?.connected) await (window.ipcRenderer as any)?.resetMailSyncState?.();
+    if (graphStatus?.mailboxConnected) await (window.ipcRenderer as any)?.resetMailSyncState?.();
     else await (window.ipcRenderer as any)?.resetClassicOutlookSyncState?.();
     await refreshMailSyncState();
     showNotice('Mailbox index checkpoint reset. Next run starts from newest mail again.');
@@ -308,8 +309,8 @@ export const MailMEView = () => {
         />
         <MailConnectorStatus
           label="Microsoft Graph"
-          connected={Boolean(graphStatus?.connected)}
-          detail={graphStatus?.connected ? graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName || 'Connected mailbox' : 'OAuth mailbox not connected'}
+          connected={Boolean(graphStatus?.connected && graphStatus?.mailboxConnected)}
+          detail={graphStatus?.mailboxConnected ? graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName || 'Connected mailbox' : graphStatus?.connected ? 'Profile signed in; mailbox unavailable for this tenant/user' : 'OAuth mailbox not connected'}
           onRefresh={refreshGraphStatus}
         />
         <MailConnectorStatus
@@ -378,7 +379,7 @@ export const MailMEView = () => {
                 <span>{loadingGraph ? 'Verifying...' : 'Complete Login'}</span>
               </button>
             )}
-            {graphStatus?.connected && (
+            {graphStatus?.mailboxConnected && (
               <button
                 onClick={readGraphInbox}
                 disabled={loadingGraph}
@@ -406,8 +407,9 @@ export const MailMEView = () => {
         )}
 
         {graphStatus?.connected && (
-          <div className="p-3 bg-green-50 border border-green-100 rounded-2xl text-[10px] font-bold text-green-700">
-            Connected: {graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName || graphStatus.profile?.displayName}
+          <div className={`p-3 rounded-2xl text-[10px] font-bold ${graphStatus.mailboxConnected ? 'bg-green-50 border border-green-100 text-green-700' : 'bg-amber-50 border border-amber-100 text-amber-700'}`}>
+            {graphStatus.mailboxConnected ? 'Mailbox connected' : 'Profile connected, mailbox not available'}: {graphStatus.profile?.mail || graphStatus.profile?.userPrincipalName || graphStatus.profile?.displayName}
+            {!graphStatus.mailboxConnected && <span className="block mt-1 font-semibold">{graphStatus.mailboxError || 'Use tenant common/consumers with a personal Microsoft account app, or keep using Classic Outlook for this mailbox.'}</span>}
           </div>
         )}
 
@@ -471,21 +473,21 @@ export const MailMEView = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => indexGraphBatch(false)}
-              disabled={(!graphStatus?.connected && !classicOutlookStatus?.ok) || batchIndexing}
+              disabled={(!graphStatus?.mailboxConnected && !classicOutlookStatus?.ok) || batchIndexing}
               className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300"
             >
               {batchIndexing ? 'Indexing...' : 'Index next 1,000'}
             </button>
             <button
               onClick={indexUntilComplete}
-              disabled={(!graphStatus?.connected && !classicOutlookStatus?.ok) || batchIndexing}
+              disabled={(!graphStatus?.mailboxConnected && !classicOutlookStatus?.ok) || batchIndexing}
               className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all disabled:bg-gray-300"
             >
               Index until complete
             </button>
             <button
               onClick={resetGraphIndex}
-              disabled={(!graphStatus?.connected && !classicOutlookStatus?.ok) || batchIndexing}
+              disabled={(!graphStatus?.mailboxConnected && !classicOutlookStatus?.ok) || batchIndexing}
               className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all disabled:text-gray-300"
             >
               Reset checkpoint
@@ -497,7 +499,7 @@ export const MailMEView = () => {
           <IndexStat label="Total indexed" value={totalIndexed.toLocaleString()} />
           <IndexStat label="Last batch" value={(mailSyncState?.lastBatchCount || 0).toLocaleString()} />
           <IndexStat label="Accounts" value={totalAccounts.toString()} />
-          <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected || classicOutlookStatus?.ok ? 'Ready / Crawling' : 'Sync Pending'} />
+          <IndexStat label="Status" value={mailSyncState?.complete || (totalAvailable > 0 && totalIndexed >= totalAvailable) ? 'Complete' : graphStatus?.mailboxConnected || classicOutlookStatus?.ok ? `${totalAvailable ? `${totalIndexed.toLocaleString()} / ${totalAvailable.toLocaleString()}` : 'Ready / Crawling'}` : 'Sync Pending'} />
         </div>
 
         {mailMemory && (

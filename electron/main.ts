@@ -532,6 +532,7 @@ function createWindow() {
       totalIndexed: processed?.mailboxMemory?.totalIndexed || stats.totalIndexed || 0,
       globalTotalIndexed: stats.totalIndexed || 0,
       totalAccounts: stats.totalAccounts || accountsInBatch.size,
+      totalAvailable: Number(status?.itemCount || 0),
       lastBatchCount: messages.length,
       updatedAt: new Date().toISOString(),
       source: 'Classic Outlook'
@@ -539,13 +540,22 @@ function createWindow() {
     store.set('classicMailSyncState', nextState);
     return { ok: true, source: 'Classic Outlook', messages, batchCount: messages.length, complete: nextState.complete, state: nextState };
   })
-  ipcMain.handle('outlook:classic-sync-state', () => store.get('classicMailSyncState', {
-    source: 'Classic Outlook',
-    complete: false,
-    totalIndexed: workspaceService.getEmailIntelligence?.()?.mailboxMemory?.totalIndexed || workspaceService.getEmailIntelligence?.()?.memory?.totalIndexed || emailIndexService.getGlobalStats()?.totalIndexed || 0,
-    totalAccounts: emailIndexService.getGlobalStats()?.totalAccounts || 0,
-    lastBatchCount: 0
-  }))
+  ipcMain.handle('outlook:classic-sync-state', async () => {
+    const status = await integrationService.getClassicOutlookStatus().catch(() => null);
+    const stats = emailIndexService.getGlobalStats?.() || {};
+    const memoryTotal = workspaceService.getEmailIntelligence?.()?.mailboxMemory?.totalIndexed || workspaceService.getEmailIntelligence?.()?.memory?.totalIndexed || 0;
+    const saved = store.get('classicMailSyncState', null) as any;
+    return {
+      source: 'Classic Outlook',
+      complete: Boolean(saved?.complete),
+      ...(saved || {}),
+      totalIndexed: Math.max(Number(saved?.totalIndexed || 0), Number(memoryTotal || 0), Number(stats.totalIndexed || 0)),
+      globalTotalIndexed: Math.max(Number(saved?.globalTotalIndexed || 0), Number(stats.totalIndexed || 0)),
+      totalAccounts: Math.max(Number(saved?.totalAccounts || 0), Number(stats.totalAccounts || 0), Number(status?.accounts?.length || 0)),
+      totalAvailable: Math.max(Number(saved?.totalAvailable || 0), Number(status?.itemCount || 0)),
+      lastBatchCount: Number(saved?.lastBatchCount || 0)
+    };
+  })
   ipcMain.handle('outlook:classic-reset-sync', () => {
     store.delete('classicMailSyncState');
     return { ok: true };
