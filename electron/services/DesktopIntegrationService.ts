@@ -56,6 +56,10 @@ export class DesktopIntegrationService {
     return `${stdout || ''}${stderr ? `\n${stderr}` : ''}`.trim();
   }
 
+  private psString(value: string) {
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
   private async getFolderSize(folderPath: string, limit = 5000) {
     let total = 0;
     let seen = 0;
@@ -789,14 +793,20 @@ $messages |
   async syncClassicOutlookMessagesBatch(options: { batchSize?: number; reset?: boolean; state?: any } = {}) {
     const safeLimit = Math.max(25, Math.min(Number(options.batchSize) || 500, 1000));
     const incomingState = options.reset ? { folderCursors: {}, folderCompleted: {}, totalIndexed: 0 } : (options.state || {});
-    const stateJson = JSON.stringify({
+    const statePayload = {
       folderCursors: incomingState.folderCursors || {},
       folderCompleted: incomingState.folderCompleted || {}
-    }).replace(/'/g, "''");
+    };
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermsdesk-outlook-'));
+    const statePath = path.join(tempDir, 'state.json');
+    const outputPath = path.join(tempDir, 'batch.json');
+    fs.writeFileSync(statePath, JSON.stringify(statePayload), 'utf8');
 
     const script = `
 $ErrorActionPreference = 'Stop'
-$state = '${stateJson}' | ConvertFrom-Json
+$statePath = ${this.psString(statePath)}
+$outputPath = ${this.psString(outputPath)}
+$state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 $folderCursors = @{}
 $folderCompleted = @{}
 if ($state.folderCursors) {
@@ -871,7 +881,7 @@ foreach ($folder in $folders) {
   $path = [string]$folder.FolderPath
   if (-not $folderCompleted[$path]) { $allComplete = $false; break }
 }
-[pscustomobject]@{
+$payload = [pscustomobject]@{
   ok = $true
   messages = @($messages | Sort-Object {[datetime]$_.receivedAt} -Descending)
   state = [pscustomobject]@{
@@ -882,12 +892,17 @@ foreach ($folder in $folders) {
     lastBatchCount = $messages.Count
     updatedAt = (Get-Date).ToString('o')
   }
-} | ConvertTo-Json -Compress -Depth 6
+}
+$payload | ConvertTo-Json -Compress -Depth 6 | Set-Content -LiteralPath $outputPath -Encoding UTF8
 `;
     try {
-      return await this.runPowerShellJson(script, 300000, 50); // 5 min timeout
+      await this.runPowerShellText(script, 300000);
+      const raw = fs.readFileSync(outputPath, 'utf8').trim();
+      return JSON.parse(raw);
     } catch (error: any) {
       return { ok: false, error: error.message || 'Could not page Classic Outlook mailbox.' };
+    } finally {
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
     }
   }
 
