@@ -470,7 +470,21 @@ function createWindow() {
   ipcMain.handle('outlook:classic-status', () => integrationService.getClassicOutlookStatus())
   ipcMain.handle('outlook:classic-messages', async (_, l) => {
     const m = await integrationService.listClassicOutlookMessages(l)
-    if (Array.isArray(m)) await processEmailIntelligence({ syncedAt: new Date().toISOString(), folders: [{ id: 'classic-outlook-inbox', displayName: 'Classic Outlook Inbox', syncedCount: m.length }], messages: m.map((msg: any) => ({ ...msg, id: `classic:${msg.id}`, folderId: `classic:${msg.folderName || 'mailbox'}`, folderName: msg.folderName || 'Classic Outlook Mailbox', categoryId: 'classic-outlook', categoryLabel: 'Classic Outlook', agentId: 'paperclip-full', approvalStatus: 'pending-review' })), summary: { 'classic-outlook': m.length } }, 'Classic Outlook')
+    if (Array.isArray(m)) {
+      const processed = await processEmailIntelligence({ syncedAt: new Date().toISOString(), folders: [{ id: 'classic-outlook-inbox', displayName: 'Classic Outlook Inbox', syncedCount: m.length }], messages: m.map((msg: any) => ({ ...msg, id: `classic:${msg.id}`, folderId: `classic:${msg.folderName || 'mailbox'}`, folderName: msg.folderName || 'Classic Outlook Mailbox', categoryId: 'classic-outlook', categoryLabel: 'Classic Outlook', agentId: 'paperclip-full', approvalStatus: 'pending-review' })), summary: { 'classic-outlook': m.length } }, 'Classic Outlook', { taskLimit: 20 })
+      const stats = emailIndexService.getGlobalStats();
+      const existingState = store.get('classicMailSyncState', {}) as any;
+      store.set('classicMailSyncState', {
+        ...existingState,
+        source: 'Classic Outlook',
+        totalIndexed: Math.max(Number(existingState.totalIndexed || 0), Number(processed?.mailboxMemory?.totalIndexed || 0), Number(stats.totalIndexed || 0)),
+        globalTotalIndexed: Math.max(Number(stats.totalIndexed || 0), Number(processed?.mailboxMemory?.totalIndexed || 0)),
+        totalAccounts: Math.max(Number(existingState.totalAccounts || 0), Number(stats.totalAccounts || 0)),
+        lastBatchCount: m.length,
+        updatedAt: new Date().toISOString(),
+        complete: Boolean(existingState.complete)
+      });
+    }
     return m
   })
   ipcMain.handle('outlook:classic-sync-batch', async (_, arg) => {
@@ -528,7 +542,7 @@ function createWindow() {
   ipcMain.handle('outlook:classic-sync-state', () => store.get('classicMailSyncState', {
     source: 'Classic Outlook',
     complete: false,
-    totalIndexed: 0,
+    totalIndexed: workspaceService.getEmailIntelligence?.()?.mailboxMemory?.totalIndexed || workspaceService.getEmailIntelligence?.()?.memory?.totalIndexed || emailIndexService.getGlobalStats()?.totalIndexed || 0,
     totalAccounts: emailIndexService.getGlobalStats()?.totalAccounts || 0,
     lastBatchCount: 0
   }))

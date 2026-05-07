@@ -23,6 +23,8 @@ export const MailMEView = () => {
   const [mailSyncState, setMailSyncState] = useState<any>(null);
   const [mailMemory, setMailMemory] = useState<any>(null);
   const [batchIndexing, setBatchIndexing] = useState(false);
+  const totalIndexed = Math.max(Number(mailSyncState?.totalIndexed || 0), Number(mailSyncState?.globalTotalIndexed || 0), Number(mailMemory?.totalIndexed || 0));
+  const totalAccounts = Math.max(Number(mailSyncState?.totalAccounts || 0), Number(classicOutlookStatus?.accounts?.length || 0));
 
   React.useEffect(() => {
     const loadSettings = async () => {
@@ -462,7 +464,7 @@ export const MailMEView = () => {
             <div>
               <h3 className="text-sm font-black text-gray-900">Full Mailbox Intelligence Index</h3>
               <p className="text-[11px] text-gray-500 mt-1">
-                Real paged Microsoft Graph crawl for large mailboxes. It keeps checkpoints, merges folders, and queues high-value analysis tasks.
+                Real paged mailbox crawl using Microsoft Graph when connected, or Classic Outlook when Graph is blocked. It keeps checkpoints, merges folders, and queues high-value analysis tasks.
               </p>
             </div>
           </div>
@@ -492,9 +494,9 @@ export const MailMEView = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <IndexStat label="Total indexed" value={(mailSyncState?.totalIndexed || 0).toLocaleString()} />
+          <IndexStat label="Total indexed" value={totalIndexed.toLocaleString()} />
           <IndexStat label="Last batch" value={(mailSyncState?.lastBatchCount || 0).toLocaleString()} />
-          <IndexStat label="Accounts" value={(mailSyncState?.totalAccounts || 0).toString()} />
+          <IndexStat label="Accounts" value={totalAccounts.toString()} />
           <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected || classicOutlookStatus?.ok ? 'Ready / Crawling' : 'Sync Pending'} />
         </div>
 
