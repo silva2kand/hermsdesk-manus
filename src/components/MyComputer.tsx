@@ -162,7 +162,7 @@ export const MyComputer = () => {
                 </div>
                 <div className="flex justify-between text-[9px] font-bold text-gray-500">
                   <span>{formatBytes(overview?.workspace?.bytes)} tracked</span>
-                  <span>{overview?.workspace?.partial ? 'sampled' : 'local'}</span>
+                  <span>{overview?.workspace?.partial ? 'partial scan' : 'local'}</span>
                 </div>
               </div>
             </div>

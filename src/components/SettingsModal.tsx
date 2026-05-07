@@ -12,10 +12,11 @@ import { ConnectorsManager } from './ConnectorsManager';
 import { SkillsRegistry } from './SkillsRegistry';
 import { MailMEView } from './MailMEView';
 import { DataControlsView } from './DataControlsView';
-import { MyComputerSettings } from './MyComputerSettings';
+import { MyComputer } from './MyComputer';
 import { KnowledgeView } from './KnowledgeView';
 import { ScheduledTasksView } from './ScheduledTasksView';
 import { APIKeyManager } from './APIKeyManager';
+import { Settings as SettingsPage } from './Settings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -387,97 +388,12 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
               {activeTab === 'Skills' && <SkillsRegistry />}
               {activeTab === 'Data' && <DataControlsView />}
               {activeTab === 'Cloud' && <DataControlsView mode="cloud" />}
-              {activeTab === 'Computer' && <MyComputerSettings />}
+              {activeTab === 'Computer' && <MyComputer />}
               {activeTab === 'Knowledge' && <KnowledgeView />}
               {activeTab === 'APIKeys' && <APIKeyManager />}
               {activeTab === 'Scheduled' && <ScheduledTasksView />}
               
-              {activeTab === 'General' && (
-                <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">General Settings</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage system language, appearance, and notifications.</p>
-                  </div>
-
-                  {/* Language */}
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Language</h3>
-                    <div className="relative max-w-xs">
-                      <select className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all">
-                        <option>English</option>
-                        <option>Tamil</option>
-                        <option>Chinese</option>
-                      </select>
-                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Appearance */}
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Appearance</h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <button className="flex flex-col items-center p-4 bg-white border-2 border-blue-600 rounded-2xl shadow-sm space-y-2">
-                        <Sun className="w-6 h-6 text-blue-600" />
-                        <span className="text-xs font-bold text-gray-900">Light</span>
-                      </button>
-                      <button className="flex flex-col items-center p-4 bg-gray-900 border border-gray-800 rounded-2xl space-y-2 group">
-                        <Moon className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" />
-                        <span className="text-xs font-bold text-gray-400 group-hover:text-white">Dark</span>
-                      </button>
-                      <button className="flex flex-col items-center p-4 bg-gray-50 border border-gray-100 rounded-2xl space-y-2 group">
-                        <Laptop className="w-6 h-6 text-gray-400 group-hover:text-gray-900 transition-colors" />
-                        <span className="text-xs font-bold text-gray-500 group-hover:text-gray-900">Follow System</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* TurboQuant Themes */}
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">TurboQuant Themes</h3>
-                      <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <button className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-blue-100">Quantum Blue</button>
-                      <button className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider">Cyber Neon</button>
-                      <button className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider">Eco Fusion</button>
-                      <button className="px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider">Solar Flare</button>
-                    </div>
-                  </div>
-
-                  {/* Communication Preferences */}
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Communication Preferences</h3>
-                    <div className="bg-gray-50/50 border border-gray-100 rounded-3xl divide-y divide-gray-100">
-                      <div className="p-6 flex items-center justify-between">
-                        <div className="space-y-1">
-                          <p className="text-sm font-bold text-gray-900">Receive product updates</p>
-                          <p className="text-[11px] text-gray-500">Receive early access to feature releases and success stories to optimize your workflow.</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" className="sr-only peer" defaultChecked />
-                          <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                      </div>
-                      <div className="p-6 flex items-center justify-between">
-                        <div className="space-y-1">
-                          <p className="text-sm font-bold text-gray-900">Email me when my queued task starts</p>
-                          <p className="text-[11px] text-gray-500">When enabled, we'll send you a timely email once your task finishes queuing and begins processing.</p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" className="sr-only peer" />
-                          <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end space-x-3 pt-4">
-                    <button onClick={onClose} className="px-6 py-2.5 text-xs font-bold text-gray-500 hover:text-gray-900 transition-colors">Cancel</button>
-                    <button onClick={onClose} className="px-8 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 shadow-lg shadow-gray-200 transition-all">Save</button>
-                  </div>
-                </div>
-              )}
+              {activeTab === 'General' && <SettingsPage />}
 
               {(['Account', 'Usage', 'SharedTasks', 'SharedFiles', 'Websites', 'Apps', 'Domains', 'Integrations', 'About', 'Help'].includes(activeTab)) && (
                 <WorkspacePanel tab={activeTab} onAction={runSettingsAction} setNotice={setSettingsNotice} />

@@ -22,6 +22,7 @@ export const MailMEView = () => {
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [mailSyncState, setMailSyncState] = useState<any>(null);
   const [mailMemory, setMailMemory] = useState<any>(null);
+  const [tinyFishStatus, setTinyFishStatus] = useState<any>(null);
   const [batchIndexing, setBatchIndexing] = useState(false);
   const totalIndexed = Math.max(Number(mailSyncState?.totalIndexed || 0), Number(mailSyncState?.globalTotalIndexed || 0), Number(mailMemory?.totalIndexed || 0));
   const totalAccounts = Math.max(Number(mailSyncState?.totalAccounts || 0), Number(classicOutlookStatus?.accounts?.length || 0));
@@ -38,6 +39,7 @@ export const MailMEView = () => {
         refreshClassicOutlook();
         refreshGraphStatus();
         refreshMailSyncState();
+        refreshTinyFishStatus();
       }
     };
     loadSettings();
@@ -92,6 +94,11 @@ export const MailMEView = () => {
     if (state) setMailSyncState(state);
     const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
     if (intel?.mailboxMemory || intel?.memory) setMailMemory(intel.mailboxMemory || intel.memory);
+  };
+
+  const refreshTinyFishStatus = async () => {
+    const status = await window.ipcRenderer?.getTinyFishApiStatus?.().catch(() => null);
+    if (status) setTinyFishStatus(status);
   };
 
   const startGraphLogin = async () => {
@@ -615,7 +622,10 @@ export const MailMEView = () => {
             <div>
               <h3 className="text-sm font-black text-gray-900">TinyFish AI Web Agents</h3>
               <p className="text-[11px] text-gray-500 mt-1">
-                Advanced web automation and research. Bypasses bot detection to extract high-quality legal, tax, and corporate data.
+                Advanced web automation and research route. It only runs when a real TinyFish API key is saved and the API accepts the request.
+              </p>
+              <p className={`text-[10px] font-black mt-2 uppercase tracking-widest ${tinyFishStatus?.configured ? 'text-green-600' : 'text-orange-600'}`}>
+                {tinyFishStatus?.configured ? `API key saved ${tinyFishStatus.keyPrefix || ''}` : 'API key not saved in this app profile'}
               </p>
             </div>
           </div>
@@ -625,6 +635,7 @@ export const MailMEView = () => {
                 const key = window.prompt('Enter TinyFish AI API Key', '');
                 if (key !== null) {
                   await (window.ipcRenderer as any)?.setTinyFishApiKey?.(key);
+                  await refreshTinyFishStatus();
                   showNotice('TinyFish API key saved locally.');
                 }
               }}
@@ -649,6 +660,26 @@ export const MailMEView = () => {
               className="px-4 py-2 bg-orange-600 text-white rounded-xl text-xs font-bold hover:bg-orange-700 transition-all"
             >
               Run Web Agent
+            </button>
+            <button
+              onClick={async () => {
+                const status = await window.ipcRenderer?.getTinyFishApiStatus?.().catch(() => null);
+                if (status) setTinyFishStatus(status);
+                if (!status?.configured) {
+                  showNotice('TinyFish is not configured in this app profile. Set the API key first.');
+                  return;
+                }
+                showNotice('Testing TinyFish with a small live request...');
+                const result = await window.ipcRenderer?.runTinyFishAgent?.({
+                  url: 'https://example.com',
+                  task: 'Read the page title and return a one sentence status.',
+                  maxSteps: 3
+                });
+                showNotice(result?.ok ? 'TinyFish API responded successfully.' : `TinyFish test failed: ${result?.error || 'unknown error'}`);
+              }}
+              className="px-4 py-2 bg-white border border-orange-100 text-orange-700 rounded-xl text-xs font-bold hover:bg-orange-50 transition-all"
+            >
+              Test API
             </button>
           </div>
         </div>

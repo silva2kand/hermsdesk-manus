@@ -91,14 +91,14 @@ export class ArtifactService {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1024" viewBox="0 0 1440 1024">
       <rect width="1440" height="1024" fill="#f8fafc"/><rect x="80" y="72" width="1280" height="880" rx="16" fill="#fff" stroke="#e5e7eb"/>
       <text x="130" y="160" font-family="Inter,Segoe UI,Arial" font-size="46" font-weight="800" fill="#111827">${escapeHtml(cleanTitle)}</text>
-      <text x="130" y="210" font-family="Inter,Segoe UI,Arial" font-size="22" fill="#475569">${escapeHtml((brief || 'Editable design mockup').slice(0, 130))}</text>
+      <text x="130" y="210" font-family="Inter,Segoe UI,Arial" font-size="22" fill="#475569">${escapeHtml((brief || 'Editable design preview').slice(0, 130))}</text>
       <rect x="130" y="280" width="360" height="180" rx="8" fill="#dbeafe"/><rect x="530" y="280" width="360" height="180" rx="8" fill="#dcfce7"/><rect x="930" y="280" width="360" height="180" rx="8" fill="#fee2e2"/>
       <rect x="130" y="520" width="1160" height="300" rx="8" fill="#111827"/><text x="170" y="590" font-family="Inter,Segoe UI,Arial" font-size="28" font-weight="800" fill="#fff">Primary workspace</text>
     </svg>`;
-    fs.writeFileSync(path.join(folder, 'mockup.svg'), svg);
+    fs.writeFileSync(path.join(folder, 'design-preview.svg'), svg);
     fs.writeFileSync(path.join(folder, 'brief.md'), `# ${cleanTitle}\n\n${brief || ''}\n`);
-    await shell.openPath(path.join(folder, 'mockup.svg'));
-    return { ok: true, kind: 'design', folder, files: ['mockup.svg', 'brief.md'] };
+    await shell.openPath(path.join(folder, 'design-preview.svg'));
+    return { ok: true, kind: 'design', folder, files: ['design-preview.svg', 'brief.md'] };
   }
 
   async analyzeData(filePath: string) {

@@ -113,7 +113,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
   const openResearch = () => window.ipcRenderer?.researchWebAutomation?.(prompt || 'HermesDesk ME research');
   const createSlides = async () => window.ipcRenderer?.createSlidesArtifact?.('HermesDesk ME Deck', prompt || 'Create a researched presentation.').then(() => onNavigate?.('projects'));
   const createWebsite = async () => window.ipcRenderer?.createWebsiteArtifact?.('HermesDesk ME Website', prompt || 'Build a production website starter.').then(() => onNavigate?.('websites'));
-  const createDesign = async () => window.ipcRenderer?.createDesignArtifact?.('HermesDesk ME Design', prompt || 'Create an editable design mockup.').then(() => onNavigate?.('apps'));
+  const createDesign = async () => window.ipcRenderer?.createDesignArtifact?.('HermesDesk ME Design', prompt || 'Create an editable design preview.').then(() => onNavigate?.('apps'));
   const analyzeData = async () => {
     const files = await window.ipcRenderer?.selectFiles?.();
     const file = files?.[0];

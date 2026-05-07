@@ -92,7 +92,7 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
 
   const resetSystemState = () => {
     setSessionVersion(prev => prev + 1);
-    showNotice('Local browsing sessions and task state were reset.');
+    showNotice('Local session marker refreshed. Close browser windows from the operator window if you want to end live sessions.');
   };
 
   const copyKeyring = async () => {
@@ -228,11 +228,11 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
               <Trash2 className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-900">Clear All Sessions</p>
-              <p className="text-[11px] text-gray-500 mt-1">Immediately terminate all active AI browsing and local task sessions.</p>
+              <p className="text-sm font-bold text-gray-900">Refresh Local Session Marker</p>
+              <p className="text-[11px] text-gray-500 mt-1">Creates a fresh local keyring/session reference without pretending to close live browser windows.</p>
             </div>
             <button onClick={resetSystemState} className="w-full py-2 bg-gray-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition-all">
-              Reset System State
+              Refresh Marker
             </button>
           </div>
           <div className="p-6 bg-white border border-gray-100 rounded-3xl space-y-4 hover:border-blue-100 transition-all">

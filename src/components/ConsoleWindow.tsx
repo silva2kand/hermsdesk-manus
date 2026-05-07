@@ -5,7 +5,47 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
   const [logs, setLogs] = useState<any[]>([]);
   const [isMinimized, setIsMinimized] = useState(false);
   const [filterAgent, setFilterAgent] = useState<string>('all');
+  const [engineState, setEngineState] = useState({
+    label: 'Checking',
+    detail: 'Checking built-in Jan+TurboQuant runtime...',
+    live: false,
+    found: false
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const addLog = (log: { type: string; content: string; agent?: string }) => {
+    setLogs(prev => [...prev.slice(-500), {
+      id: Date.now() + Math.random(),
+      type: log.type,
+      content: log.content,
+      time: new Date().toLocaleTimeString(),
+      agent: log.agent || 'system'
+    }]);
+  };
+
+  const refreshEngineState = async () => {
+    try {
+      const status: any = await window.ipcRenderer?.janStatus?.();
+      const live = Boolean(status?.apiOnline);
+      const found = Boolean(status?.runtimeFound || status?.nitroFound || status?.backendFound || live);
+      const activeModel = status?.activeModel || status?.model || 'no model loaded';
+      const label = live ? 'Jan+TurboQuant Online' : found ? 'Runtime found, API offline' : 'Runtime missing';
+      const detail = live
+        ? `API online at ${status?.apiUrl || 'http://localhost:6767/v1'} · ${activeModel}`
+        : status?.missingReason || status?.message || 'No built-in runtime process is responding yet.';
+
+      setEngineState({ label, detail, live, found });
+      addLog({
+        type: live ? 'result' : found ? 'bug' : 'error',
+        content: `${label}: ${detail}`,
+        agent: 'system'
+      });
+    } catch (err: any) {
+      const detail = err?.message || 'Unable to read Jan+TurboQuant status from Electron main process.';
+      setEngineState({ label: 'Status unavailable', detail, live: false, found: false });
+      addLog({ type: 'error', content: `Jan+TurboQuant status check failed: ${detail}`, agent: 'system' });
+    }
+  };
 
   useEffect(() => {
     if (window.ipcRenderer) {
@@ -54,7 +94,7 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
           agent: e.detail.agent || 'system'
         }]);
       };
-      
+
       window.addEventListener('app-log', handleCustomLog);
       
       return () => {
@@ -71,6 +111,9 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
         { id: 2, type: 'info', content: 'Engine Priority: Jan+TurboQuant (6767) → Ollama (11434) → LM Studio (1234) → Cloud', time: new Date().toLocaleTimeString(), agent: 'system' },
         { id: 3, type: 'bug', content: 'Checking built-in Jan+TurboQuant engine status...', time: new Date().toLocaleTimeString(), agent: 'system' }
       ]);
+    }
+    if (isOpen) {
+      refreshEngineState();
     }
   }, [isOpen]);
 
@@ -173,12 +216,20 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
           {/* Footer Actions */}
           <div className="px-4 py-2 bg-white/5 border-t border-white/10 flex justify-between items-center">
             <div className="flex items-center space-x-4">
-              <span className="text-[8px] font-bold text-gray-500 uppercase">Jan+TurboQuant Engine</span>
+              <span className="text-[8px] font-bold text-gray-500 uppercase" title={engineState.detail}>{engineState.label}</span>
               <div className="flex items-center space-x-1">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-[8px] font-bold text-green-500 uppercase">Live</span>
+                <div className={`w-1.5 h-1.5 rounded-full ${engineState.live ? 'bg-green-500 animate-pulse' : engineState.found ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                <span className={`text-[8px] font-bold uppercase ${engineState.live ? 'text-green-500' : engineState.found ? 'text-yellow-500' : 'text-red-500'}`}>
+                  {engineState.live ? 'Live' : engineState.found ? 'Offline' : 'Missing'}
+                </span>
               </div>
             </div>
+            <button
+              onClick={refreshEngineState}
+              className="px-2 py-1 hover:bg-white/10 rounded-lg transition-colors text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white"
+            >
+              Check Engine
+            </button>
             <button 
               onClick={() => setLogs([])}
               className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-gray-400 hover:text-white"

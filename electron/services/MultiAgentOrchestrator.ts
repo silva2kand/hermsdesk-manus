@@ -369,6 +369,35 @@ export class MultiAgentOrchestrator {
     return eventPayload;
   }
 
+  private toolNeedsManualApproval(name: string, params: any = {}) {
+    const normalized = String(name || '').toLowerCase().replace(/_/g, '-');
+    const action = String(params?.action || '').toLowerCase();
+
+    if (['read-file', 'list-dir', 'list-directory', 'outlook-list-accounts', 'outlook-search-emails', 'outlook-get-email-details'].includes(normalized)) {
+      return false;
+    }
+
+    if (normalized === 'os-control-expert' && action === 'list-windows') {
+      return false;
+    }
+
+    return [
+      'run-powershell',
+      'run-command',
+      'execute-command',
+      'write-file',
+      'open-app',
+      'os-control-expert'
+    ].some(tool => normalized === tool)
+      || normalized.includes('powershell')
+      || normalized.includes('command')
+      || normalized.includes('write')
+      || normalized.includes('delete')
+      || normalized.includes('move')
+      || normalized.includes('send')
+      || normalized.includes('open');
+  }
+
   getAgents() {
     return this.agents.map(a => ({
       ...a,
@@ -552,7 +581,22 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
                 params: toolCall.params
               });
 
-              // Auto-approve for agent execution
+              if (this.toolNeedsManualApproval(toolCall.name, toolCall.params)) {
+                const approvalMessage = `Approval required for ${toolCall.name}. The proposed action is waiting in Approvals and was not auto-executed.`;
+                sendUpdate(approvalMessage, 'tool');
+                this.emitThought(task, agent, 'OBSERVATION', approvalMessage, {
+                  tool: toolCall.name,
+                  params: toolCall.params,
+                  approvalId: action.id
+                });
+                messages.push({ role: 'assistant', content });
+                messages.push({
+                  role: 'user',
+                  content: `Tool "${toolCall.name}" requires explicit user approval and was not executed automatically. Continue with safe read-only reasoning, explain what approval is needed, or choose a read-only tool if possible.`
+                });
+                continue;
+              }
+
               const result = await this.skillsEngine.approveAction(action.id);
               const resultStr = typeof result.result === 'string' 
                 ? result.result.slice(0, 2000) 

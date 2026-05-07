@@ -155,6 +155,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getEmailIntelligence: () => ipcRenderer.invoke('workspace:get-email-intelligence'),
   runTinyFishAgent: (options: any) => ipcRenderer.invoke('tinyfish:run-agent', options),
   setTinyFishApiKey: (key: string) => ipcRenderer.invoke('tinyfish:set-api-key', key),
+  getTinyFishApiStatus: () => ipcRenderer.invoke('tinyfish:api-status'),
   getTinyFishStatus: (sessionId: string) => ipcRenderer.invoke('tinyfish:get-status', sessionId),
   approveEmailRoute: (messageId: string, status: string) => ipcRenderer.invoke('workspace:approve-email-route', { messageId, status }),
   getProjects: () => ipcRenderer.invoke('workspace:get-projects'),

@@ -11,7 +11,7 @@ export interface TinyFishAgentOptions {
 export class TinyFishService {
   private store: any;
   private apiKey: string;
-  private baseUrl = 'https://api.tinyfish.ai/v1';
+  private baseUrl = 'https://agent.tinyfish.ai/v1';
 
   constructor(sharedStore?: any) {
     this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
@@ -21,6 +21,15 @@ export class TinyFishService {
   setApiKey(key: string) {
     this.apiKey = key;
     this.store.set('tinyFishApiKey', key);
+    return this.getApiStatus();
+  }
+
+  getApiStatus() {
+    return {
+      configured: Boolean(this.apiKey),
+      keyPrefix: this.apiKey ? `${this.apiKey.slice(0, 10)}...` : '',
+      baseUrl: this.baseUrl
+    };
   }
 
   async runAgent(options: TinyFishAgentOptions) {
@@ -29,23 +38,25 @@ export class TinyFishService {
     }
 
     try {
-      const response = await axios.post(`${this.baseUrl}/agents/run`, {
+      const response = await axios.post(`${this.baseUrl}/automation/run`, {
         url: options.url,
-        instruction: options.task,
-        model: options.model || 'gpt-4o', // TinyFish usually wraps an LLM
-        max_steps: options.maxSteps || 10
+        goal: options.task,
+        browser_profile: 'lite'
       }, {
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'X-API-Key': this.apiKey,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 120000
       });
 
       return {
         ok: true,
-        sessionId: response.data.session_id,
+        sessionId: response.data.run_id,
         status: response.data.status,
-        result: response.data.result
+        result: response.data.result,
+        streamingUrl: response.data.streaming_url,
+        steps: response.data.steps || []
       };
     } catch (error: any) {
       console.error('TinyFish Agent execution failed:', error.response?.data || error.message);
@@ -60,8 +71,9 @@ export class TinyFishService {
     if (!this.apiKey) throw new Error('TinyFish AI API Key not set.');
 
     try {
-      const response = await axios.get(`${this.baseUrl}/sessions/${sessionId}`, {
-        headers: { 'Authorization': `Bearer ${this.apiKey}` }
+      const response = await axios.get(`${this.baseUrl}/runs/${sessionId}`, {
+        headers: { 'X-API-Key': this.apiKey },
+        timeout: 30000
       });
       return response.data;
     } catch (error: any) {

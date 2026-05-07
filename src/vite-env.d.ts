@@ -77,6 +77,10 @@ interface Window {
     getSilvaMemory: () => Promise<string>;
     saveSilvaMemory: (memory: string) => Promise<boolean>;
     getEmailIntelligence: () => Promise<any>;
+    runTinyFishAgent: (options: any) => Promise<any>;
+    setTinyFishApiKey: (key: string) => Promise<any>;
+    getTinyFishApiStatus: () => Promise<any>;
+    getTinyFishStatus: (sessionId: string) => Promise<any>;
     approveEmailRoute: (messageId: string, status: string) => Promise<any>;
     getWhatsAppDrafts: () => Promise<any[]>;
     saveWhatsAppDraft: (draft: any) => Promise<any>;

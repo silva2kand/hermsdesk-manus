@@ -623,6 +623,7 @@ function createWindow() {
   ipcMain.handle('microsoft:graph-get-config', () => microsoftGraph.getConfig())
   ipcMain.handle('tinyfish:run-agent', (_, options) => tinyFish.runAgent(options))
   ipcMain.handle('tinyfish:set-api-key', (_, key) => tinyFish.setApiKey(key))
+  ipcMain.handle('tinyfish:api-status', () => tinyFish.getApiStatus())
   ipcMain.handle('tinyfish:get-status', (_, sessionId) => tinyFish.getSessionStatus(sessionId))
   ipcMain.handle('microsoft:graph-mail-action', async (_, arg) => {
     const accountId = arg?.accountId;
