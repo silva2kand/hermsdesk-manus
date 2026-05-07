@@ -47,15 +47,19 @@ const PERSONALITIES: Record<string, string> = {
 Your capabilities:
 - Full access to the local filesystem (read, write, list directories)
 - PowerShell command execution on Windows
+- Expert OS control (focus windows, list processes)
 - Code generation, debugging, and refactoring
 - Workspace automation and build system management
-- Git operations and repository management
+- WhatsApp UI inspection and response drafting
 
 Your personality: You are precise, technical, and efficient. You explain your reasoning before acting. You write production-quality code. When you need to perform a system action, use the tool format:
 [TOOL: tool_name(param="value")]
 
 Available tools:
 - [TOOL: run_powershell(command="your command here")]
+- [TOOL: os_control_expert(action="list_windows")]
+- [TOOL: os_control_expert(action="focus_window", windowTitle="title")]
+- [TOOL: whatsapp_inspect_ui()]
 - [TOOL: write_file(path="file/path", content="file content")]
 - [TOOL: read_file(path="file/path")]
 - [TOOL: list_dir(path="directory/path")]
@@ -68,14 +72,19 @@ Always think step-by-step before executing tools. Report results clearly.`,
 Your capabilities:
 - Document routing and classification
 - Email-to-task conversion workflows
+- Professional Outlook management across multiple accounts
+- High-volume email indexing and searching (60,000+ emails)
 - UK regulatory compliance checking
 - Data organization and filing
-- Calendar and schedule management
 
 Your personality: You are meticulous, organized, and thorough. You classify everything. You flag compliance issues. You create structured summaries. When you need to perform a system action, use the tool format:
 [TOOL: tool_name(param="value")]
 
 Available tools:
+- [TOOL: outlook_list_accounts()]
+- [TOOL: outlook_sync_account(accountId="id", batchSize="100")]
+- [TOOL: outlook_search_emails(query="search terms")]
+- [TOOL: outlook_get_email_details(messageId="id", accountId="id")]
 - [TOOL: read_file(path="document/path")]
 - [TOOL: write_file(path="output/path", content="organized content")]
 - [TOOL: list_dir(path="folder/path")]
@@ -320,10 +329,13 @@ export class MultiAgentOrchestrator {
 
   private taskQueues: Map<string, Task[]> = new Map();
 
-  constructor(sharedStore?: any, aiService?: any, skillsEngine?: any) {
+  private workspaceService: any;
+
+  constructor(sharedStore?: any, aiService?: any, skillsEngine?: any, workspaceService?: any) {
     this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
     this.aiService = aiService;
     this.skillsEngine = skillsEngine;
+    this.workspaceService = workspaceService;
     
     // Initialize task queues per agent
     this.agents.forEach(agent => {
@@ -440,8 +452,23 @@ export class MultiAgentOrchestrator {
     });
 
     const skillGuidance = this.skillsEngine?.getSkillGuidance?.();
+    const silvaMemory = this.workspaceService?.getSilvaMemory?.() || '';
+    
     const messages: any[] = [
-      { role: 'system', content: `${agent.personality}${skillGuidance?.prompt ? `\n\nInstalled ME/Mythos skills:\n${skillGuidance.prompt}` : ''}` },
+      { 
+        role: 'system', 
+        content: `${agent.personality}
+
+### BASE MEMORY OF SILVA KANDASAMY
+${silvaMemory}
+
+### CRITICAL CONSTRAINTS
+- **AUTO-ORGANIZATION**: You are empowered to organize files, documents, and emails into their logical categories.
+- **NO DELETION**: You are NEVER allowed to delete, remove, or trash any email, file, or data. This is a strict constraint.
+- **APPROVAL FIRST**: Destructive actions, money transfers, or external communication require explicit user approval.
+
+${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : ''}` 
+      },
       { role: 'user', content: task.input }
     ];
 

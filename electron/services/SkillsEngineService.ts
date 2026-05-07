@@ -34,6 +34,10 @@ export interface SkillPackage {
 export class SkillsEngineService {
   private store: any;
   private pendingActions: SkillAction[] = [];
+  private microsoftGraph: any;
+  private indexService: any;
+  private browserOperator: any;
+
   private defaultSkills = [
     'me-api',
     'skill-creator',
@@ -48,8 +52,11 @@ export class SkillsEngineService {
     'mythos-purchase-protection'
   ];
 
-  constructor(sharedStore?: any) {
+  constructor(sharedStore?: any, microsoftGraph?: any, indexService?: any, browserOperator?: any) {
     this.store = sharedStore || new Store({ name: 'skills-engine', atomically: false, watch: false });
+    this.microsoftGraph = microsoftGraph;
+    this.indexService = indexService;
+    this.browserOperator = browserOperator;
   }
 
   getInstalledSkills() {
@@ -83,16 +90,13 @@ export class SkillsEngineService {
       rules.push('Mythos PC Operator: prefer real local routes for files, terminal, browser opening, app launching, ME Computer activity, and approval-first OS actions.');
     }
     if (installed.includes('mythos-whatsapp-reply')) {
-      rules.push('Mythos WhatsApp Reply: draft professional, concise replies from user-provided message text; open the real WhatsApp composer; never claim background read/send access.');
+      rules.push('Mythos WhatsApp Reply: draft professional, concise replies from user-provided message text; open the real WhatsApp composer; never claim background read/send access. Use [TOOL: whatsapp_inspect_ui()] to see current messages.');
     }
     if (installed.includes('mythos-truthful-connectors')) {
-      rules.push('Mythos Connector Truth: distinguish enabled routes from authenticated connections. Say login/API key required when real private data access is not connected.');
+      rules.push('Mythos Connector Truth: distinguish enabled routes from authenticated connections. Use [TOOL: outlook_list_accounts()] to see connected Outlook accounts.');
     }
     if (installed.includes('mythos-justice-casework')) {
-      rules.push('Mythos Justice Casework: for legal/public-interest issues, build evidence-first case packs, chronology, issue lists, appeal/review route maps, complaint drafts, and deadline checks. Do not claim to be a solicitor or file/send without approval. Verify current official procedure before action.');
-    }
-    if (installed.includes('mythos-purchase-protection')) {
-      rules.push('Mythos Purchase Protection: for online buying, research seller/product, compare independent sources, check scam signals, preserve evidence, and prepare refund/chargeback/complaint routes. Never approve payment or send disputes without user approval.');
+      rules.push('Mythos Justice Casework: for legal/public-interest issues, build evidence-first case packs, chronology, issue lists, appeal/review route maps, complaint drafts, and deadline checks.');
     }
 
     return {
@@ -207,7 +211,6 @@ export class SkillsEngineService {
       const result = await this.executeAction(action);
       action.status = 'executed';
       
-      // Log to audit trail
       const logs = this.store.get('skills_audit', []) as any[];
       logs.push({ ...action, result, success: true });
       this.store.set('skills_audit', logs);
@@ -232,6 +235,65 @@ export class SkillsEngineService {
     const name = action.name;
     const params = action.params || {};
 
+    // --- OUTLOOK TOOLS ---
+    if (name === 'outlook_list_accounts') {
+      const accounts = this.indexService?.getAllAccounts() || [];
+      return accounts.length > 0 
+        ? accounts.map((a: any) => `- ${a.displayName} (${a.email}): ${a.totalIndexed} emails indexed`).join('\n')
+        : 'No Outlook accounts connected.';
+    }
+
+    if (name === 'outlook_search_emails') {
+      const results = await this.indexService?.searchEmails(params.query, params.accountId);
+      if (!results || results.length === 0) return `No emails found for query: "${params.query}"`;
+      return results.map((m: any) => `[${m.accountId}] ${m.receivedAt} | ${m.sender}: ${m.subject} (ID: ${m.id})`).join('\n');
+    }
+
+    if (name === 'outlook_sync_account') {
+      if (!this.microsoftGraph) throw new Error('Microsoft Graph service not initialized');
+      const result = await this.microsoftGraph.syncEmailIntelligenceBatch(params.accountId, { batchSize: params.batchSize || 100 });
+      return `Sync complete for ${params.accountId}. Indexed ${result.syncedCount} new messages. Total: ${result.totalIndexed}. Complete: ${result.complete}`;
+    }
+
+    if (name === 'outlook_get_email_details') {
+      if (!this.microsoftGraph) throw new Error('Microsoft Graph service not initialized');
+      const data = await this.microsoftGraph.graphGet(`/me/messages/${params.messageId}`, params.accountId);
+      return `Subject: ${data.subject}\nFrom: ${data.from?.emailAddress?.name} <${data.from?.emailAddress?.address}>\nDate: ${data.receivedDateTime}\n\n${data.body?.content || data.bodyPreview}`;
+    }
+
+    // --- WHATSAPP TOOLS ---
+    if (name === 'whatsapp_inspect_ui') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const sessions = this.browserOperator.getSessions();
+      let waSession = sessions.find((s: any) => s.url.includes('web.whatsapp.com'));
+      
+      if (!waSession) {
+        await this.browserOperator.open('https://web.whatsapp.com/', 'whatsapp-vision', 'WhatsApp Web');
+        return 'WhatsApp Web was not open. I have opened it for you. Please wait a moment for it to load, then try this tool again.';
+      }
+
+      const inspection = await this.browserOperator.inspectScreen(waSession.id);
+      return `WhatsApp UI Inspection:\nURL: ${inspection.url}\nVisible Text: ${inspection.visibleText.slice(0, 2000)}\nNote: I have captured a screenshot for visual confirmation.`;
+    }
+
+    // --- EXPERT OS TOOLS ---
+    if (name === 'os_control_expert') {
+      if (params.action === 'list_windows') {
+        const cmd = 'Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object ProcessName, MainWindowTitle';
+        const { stdout } = await execAsync(`powershell -Command "${cmd}"`);
+        return stdout;
+      }
+      if (params.action === 'focus_window') {
+        const script = `
+          $wshell = New-Object -ComObject WScript.Shell;
+          $wshell.AppActivate("${params.windowTitle}")
+        `;
+        await execAsync(`powershell -Command "${script}"`);
+        return `Attempted to focus window: ${params.windowTitle}`;
+      }
+      return `Expert action ${params.action} not yet implemented.`;
+    }
+
     // File operations
     if (name === 'write_file' || name === 'write-file') {
       const fullPath = path.resolve(params.path);
@@ -239,7 +301,6 @@ export class SkillsEngineService {
       if (!allowedDirs.some(dir => fullPath.startsWith(dir))) {
         throw new Error(`Access denied: Cannot write to ${fullPath}. Allowed: ${allowedDirs.join(', ')}`);
       }
-      // Ensure directory exists
       const dir = path.dirname(fullPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(fullPath, params.content || '');
@@ -250,7 +311,7 @@ export class SkillsEngineService {
       const fullPath = path.resolve(params.path);
       if (!fs.existsSync(fullPath)) throw new Error(`File not found: ${fullPath}`);
       const content = fs.readFileSync(fullPath, 'utf8');
-      return content.slice(0, 8000); // Cap at 8KB for LLM context
+      return content.slice(0, 8000);
     }
 
     if (name === 'list_dir' || name === 'list-dir') {
@@ -268,7 +329,6 @@ export class SkillsEngineService {
       return `File: ${path.basename(fullPath)}\nSize: ${stats.size} bytes\nLines: ${content.split('\n').length}\n---\n${content.slice(0, 6000)}`;
     }
 
-    // Script execution
     if (name === 'run_powershell' || name === 'run-powershell') {
       const cmd = params.command;
       if (!cmd) throw new Error('No command provided');
@@ -285,7 +345,6 @@ export class SkillsEngineService {
       return (stdout || stderr || 'Command completed with no output.').slice(0, 4000);
     }
 
-    // OS operations
     if (name === 'open_app' || name === 'open-app') {
       const target = params.url || params.app;
       if (!target) throw new Error('No app or URL provided');

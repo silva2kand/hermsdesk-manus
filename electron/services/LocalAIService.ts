@@ -10,7 +10,7 @@ import Store from 'electron-store';
 import { providerService } from '../main'
 
 const require = createRequire(import.meta.url);
-const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
+const electron = require('electron');
 const { app } = electron;
 const execFileAsync = promisify(execFile);
 
@@ -21,29 +21,11 @@ export interface Model {
   digest: string;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// LocalAIService — HermesDesk ME 1.8
-// 
-// ENGINE PRIORITY:
-//   1. Jan + TurboQuant  (built-in, primary, port 6767; 1337 compatibility)
-//   2. Ollama            (optional external, port 11434)
-//   3. LM Studio         (optional external, port 1234)
-//   4. Cloud free-tier   (fallback only — OpenRouter/NVIDIA/Gemini)
-//
-// Jan + TurboQuant is the MAIN ENGINE. It is not optional.
-// It exposes a full OpenAI-compatible API so external apps can
-// connect to it exactly like they connect to Jan, LM Studio, or Ollama.
-// ═══════════════════════════════════════════════════════════════════
-
 export class LocalAIService {
   private store: any;
-
-  // Built-in Jan + TurboQuant Engine (PRIMARY)
   private janUrl = 'http://127.0.0.1:6767/v1';
   private activeJanModel = '';
   private modelsPath = path.join(app.getPath('userData'), 'models');
-
-  // Optional External Engines
   private ollamaUrl = 'http://localhost:11434/api';
   private lmStudioUrl = 'http://localhost:1234/v1';
   private openCodeUrls = [
@@ -54,7 +36,6 @@ export class LocalAIService {
     'http://localhost:3456/v1'
   ].filter(Boolean);
 
-  // System resource cache
   private pcCache = {
     gpu: 'Detecting...',
     vram: '0GB',
@@ -67,8 +48,8 @@ export class LocalAIService {
   constructor(sharedStore?: any) {
     this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
     this.activeJanModel = this.store.get('activeJanModel', '') as string;
-    fs.mkdirSync(this.modelsPath, { recursive: true });
-    fs.mkdirSync(this.getHermsDeskJanProfileRoot(), { recursive: true });
+    if (!fs.existsSync(this.modelsPath)) fs.mkdirSync(this.modelsPath, { recursive: true });
+    if (!fs.existsSync(this.getHermsDeskJanProfileRoot())) fs.mkdirSync(this.getHermsDeskJanProfileRoot(), { recursive: true });
   }
 
   private getHermsDeskJanProfileRoot() {
@@ -82,9 +63,9 @@ export class LocalAIService {
   private getJanProcessEnv() {
     const profileRoot = this.getHermsDeskJanProfileRoot();
     const localRoot = path.join(profileRoot, 'Local');
-    fs.mkdirSync(profileRoot, { recursive: true });
-    fs.mkdirSync(localRoot, { recursive: true });
-    fs.mkdirSync(this.getHermsDeskJanDataRoot(), { recursive: true });
+    if (!fs.existsSync(profileRoot)) fs.mkdirSync(profileRoot, { recursive: true });
+    if (!fs.existsSync(localRoot)) fs.mkdirSync(localRoot, { recursive: true });
+    if (!fs.existsSync(this.getHermsDeskJanDataRoot())) fs.mkdirSync(this.getHermsDeskJanDataRoot(), { recursive: true });
     return {
       ...process.env,
       APPDATA: profileRoot,
@@ -97,13 +78,14 @@ export class LocalAIService {
   private getRuntimeRoots() {
     const roots = [
       process.cwd(),
-      path.dirname(process.execPath || ''),
-      process.resourcesPath || '',
-      path.join(path.dirname(process.execPath || ''), 'resources'),
-      path.join(app.getAppPath?.() || '', '..'),
+      path.join(process.cwd(), '..'),
+      app.getAppPath(),
+      path.join(app.getAppPath(), '..'),
       path.join(os.homedir(), 'WorkSpace', 'hermsdeskapp'),
-      path.join(os.homedir(), 'WorkSpace', 'hermsdeskapp', 'release', 'win-unpacked'),
-      path.join(os.homedir(), 'WorkSpace', 'hermsdeskapp', 'release', 'win-unpacked', 'resources')
+      app.getPath('userData'),
+      path.join(app.getPath('userData'), 'runtime'),
+      path.dirname(process.execPath),
+      path.join(path.dirname(process.execPath), 'resources')
     ].filter(Boolean);
     return [...new Set(roots.map(root => path.resolve(root)))];
   }
@@ -157,6 +139,7 @@ export class LocalAIService {
     const janCliPath = janCliPaths.find(p => fs.existsSync(p)) || '';
     const janAppPath = janAppPaths.find(p => fs.existsSync(p) && p.toLowerCase().endsWith('.exe')) || '';
     const turboQuantBackendPath = this.getTurboQuantBackendPath();
+
     return {
       nitroPath,
       janCliPath,
@@ -242,11 +225,6 @@ export class LocalAIService {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BUILT-IN JAN + TURBOQUANT ENGINE (PRIMARY)
-  // ═══════════════════════════════════════════════════════════════
-
-  /** Health check for the built-in Jan + TurboQuant engine */
   async checkJanEngine(): Promise<boolean> {
     const headers = this.getJanAuthHeaders();
     for (const baseUrl of ['http://127.0.0.1:6767/v1', 'http://localhost:6767/v1', 'http://127.0.0.1:1337/v1', 'http://localhost:1337/v1']) {
@@ -261,13 +239,11 @@ export class LocalAIService {
           this.janUrl = baseUrl;
           return true;
         }
-        // Try the next host form before declaring Jan offline.
       }
     }
     return false;
   }
 
-  /** Full status report for the built-in engine */
   async getJanEngineStatus(): Promise<any> {
     const isOnline = await this.checkJanEngine();
     let models: any[] = [];
@@ -283,19 +259,15 @@ export class LocalAIService {
         }
       } catch (e: any) {
         authRequired = e?.response?.status === 401 || e?.response?.status === 403;
-        console.error('Failed to fetch Jan models:', e.message);
       }
     }
 
-    // Detect if another service is occupying the Jan API port
     let portOccupiedByOther = false;
     if (!isOnline) {
       try {
         const probe = await axios.get('http://127.0.0.1:6767/v1/models', { timeout: 1500 });
-        // If we get a response but it's not Jan format, another service is there
         portOccupiedByOther = probe.status === 200;
       } catch (e: any) {
-        // Expected if nothing is running on 6767
         console.log('Port 6767 probe failed/timeout:', e.message);
       }
     }
@@ -331,438 +303,162 @@ export class LocalAIService {
     };
   }
 
-  /** Start the built-in Jan + TurboQuant Nitro server */
   async startJanEngine() {
     const status = await this.getJanEngineStatus();
-    if (status.apiOnline) {
-      return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in engine is already running.', status };
-    }
-    if (status.portOccupiedByOther) {
-      return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan API port is occupied by another service. Please free port 6767/1337 so the built-in engine can start.' };
-    }
+    if (status.apiOnline) return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in engine is already running.', status };
+    if (status.portOccupiedByOther) return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan API port is occupied by another service.' };
 
     const runtime = this.getJanRuntimeDiagnostics();
     if (runtime.janCliPath) {
       const library = await providerService.listLibraryModels().catch(() => []);
       const models = Array.isArray(library) ? library.filter((model: any) => model?.path && fs.existsSync(model.path)) : [];
-      const preferred = (
-        models.find((model: any) => /qwen/i.test(model.name || model.id || '')) ||
-        models.find((model: any) => /phi/i.test(model.name || model.id || '')) ||
-        models[0]
-      );
+      const preferred = models.find((model: any) => /qwen/i.test(model.name || model.id || '')) || models.find((model: any) => /phi/i.test(model.name || model.id || '')) || models[0];
       if (preferred) {
         const started = await this.startJanCliServe(preferred.path, preferred.name || preferred.id);
         const newStatus = await this.getJanEngineStatus();
         if (started.ok || newStatus.apiOnline) {
           this.activeJanModel = preferred.name || preferred.id;
           this.store.set('activeJanModel', this.activeJanModel);
-          return {
-            ok: true,
-            engine: 'Jan + TurboQuant',
-            message: `Built-in Jan + TurboQuant started with ${this.activeJanModel}.`,
-            model: this.activeJanModel,
-            status: newStatus
-          };
+          return { ok: true, engine: 'Jan + TurboQuant', message: `Started with ${this.activeJanModel}.`, model: this.activeJanModel, status: newStatus };
         }
         return { ok: false, engine: 'Jan + TurboQuant', error: started.error || 'Jan CLI did not become ready.', status: newStatus };
       }
-      return {
-        ok: false,
-        engine: 'Jan + TurboQuant',
-        error: 'Bundled Jan CLI is installed, but no usable GGUF model is in the HermsDesk model library. Download Qwen or Phi in Model Hub, then press Start Jan.',
-        status
-      };
     }
 
     if (runtime.nitroPath) {
-      console.log(`ME 1.8: Spawning Jan+TurboQuant Nitro from ${runtime.nitroPath}`);
-      const nitro = spawn(runtime.nitroPath, ['--port', '6767'], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-        env: this.getJanProcessEnv()
-      });
+      const nitro = spawn(runtime.nitroPath, ['--port', '6767'], { detached: true, stdio: 'ignore', windowsHide: true, env: this.getJanProcessEnv() });
       nitro.unref();
-
       for (let attempt = 0; attempt < 10; attempt += 1) {
         await new Promise(r => setTimeout(r, 1000));
         const newStatus = await this.getJanEngineStatus();
-        if (newStatus.apiOnline) {
-          return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in Nitro runtime started successfully.', status: newStatus };
-        }
+        if (newStatus.apiOnline) return { ok: true, engine: 'Jan + TurboQuant', message: 'Nitro started.', status: newStatus };
       }
-      return { ok: false, engine: 'Jan + TurboQuant', error: 'Nitro was launched but the Jan-compatible API did not become ready on port 6767.', status: await this.getJanEngineStatus() };
     }
 
     if (runtime.janAppPath) {
-      console.log(`ME 1.8: Starting bundled Jan desktop runtime from ${runtime.janAppPath}`);
-      const jan = spawn(runtime.janAppPath, [], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: false,
-        env: this.getJanProcessEnv()
-      });
+      const jan = spawn(runtime.janAppPath, [], { detached: true, stdio: 'ignore', windowsHide: false, env: this.getJanProcessEnv() });
       jan.unref();
-
       for (let attempt = 0; attempt < 18; attempt += 1) {
         await new Promise(r => setTimeout(r, 1000));
         const newStatus = await this.getJanEngineStatus();
-        if (newStatus.apiOnline) {
-          return { ok: true, engine: 'Jan + TurboQuant', message: 'Bundled Jan desktop runtime started and API is ready.', status: newStatus };
-        }
+        if (newStatus.apiOnline) return { ok: true, engine: 'Jan + TurboQuant', message: 'Jan desktop started.', status: newStatus };
       }
-      return { ok: false, engine: 'Jan + TurboQuant', error: 'Bundled Jan desktop runtime was launched but its OpenAI-compatible API did not become ready on port 6767. Load a GGUF model from Model Hub to start Jan CLI serve inside HermsDesk.', status: await this.getJanEngineStatus() };
     }
 
-    return {
-      ok: false,
-      engine: 'Jan + TurboQuant',
-      error: 'Built-in Jan/TurboQuant runtime files are missing. Run `npm run setup:jan` to place the official Jan runtime inside this app, then rebuild.',
-      status: await this.getJanEngineStatus()
-    };
+    return { ok: false, engine: 'Jan + TurboQuant', error: 'Built-in Jan/TurboQuant runtime files are missing.', status: await this.getJanEngineStatus() };
   }
 
   private async startJanCliServe(modelPath: string, modelName: string) {
     const runtime = this.getJanRuntimeDiagnostics();
-    if (!runtime.janCliPath) {
-      return { ok: false, error: 'Bundled Jan CLI was not found. Run npm run setup:jan first.' };
-    }
-    if (!modelPath || !fs.existsSync(modelPath)) {
-      return { ok: false, error: `Model file not found: ${modelPath || modelName}` };
-    }
-
+    if (!runtime.janCliPath) return { ok: false, error: 'Bundled Jan CLI not found.' };
     const logDir = path.join(this.getHermsDeskJanDataRoot(), 'logs');
-    fs.mkdirSync(logDir, { recursive: true });
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
     const logPath = path.join(logDir, 'turboquant-serve.log');
     const apiKey = process.env.JAN_API_KEY || ((this.store.get('api-keys', {}) || {}) as any)['jan-turboquant'] || '';
     const policy = this.buildDfalshTurboQuantPolicy(modelPath);
-    const args = [
-      'serve',
-      modelName || path.basename(modelPath),
-      '--model-path',
-      modelPath,
-      '--port',
-      '6767',
-      '--fit',
-      `--ctx-size=${policy.ctxSize}`,
-      `--threads=${policy.threads}`,
-      `--n-gpu-layers=${policy.gpuLayers}`,
-      `--timeout=${policy.timeout}`,
-      '--detach',
-      '--log',
-      logPath
-    ];
-    if (runtime.turboQuantBackendPath) {
-      args.push('--bin', runtime.turboQuantBackendPath);
-    }
+    const args = ['serve', modelName || path.basename(modelPath), '--model-path', modelPath, '--port', '6767', '--fit', `--ctx-size=${policy.ctxSize}`, `--threads=${policy.threads}`, `--n-gpu-layers=${policy.gpuLayers}`, `--timeout=${policy.timeout}`, '--detach', '--log', logPath];
+    if (runtime.turboQuantBackendPath) args.push('--bin', runtime.turboQuantBackendPath);
     if (apiKey) args.push('--api-key', apiKey);
 
-    const child = spawn(runtime.janCliPath, args, {
-      cwd: path.dirname(runtime.janCliPath),
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-      env: this.getJanProcessEnv()
-    });
+    const child = spawn(runtime.janCliPath, args, { cwd: path.dirname(runtime.janCliPath), detached: true, stdio: 'ignore', windowsHide: true, env: this.getJanProcessEnv() });
     child.unref();
 
     for (let attempt = 0; attempt < 90; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 1000));
-      const online = await this.checkJanEngine();
-      if (online) return { ok: true, logPath };
+      if (await this.checkJanEngine()) return { ok: true, logPath };
     }
-    return { ok: false, error: `Jan CLI started but the model server did not become ready on port 6767. Check log: ${logPath}`, logPath };
+    return { ok: false, error: 'Jan CLI server did not become ready.', logPath };
   }
 
-  /** Load a model into the built-in Jan + TurboQuant engine */
   async loadJanModel(model: { name: string, path?: string }) {
-    console.log(`ME 1.8: Loading model ${model.name} into Jan+TurboQuant engine`);
-    
     try {
       const status = await this.getJanEngineStatus();
       const library = await providerService.listLibraryModels();
       const target = library.find((m: any) => m.name === model.name || m.id === model.name);
-      
-      if (!target) {
-        throw new Error(`Model ${model.name} not found in library. Download it first from Model Hub.`);
-      }
+      if (!target) throw new Error(`Model ${model.name} not found in library.`);
 
       const runtime = this.getJanRuntimeDiagnostics();
       if (runtime.janCliPath && (!status.apiOnline || this.janUrl.includes(':6767'))) {
         const started = await this.startJanCliServe(target.path, target.name || model.name);
-        if (!started.ok) {
-          return {
-            ok: false,
-            engine: 'Jan + TurboQuant',
-            model: model.name,
-            error: started.error,
-            status: await this.getJanEngineStatus()
-          };
-        }
+        if (!started.ok) return { ok: false, error: started.error, status: await this.getJanEngineStatus() };
         this.activeJanModel = model.name;
         this.store.set('activeJanModel', model.name);
         return { ok: true, engine: 'Jan + TurboQuant', model: model.name, status: await this.getJanEngineStatus() };
       }
 
-      if (!status.apiOnline) {
-        return {
-          ok: false,
-          engine: 'Jan + TurboQuant',
-          error: 'Jan + TurboQuant is not online. Start the built-in engine first, then load the model.',
-          status
-        };
-      }
-      if (status.authRequired) {
-        return {
-          ok: false,
-          engine: 'Jan + TurboQuant',
-          error: 'Jan local API is running but requires an API key. Save the Jan Local API key in Settings -> API & Connections as Jan + TurboQuant, or set JAN_API_KEY.',
-          status
-        };
-      }
-
-      // 2. Load model into the built-in engine via Jan API
-      const response = await axios.post(`${this.janUrl}/models/load`, {
-        model: target.id
-      }, { timeout: 30000, headers: this.getJanAuthHeaders() });
-
+      if (!status.apiOnline) return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan is offline.', status };
+      const response = await axios.post(`${this.janUrl}/models/load`, { model: target.id }, { timeout: 30000, headers: this.getJanAuthHeaders() });
       if (response.status === 200) {
         this.activeJanModel = model.name;
         this.store.set('activeJanModel', model.name);
         return { ok: true, engine: 'Jan + TurboQuant', model: model.name, status: await this.getJanEngineStatus() };
       }
     } catch (e: any) {
-      console.error('ME 1.8: Model load failed:', e.message);
-      return {
-        ok: false,
-        engine: 'Jan + TurboQuant',
-        model: model.name,
-        error: e?.response?.data?.error || e?.message || `Jan + TurboQuant could not load ${model.name}.`,
-        status: await this.getJanEngineStatus()
-      };
+      return { ok: false, engine: 'Jan + TurboQuant', error: e.message, status: await this.getJanEngineStatus() };
     }
-    return { ok: false, error: 'Failed to communicate with the built-in Jan+TurboQuant engine.' };
+    return { ok: false, error: 'Failed to communicate with Jan engine.' };
   }
 
-  /** Chat with the built-in Jan + TurboQuant engine (PRIMARY) */
   async chatWithJan(model: string, messages: any[]): Promise<any> {
-    try {
-      const status = await this.getJanEngineStatus();
-      if (status.authRequired) {
-        throw new Error('Jan local API is running but requires an API key. Save the Jan Local API key in Settings -> API & Connections as Jan + TurboQuant, or set JAN_API_KEY.');
-      }
-      const modelIds = (status.models || []).map((m: any) => m.id || m.name || m.model).filter(Boolean);
-      const selectedModel = this.chooseBestJanModel(modelIds, model);
-      const response = await axios.post(`${this.janUrl}/chat/completions`, {
-        model: selectedModel,
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        stream: false
-      }, { timeout: 120000, headers: this.getJanAuthHeaders() });
-      
-      const content = response.data?.choices?.[0]?.message?.content || '';
-      this.activeJanModel = selectedModel;
-      this.store.set('activeJanModel', selectedModel);
-      const metrics = this.saveJanMetrics(response.data, selectedModel);
-      return { 
-        message: { content }, 
-        engine: 'Jan + TurboQuant',
-        model: selectedModel,
-        metrics
-      };
-    } catch (error: any) {
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error('Built-in Jan+TurboQuant engine is not responding on port 6767/1337.');
-      }
-      throw new Error(`Jan+TurboQuant error: ${error.message}`);
-    }
+    const status = await this.getJanEngineStatus();
+    const modelIds = (status.models || []).map((m: any) => m.id || m.name || m.model).filter(Boolean);
+    const selectedModel = this.chooseBestJanModel(modelIds, model);
+    const response = await axios.post(`${this.janUrl}/chat/completions`, { model: selectedModel, messages: messages.map(m => ({ role: m.role, content: m.content })), stream: false }, { timeout: 120000, headers: this.getJanAuthHeaders() });
+    const metrics = this.saveJanMetrics(response.data, selectedModel);
+    return { message: { content: response.data?.choices?.[0]?.message?.content || '' }, engine: 'Jan + TurboQuant', model: selectedModel, metrics };
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // SMART ENGINE ROUTER — chatWithBestAvailable
-  // Priority: Jan+TurboQuant → Ollama → LM Studio → Error
-  // ═══════════════════════════════════════════════════════════════
 
   async chatWithBestAvailable(model: string, messages: any[], options: { preferred?: 'jan' | 'ollama' | 'lmstudio' } = {}): Promise<any> {
-    // 1. Try built-in Jan + TurboQuant first (PRIMARY)
     try {
       let janOnline = await this.checkJanEngine();
       if (!janOnline) {
-        console.log('ME 1.8: Jan is offline. Attempting auto-start...');
         const startResult = await this.startJanEngine();
-        if (startResult.ok) {
-          janOnline = true;
-          // Wait slightly for model loading if needed
-          await new Promise(r => setTimeout(r, 1000));
-        }
+        if (startResult.ok) janOnline = true;
       }
+      if (janOnline) return await this.chatWithJan(model, messages);
+    } catch (e) {}
 
-      if (janOnline) {
-        console.log('ME 1.8: Routing to built-in Jan+TurboQuant engine');
-        return await this.chatWithJan(model, messages);
-      }
-    } catch (e) {
-      console.log('ME 1.8: Jan+TurboQuant unavailable, trying fallbacks...');
-    }
-
-    // 2. Try Ollama (optional external)
     try {
       const ollamaCheck = await axios.get(`${this.ollamaUrl}/tags`, { timeout: 3000 });
-      if (ollamaCheck.status === 200) {
-        console.log('ME 1.8: Routing to Ollama (optional external)');
-        const ollamaModels = ollamaCheck.data?.models || [];
-        const modelNames = ollamaModels.map((m: any) => m.name).filter(Boolean);
-        const selectedModel =
-          modelNames.find((name: string) => name === model || name === `${model}:latest`) ||
-          modelNames[0] ||
-          model;
-        const result = await this.chatWithOllama(selectedModel, messages);
-        return { ...result, engine: 'Ollama (External)' };
-      }
-    } catch (e) {
-      console.log('ME 1.8: Ollama unavailable...');
-    }
+      if (ollamaCheck.status === 200) return await this.chatWithOllama(model, messages);
+    } catch (e) {}
 
-    // 3. Try LM Studio (optional external)
-    try {
-      const lmCheck = await this.checkLMStudio();
-      if (lmCheck?.online) {
-        console.log('ME 1.8: Routing to LM Studio (optional external)');
-        const result = await this.chatWithLMStudio(model, messages);
-        return { ...result, engine: 'LM Studio (External)' };
-      }
-    } catch (e) {
-      console.log('ME 1.8: LM Studio unavailable...');
-    }
-
-    // 4. Try OpenCode/OpenAI-compatible local route (optional external)
-    try {
-      const openCode = await this.checkOpenCode();
-      if (openCode?.online) {
-        console.log('ME 1.8: Routing to OpenCode (optional external)');
-        const result = await this.chatWithOpenCode(model, messages);
-        return { ...result, engine: 'OpenCode (External)' };
-      }
-    } catch {
-      console.log('ME 1.8: OpenCode unavailable...');
-    }
-
-    // 5. All local engines offline
-    return { 
-      message: { content: `Jan + TurboQuant is the built-in primary engine, but it is not responding on port 6767/1337 right now.${options.preferred === 'jan' ? ' Hermes ME did not treat Jan as an external app; it tried the built-in route first.' : ''}\n\nI also checked optional local fallbacks: Ollama, LM Studio, and OpenCode are not available with a usable model. Open Model Hub, press Load on a GGUF model to start the bundled Jan CLI server. If you want API fallback, choose OpenRouter, Gemini, or NVIDIA from the provider menu; Hermes ME will keep those routes on free-tier models.` },
-      engine: 'None (All Offline)'
-    };
+    return { message: { content: 'No local AI engine is available.' }, engine: 'None' };
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // FULL ENGINE STATUS — all engines at once
-  // ═══════════════════════════════════════════════════════════════
 
   async getFullEngineStatus() {
-    const [janOnline, ollamaModels, lmStudio, openCode] = await Promise.all([
-      this.checkJanEngine().catch(() => false),
-      this.listOllamaModels().catch(() => []),
-      this.checkLMStudio().catch(() => null),
-      this.checkOpenCode().catch(() => null)
-    ]);
-
-    return {
-      primary: {
-        name: 'Jan + TurboQuant',
-        role: 'Built-in Engine',
-        online: janOnline,
-        port: janOnline ? (this.janUrl.includes(':6767') ? 6767 : 1337) : 6767,
-        url: this.janUrl,
-        activeModel: this.activeJanModel
-      },
-      ollama: {
-        name: 'Ollama',
-        role: 'Optional External',
-        online: ollamaModels.length > 0 || false,
-        port: 11434,
-        models: ollamaModels
-      },
-      lmStudio: {
-        name: 'LM Studio',
-        role: 'Optional External',
-        online: lmStudio?.online || false,
-        port: 1234
-      },
-      openCode: {
-        name: 'OpenCode',
-        role: 'Optional External / OpenAI-compatible',
-        online: openCode?.online || false,
-        url: openCode?.url || this.openCodeUrls[0],
-        models: openCode?.models || []
-      }
-    };
+    const [janOnline, ollamaModels, lmStudio, openCode] = await Promise.all([this.checkJanEngine().catch(() => false), this.listOllamaModels().catch(() => []), this.checkLMStudio().catch(() => null), this.checkOpenCode().catch(() => null)]);
+    return { primary: { name: 'Jan + TurboQuant', online: janOnline, activeModel: this.activeJanModel }, ollama: { name: 'Ollama', online: ollamaModels.length > 0 }, lmStudio: { name: 'LM Studio', online: lmStudio?.online || false } };
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // OPTIONAL EXTERNAL ENGINES
-  // ═══════════════════════════════════════════════════════════════
 
   async listOllamaModels(): Promise<Model[]> {
     try {
       const response = await axios.get(`${this.ollamaUrl}/tags`, { timeout: 5000 });
       return response.data.models || [];
-    } catch (error: any) {
-      return [];
-    }
+    } catch (error: any) { return []; }
   }
 
   async chatWithOllama(model: string, messages: any[]) {
-    try {
-      const response = await axios.post(`${this.ollamaUrl}/chat`, {
-        model: model || 'llama3',
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        stream: false
-      }, { timeout: 120000 });
-      return response.data;
-    } catch (error: any) {
-      if (error.code === 'ECONNREFUSED') {
-        return { message: { content: 'Ollama is not running. It is an optional external engine — the built-in Jan+TurboQuant engine is the primary.' } };
-      }
-      if (error.response?.status === 404) {
-        return { message: { content: `Model "${model}" not found in Ollama. Pull it first with: ollama pull ${model}` } };
-      }
-      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-        return { message: { content: 'Ollama timed out while generating a response. This often happens if the selected model is too large for your hardware. Try switching to a smaller model (e.g., Phi-3 or Gemma 2b) or increasing your system RAM/VRAM.' } };
-      }
-      return { message: { content: `Ollama error: ${error.message}` } };
-    }
+    const response = await axios.post(`${this.ollamaUrl}/chat`, { model: model || 'llama3', messages: messages.map(m => ({ role: m.role, content: m.content })), stream: false }, { timeout: 120000 });
+    return response.data;
   }
 
   async chatWithLMStudio(model: string, messages: any[]) {
-    try {
-      const response = await axios.post(`${this.lmStudioUrl}/chat/completions`, {
-        model: model || 'local-model',
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        stream: false
-      }, { timeout: 120000 });
-      return { message: { content: response.data.choices[0].message.content } };
-    } catch (error: any) {
-      if (error.code === 'ECONNREFUSED') {
-        return { message: { content: 'LM Studio is not running. It is an optional external engine.' } };
-      }
-      return { message: { content: `LM Studio error: ${error.message}` } };
-    }
+    const response = await axios.post(`${this.lmStudioUrl}/chat/completions`, { model: model || 'local-model', messages: messages.map(m => ({ role: m.role, content: m.content })), stream: false }, { timeout: 120000 });
+    return { message: { content: response.data.choices[0].message.content } };
   }
 
   async checkLMStudio() {
     try {
       const response = await axios.get(`${this.lmStudioUrl}/models`, { timeout: 2000 });
-      if (response.status === 200) {
-        return { online: true, url: this.lmStudioUrl, provider: 'LM Studio' };
-      }
-    } catch (e: any) {
-      console.log('LM Studio probe failed:', e.message);
-    }
+      if (response.status === 200) return { online: true, url: this.lmStudioUrl };
+    } catch (e) {}
     return null;
   }
 
   private getOpenCodeAuthHeaders() {
     const keys = (this.store.get('api-keys', {}) || {}) as Record<string, string>;
-    const token = process.env.OPENCODE_API_KEY || keys.opencode || keys.openCode || '';
+    const token = process.env.OPENCODE_API_KEY || keys.opencode || '';
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
@@ -771,23 +467,8 @@ export class LocalAIService {
     for (const baseUrl of this.openCodeUrls) {
       try {
         const response = await axios.get(`${baseUrl}/models`, { timeout: 2000, headers });
-        if (response.status === 200) {
-          const models = response.data?.data || response.data?.models || [];
-          return { online: true, authRequired: false, url: baseUrl, provider: 'OpenCode', models };
-        }
-      } catch (error: any) {
-        if (error?.response?.status === 401 || error?.response?.status === 403) {
-          return {
-            online: true,
-            authRequired: true,
-            url: baseUrl,
-            provider: 'OpenCode',
-            models: [],
-            error: 'OpenCode endpoint is running but requires an API key/token.'
-          };
-        }
-        // Try next OpenCode-compatible endpoint.
-      }
+        if (response.status === 200) return { online: true, url: baseUrl, models: response.data?.data || [] };
+      } catch (error: any) {}
     }
     return null;
   }
@@ -799,163 +480,54 @@ export class LocalAIService {
 
   async chatWithOpenCode(model: string, messages: any[]) {
     const status = await this.checkOpenCode();
-    if (!status?.online) {
-      return { message: { content: 'OpenCode is not running on a detected OpenAI-compatible local endpoint. Start OpenCode or set OPENCODE_API_URL.' } };
-    }
-    if (status.authRequired) {
-      return {
-        message: {
-          content: 'OpenCode is running, but it requires a local API key/token. Add it in Settings -> API & Connections as "OpenCode Local Token", or set OPENCODE_API_KEY, then refresh models.'
-        },
-        engine: 'OpenCode (Auth Required)'
-      };
-    }
-    try {
-      const modelIds = (status.models || []).map((m: any) => m.id || m.name).filter(Boolean);
-      const selectedModel = modelIds.includes(model) ? model : modelIds[0] || model || 'local-model';
-      const response = await axios.post(`${status.url}/chat/completions`, {
-        model: selectedModel,
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        stream: false
-      }, { timeout: 120000, headers: this.getOpenCodeAuthHeaders() });
-      return {
-        message: { content: response.data?.choices?.[0]?.message?.content || '' },
-        model: selectedModel
-      };
-    } catch (error: any) {
-      return { message: { content: `OpenCode error: ${error.message}` } };
-    }
+    const response = await axios.post(`${status!.url}/chat/completions`, { model: model || 'local-model', messages: messages.map(m => ({ role: m.role, content: m.content })), stream: false }, { timeout: 120000, headers: this.getOpenCodeAuthHeaders() });
+    return { message: { content: response.data?.choices?.[0]?.message?.content || '' } };
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // SYSTEM RESOURCES (Real hardware detection)
-  // ═══════════════════════════════════════════════════════════════
-
   private withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs))
-    ]);
+    return Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs))]);
   }
 
   private async scanNvidiaSmi() {
     try {
-      const { stdout } = await execFileAsync('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], {
-        timeout: 2500,
-        windowsHide: true,
-        maxBuffer: 1024 * 1024
-      });
-      const line = stdout.split(/\r?\n/).map(value => value.trim()).filter(Boolean)[0];
-      const [name, memoryMb] = line.split(',').map(value => value.trim());
-      if (name && Number(memoryMb)) {
-        return { name, vramGb: Math.round(Number(memoryMb) / 1024) };
-      }
-    } catch {
-      // nvidia-smi is best-effort; CIM below still handles non-NVIDIA systems.
-    }
-    return null;
+      const { stdout } = await execFileAsync('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], { timeout: 2500, windowsHide: true });
+      const [name, memoryMb] = stdout.split(',').map(v => v.trim());
+      return { name, vramGb: Math.round(Number(memoryMb) / 1024) };
+    } catch { return null; }
   }
 
   private async scanWindowsHardwareFallback() {
     const nvidiaGpu = await this.scanNvidiaSmi();
-    const script = `
-$ErrorActionPreference = 'SilentlyContinue'
-$gpu = Get-CimInstance Win32_VideoController | Sort-Object AdapterRAM -Descending | Select-Object -First 1
-$os = Get-CimInstance Win32_OperatingSystem
-[pscustomobject]@{
-  gpu = if ($gpu.Name) { [string]$gpu.Name } else { 'GPU not detected' }
-  vram = if ($gpu.AdapterRAM) { [math]::Round([double]$gpu.AdapterRAM / 1GB) } else { 0 }
-  ram = if ($os.TotalVisibleMemorySize) { [math]::Round([double]$os.TotalVisibleMemorySize / 1MB) } else { 0 }
-  os = "$($os.Caption) $($os.Version)"
-} | ConvertTo-Json -Compress
-`;
-    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
-      timeout: 5000,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024
-    });
+    const script = `$ErrorActionPreference = 'SilentlyContinue'; $gpu = Get-CimInstance Win32_VideoController | Sort-Object AdapterRAM -Descending | Select-Object -First 1; $os = Get-CimInstance Win32_OperatingSystem; [pscustomobject]@{ gpu = if ($gpu.Name) { [string]$gpu.Name } else { 'GPU not detected' }; vram = if ($gpu.AdapterRAM) { [math]::Round([double]$gpu.AdapterRAM / 1GB) } else { 0 }; ram = if ($os.TotalVisibleMemorySize) { [math]::Round([double]$os.TotalVisibleMemorySize / 1MB) } else { 0 }; os = "$($os.Caption) $($os.Version)" } | ConvertTo-Json -Compress`;
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], { timeout: 5000, windowsHide: true });
     const parsed = JSON.parse(stdout.trim());
-    return {
-      gpu: nvidiaGpu?.name || parsed.gpu || 'GPU not detected',
-      vram: `${nvidiaGpu?.vramGb || Number(parsed.vram || 0)}GB`,
-      ram: `${Number(parsed.ram || Math.round(os.totalmem() / (1024 * 1024 * 1024)))}GB`,
-      os: parsed.os || `${os.type()} ${os.release()}`,
-      scannedAt: Date.now(),
-      approximate: false
-    };
+    return { gpu: nvidiaGpu?.name || parsed.gpu, vram: `${nvidiaGpu?.vramGb || parsed.vram}GB`, ram: `${parsed.ram}GB`, os: parsed.os, scannedAt: Date.now(), approximate: false };
   }
 
   async scanPCResources() {
     try {
-      const [gpus, mem, osInfo] = await Promise.all([
-        this.withTimeout(si.graphics(), 3500, 'GPU scan'),
-        this.withTimeout(si.mem(), 2500, 'RAM scan'),
-        this.withTimeout(si.osInfo(), 2500, 'OS scan')
-      ]);
-      
-      // Prioritize discrete NVIDIA GPUs
-      let mainGpu = gpus.controllers.find(c => 
-        (c.vendor.toLowerCase().includes('nvidia') || c.model.toLowerCase().includes('rtx')) && 
-        c.vram && c.vram > 2048
-      );
-
-      // If no discrete found, pick the one with most VRAM
-      if (!mainGpu && gpus.controllers.length > 0) {
-        mainGpu = gpus.controllers.reduce((prev, current) => 
-          ((prev.vram || 0) > (current.vram || 0)) ? prev : current
-        , gpus.controllers[0]);
-      }
-      
+      const [gpus, mem, osInfo] = await Promise.all([this.withTimeout(si.graphics(), 3500, 'GPU'), this.withTimeout(si.mem(), 2500, 'RAM'), this.withTimeout(si.osInfo(), 2500, 'OS')]);
+      const mainGpu = gpus.controllers[0];
       const nvidiaGpu = await this.scanNvidiaSmi();
-      const vramGB = nvidiaGpu?.vramGb || (mainGpu?.vram ? Math.round(mainGpu.vram / 1024) : 0);
-      const ramGB = Math.round(mem.total / (1024 * 1024 * 1024));
-
-      this.pcCache = {
-        gpu: nvidiaGpu?.name || mainGpu?.model || 'Integrated Graphics',
-        vram: `${vramGB}GB`,
-        ram: `${ramGB}GB`,
-        os: `${osInfo.distro} ${osInfo.release}`,
-        scannedAt: Date.now(),
-        approximate: !mainGpu
+      this.pcCache = { 
+        gpu: nvidiaGpu?.name || mainGpu?.model || 'Integrated', 
+        vram: `${nvidiaGpu?.vramGb || Math.round((mainGpu?.vram || 0) / 1024) || 0}GB`, 
+        ram: `${Math.round(mem.total / (1024 ** 3))}GB`, 
+        os: `${osInfo.distro} ${osInfo.release}`, 
+        scannedAt: Date.now(), 
+        approximate: !mainGpu 
       };
-      
       return this.pcCache;
     } catch (e) {
-      console.error('ME 1.8: PC Scan failed:', e);
-      try {
-        this.pcCache = await this.scanWindowsHardwareFallback();
-        return this.pcCache;
-      } catch (fallbackError) {
-        console.error('ME 1.8: Windows hardware fallback failed:', fallbackError);
-      }
+      this.pcCache = await this.scanWindowsHardwareFallback();
       return this.pcCache;
     }
   }
 
   async getResourceUsage() {
     try {
-      const [cpuLoad, mem, gpuData] = await Promise.all([
-        si.currentLoad(),
-        si.mem(),
-        si.graphics().catch(() => null)
-      ]);
-
-      // Real GPU utilization from systeminformation
-      let gpuUtil = 0;
-      if (gpuData?.controllers?.[0]) {
-        // si.graphics() provides utilizationGpu on some systems
-        gpuUtil = (gpuData.controllers[0] as any).utilizationGpu || 0;
-      }
-
-      return {
-        cpu: Math.round(cpuLoad.currentLoad),
-        ram: Math.round((mem.active / mem.total) * 100),
-        gpu: gpuUtil,
-        gpuModel: this.pcCache.gpu,
-        engine: await this.checkJanEngine() ? 'Jan + TurboQuant' : 'Offline'
-      };
-    } catch (error) {
-      return { cpu: 0, ram: 0, gpu: 0, gpuModel: this.pcCache.gpu, engine: 'Unknown' };
-    }
+      const [cpuLoad, mem] = await Promise.all([si.currentLoad(), si.mem()]);
+      return { cpu: Math.round(cpuLoad.currentLoad), ram: Math.round((mem.active / mem.total) * 100), gpu: 0, gpuModel: this.pcCache.gpu, engine: await this.checkJanEngine() ? 'Jan + TurboQuant' : 'Offline' };
+    } catch (error) { return { cpu: 0, ram: 0, gpu: 0, gpuModel: this.pcCache.gpu, engine: 'Unknown' }; }
   }
 }

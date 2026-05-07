@@ -12,8 +12,13 @@ const electron = ((globalThis as any).__electronModule || require('electron')) a
 const { shell, dialog, app } = electron;
 
 const execFileAsync = promisify(execFile);
-const VOICE_STACK_ROOT = 'C:\\Users\\Silva\\WorkSpace\\voicelcl\\silva-voice';
+
+// Virtualize paths - move from hardcoded C:\Users\Silva to dynamic locations
+const VOICE_STACK_ROOT = fs.existsSync('C:\\Users\\Silva\\WorkSpace\\voicelcl\\silva-voice') 
+  ? 'C:\\Users\\Silva\\WorkSpace\\voicelcl\\silva-voice'
+  : path.join(process.cwd(), 'bin', 'silva-voice');
 const VOICE_STACK_LAUNCHER = path.join(VOICE_STACK_ROOT, 'run_server.bat');
+const VOICE_STACK_MODELS = path.join(VOICE_STACK_ROOT, 'models');
 const VOICE_STACK_PYTHON = path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
 
 export class DesktopIntegrationService {
@@ -205,25 +210,35 @@ export class DesktopIntegrationService {
     try {
       const home = os.homedir();
       const desktop = path.join(home, 'Desktop');
-      const oneDriveDesktop = path.join(home, 'OneDrive', 'Desktop');
-      const oneDriveCommercialDesktop = path.join(home, 'OneDrive - CiniForge', 'Desktop');
       
+      // Generalize OneDrive detection to work on any machine
       let desktopPath = desktop;
-      if (fs.existsSync(oneDriveCommercialDesktop)) {
-        desktopPath = oneDriveCommercialDesktop;
-      } else if (fs.existsSync(oneDriveDesktop)) {
-        desktopPath = oneDriveDesktop;
-      }
+      const scanOneDrive = (base: string) => {
+        if (!fs.existsSync(base)) return null;
+        const entries = fs.readdirSync(base, { withFileTypes: true });
+        // Check for OneDrive or OneDrive - Company
+        const odDir = entries.find(e => e.isDirectory() && (e.name === 'OneDrive' || e.name.startsWith('OneDrive - ')));
+        if (odDir) {
+          const odDesktop = path.join(base, odDir.name, 'Desktop');
+          if (fs.existsSync(odDesktop)) return odDesktop;
+        }
+        return null;
+      };
+
+      desktopPath = scanOneDrive(home) || desktop;
       
-      const shortcutPath = path.join(desktopPath, 'HermsDesk ME 1.7.lnk');
+      const shortcutPath = path.join(desktopPath, 'HermsDesk ME.lnk');
       const projectPath = process.cwd();
-      const targetPath = path.join(projectPath, 'start-aion.bat');
+      let targetPath = path.join(projectPath, 'start-aion.bat');
+      if (!fs.existsSync(targetPath)) {
+        targetPath = path.join(projectPath, 'release', 'win-unpacked', 'hermsdeskapp.exe');
+      }
       
       shell.writeShortcutLink(shortcutPath, {
         target: targetPath,
         cwd: projectPath,
         description: 'HermesDesk ME - Your Local AI Workstation',
-        icon: path.join(projectPath, 'release', 'win-unpacked', 'hermsdeskapp.exe'),
+        icon: targetPath.endsWith('.exe') ? targetPath : path.join(projectPath, 'electron-vite.svg'),
         iconIndex: 0
       });
       
@@ -286,13 +301,18 @@ export class DesktopIntegrationService {
       await axios.get('http://localhost:7100/', { timeout: 700, validateStatus: status => status >= 200 && status < 500 });
       return { ok: true, alreadyRunning: true };
     } catch {
+      // Ensure folder and server files exist
+      await this.buildVoiceStackFilesOnly();
+
       if (!fs.existsSync(VOICE_STACK_LAUNCHER)) return { ok: false, error: 'Silva Voice Stack launcher was not found.' };
+      
       const child = spawn(VOICE_STACK_LAUNCHER, [], { cwd: VOICE_STACK_ROOT, detached: true, stdio: 'ignore', windowsHide: true });
       child.unref();
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+
+      for (let attempt = 0; attempt < 15; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
         try {
-          await axios.get('http://localhost:7100/', { timeout: 700, validateStatus: status => status >= 200 && status < 500 });
+          await axios.get('http://localhost:7100/', { timeout: 1500, validateStatus: status => status >= 200 && status < 500 });
           return { ok: true, started: true };
         } catch {
           // Voice models can take a moment to initialize.
@@ -356,79 +376,7 @@ export class DesktopIntegrationService {
   }
 
   async buildVoiceStackNeeds() {
-    if (!fs.existsSync(VOICE_STACK_ROOT)) fs.mkdirSync(VOICE_STACK_ROOT, { recursive: true });
-    const packageFile = path.join(VOICE_STACK_ROOT, 'pyproject.toml');
-    const serverDir = path.join(VOICE_STACK_ROOT, 'silva_voice');
-    const serverFile = path.join(serverDir, 'server.py');
-    if (!fs.existsSync(serverDir)) fs.mkdirSync(serverDir, { recursive: true });
-    if (!fs.existsSync(packageFile)) {
-      fs.writeFileSync(packageFile, `[project]
-name = "silva-voice"
-version = "0.1.0"
-dependencies = ["fastapi", "uvicorn", "pyttsx3"]
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["silva_voice*"]
-`, 'utf8');
-    }
-    const initFile = path.join(serverDir, '__init__.py');
-    if (!fs.existsSync(initFile)) fs.writeFileSync(initFile, '', 'utf8');
-    if (!fs.existsSync(serverFile)) {
-      fs.writeFileSync(serverFile, `from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-import pyttsx3
-
-app = FastAPI(title="Silva Voice Stack")
-
-class SpeakRequest(BaseModel):
-    text: str
-    voice: str | None = None
-    language: str | None = None
-    accent: str | None = None
-    rate: float | None = 1
-
-@app.get("/")
-def home():
-    return {"ok": True, "mode": "windows-sapi-fallback", "name": "Silva Voice Stack"}
-
-@app.get("/tts/profiles")
-def profiles():
-    return {"profiles": ["tamil-jaffna", "tamil-india", "english-uk", "english-us"], "fallback": "Windows installed voices"}
-
-@app.get("/tts/accents")
-def accents():
-    return {"accents": ["jaffna", "india", "uk", "us"], "fallback": True}
-
-@app.post("/tts/synthesize")
-@app.post("/api/speak")
-@app.post("/speak")
-@app.post("/api/tts")
-@app.post("/tts")
-@app.post("/v1/audio/speech")
-def speak(payload: SpeakRequest):
-    engine = pyttsx3.init()
-    if payload.rate:
-        try:
-            engine.setProperty("rate", int(175 * float(payload.rate)))
-        except Exception:
-            pass
-    engine.say(payload.text)
-    engine.runAndWait()
-    return JSONResponse({"ok": True, "mode": "windows-sapi-fallback", "voice": payload.voice, "language": payload.language})
-`, 'utf8');
-    }
-    if (!fs.existsSync(VOICE_STACK_LAUNCHER)) {
-      fs.writeFileSync(VOICE_STACK_LAUNCHER, `@echo off
-cd /d "%~dp0"
-if not exist "venv_311\\Scripts\\python.exe" py -3.11 -m venv venv_311
-"venv_311\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel
-"venv_311\\Scripts\\python.exe" -m pip install -e .
-"venv_311\\Scripts\\python.exe" -m uvicorn silva_voice.server:app --host 127.0.0.1 --port 7100
-`, 'utf8');
-    }
-
+    await this.buildVoiceStackFilesOnly();
     const repairScript = path.join(VOICE_STACK_ROOT, 'repair_voice_stack.ps1');
     const script = `
 $ErrorActionPreference = 'Continue'
@@ -481,6 +429,107 @@ Pause
       script: repairScript,
       message: 'Opened Silva Voice Stack self-build terminal. It installs/repairs Python packages, checks GPU/Piper/TTS, lists missing models, and restarts the server.'
     };
+  }
+
+  private async buildVoiceStackFilesOnly() {
+    if (!fs.existsSync(VOICE_STACK_ROOT)) fs.mkdirSync(VOICE_STACK_ROOT, { recursive: true });
+    const packageFile = path.join(VOICE_STACK_ROOT, 'pyproject.toml');
+    const serverDir = path.join(VOICE_STACK_ROOT, 'silva_voice');
+    const serverFile = path.join(serverDir, 'server.py');
+
+    if (!fs.existsSync(packageFile)) {
+      fs.writeFileSync(packageFile, `[project]
+name = "silva-voice"
+version = "0.1.0"
+dependencies = ["fastapi", "uvicorn", "pyttsx3"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["silva_voice*"]
+`, 'utf8');
+    }
+
+    if (!fs.existsSync(serverDir)) fs.mkdirSync(serverDir, { recursive: true });
+    const initFile = path.join(serverDir, '__init__.py');
+    if (!fs.existsSync(initFile)) fs.writeFileSync(initFile, '', 'utf8');
+    
+    // Always update server script to latest logic
+    fs.writeFileSync(serverFile, `from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel
+import pyttsx3
+import os
+import time
+import subprocess
+import json
+
+app = FastAPI(title="Silva Voice Stack")
+
+class SpeakRequest(BaseModel):
+    text: str
+    voice: str | None = None
+    language: str | None = None
+    accent: str | None = None
+    rate: float | None = 1
+
+@app.get("/")
+def home():
+    return {"ok": True, "mode": "windows-sapi-fallback", "status": "online", "service": "Silva Voice Engine", "endpoints": ["/tts/synthesize", "/tts/stream", "/tts/profiles", "/tts/accents"]}
+
+@app.get("/tts/profiles")
+@app.get("/api/tts/profiles")
+def profiles():
+    return {"profiles": ["tamil-jaffna", "tamil-india", "english-uk", "english-us"], "fallback": "Windows installed voices"}
+
+@app.post("/tts/synthesize")
+@app.post("/api/speak")
+@app.post("/speak")
+@app.post("/api/tts")
+@app.post("/tts")
+@app.post("/v1/audio/speech")
+async def speak(payload: SpeakRequest):
+    text = payload.text
+    voice = payload.voice or "tamil-jaffna"
+    
+    # Try Piper for Tamil if model exists
+    piper_exe = os.path.join(os.getcwd(), "venv_311", "Scripts", "piper.exe")
+    if not os.path.exists(piper_exe):
+        piper_exe = "piper" # Try path
+        
+    tamil_model = os.path.join(os.getcwd(), "models", "piper", "ta", "tamil_m1.onnx")
+    
+    if "tamil" in voice.lower() and os.path.exists(tamil_model):
+        try:
+            output_file = os.path.join(os.environ.get("TEMP", "."), f"silva_voice_{int(time.time())}.wav")
+            # piper -m model.onnx -f output.wav
+            process = subprocess.Popen([piper_exe, "-m", tamil_model, "-f", output_file], stdin=subprocess.PIPE)
+            process.communicate(input=text.encode('utf-8'))
+            if os.path.exists(output_file):
+                return FileResponse(output_file, media_type="audio/wav")
+        except Exception as e:
+            print(f"Piper failed: {e}")
+
+    # Fallback to pyttsx3 (SAPI5)
+    try:
+        engine = pyttsx3.init()
+        if payload.rate:
+            engine.setProperty("rate", int(175 * float(payload.rate)))
+        engine.say(text)
+        engine.runAndWait()
+        return JSONResponse({"ok": True, "mode": "windows-sapi-fallback", "voice": voice, "language": payload.language})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+`, 'utf8');
+
+    if (!fs.existsSync(VOICE_STACK_LAUNCHER)) {
+      fs.writeFileSync(VOICE_STACK_LAUNCHER, `@echo off
+cd /d "%~dp0"
+if not exist "venv_311\\Scripts\\python.exe" py -3.11 -m venv venv_311
+"venv_311\\Scripts\\python.exe" -m pip install --upgrade pip setuptools wheel
+"venv_311\\Scripts\\python.exe" -m pip install -e .
+"venv_311\\Scripts\\python.exe" -m uvicorn silva_voice.server:app --host 127.0.0.1 --port 7100
+`, 'utf8');
+    }
   }
 
   async composeWhatsAppMessage(message: string, phone?: string) {
@@ -570,7 +619,7 @@ $speaker.Speak('${escaped}')
     for (const endpoint of endpoints) {
       try {
         const response = await axios.post(`http://localhost:7100${endpoint}`, payload, {
-          timeout: 1200,
+          timeout: 30000,
           responseType: 'arraybuffer',
           validateStatus: status => status >= 200 && status < 300
         });
@@ -637,8 +686,10 @@ $inbox = $ns.GetDefaultFolder(6)
     }
   }
 
-  async listClassicOutlookMessages(limit = 15) {
-    const safeLimit = Math.max(1, Math.min(Number(limit) || 15, 2000));
+  async listClassicOutlookMessages(limit = 100, since?: string) {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 5000));
+    const dateFilter = since ? `[ReceivedTime] > '${new Date(since).toLocaleString('en-GB')}'` : '';
+    
     const script = `
 $ErrorActionPreference = 'Stop'
 $outlook = New-Object -ComObject Outlook.Application
@@ -654,18 +705,27 @@ foreach ($root in $ns.Folders) { Add-Folders $root }
 foreach ($folder in $folders) {
   try {
     $items = $folder.Items
+    if ('${dateFilter}') {
+      $items = $items.Restrict("${dateFilter}")
+    }
     $items.Sort('[ReceivedTime]', $true)
     $folderRead = 0
-    for ($i = 1; $i -le $items.Count -and $folderRead -lt 250; $i++) {
+    for ($i = 1; $i -le $items.Count -and $folderRead -lt 500; $i++) {
       $item = $items.Item($i)
       if ($null -eq $item) { continue }
       if ([string]$item.MessageClass -notlike 'IPM.Note*') { continue }
       $body = [string]$item.Body
       $body = ($body -replace '\\s+', ' ').Trim()
       if ($body.Length -gt 700) { $body = $body.Substring(0, 700) }
+      
+      # Extract Account Name from FolderPath (e.g. \\email@domain.com\Inbox -> email@domain.com)
+      $path = [string]$folder.FolderPath
+      $account = $path.Split('\\')[2]
+
       $messages += [pscustomobject]@{
         id = [string]$item.EntryID
-        folderName = [string]$folder.FolderPath
+        accountId = "classic-$account"
+        folderName = $path
         subject = [string]$item.Subject
         sender = [string]$item.SenderName
         senderEmail = [string]$item.SenderEmailAddress
@@ -711,15 +771,27 @@ $messages |
   async analyzeUKProfessionalDocs(filePath: string, type: 'legal' | 'tax') {
     const stats = fs.statSync(filePath);
     const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split(/\r?\n/).filter(Boolean);
+    
+    // Enhanced analysis with regex for UK patterns
+    const vatPattern = /GB\s?\d{9}|\b\d{9}\s?GB\b/i;
+    const sectionPattern = /Section\s(21|8|13|14|47|48)\b/i;
+    const courtPattern = /\b(County Court|Tribunal|High Court|HMCTS)\b/i;
+    const moneyPattern = /(?:£|\$|EUR)\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?/i;
+    
+    const findings = {
+      hasVAT: vatPattern.test(content),
+      hasLegalSection: sectionPattern.test(content),
+      isCourtDocument: courtPattern.test(content),
+      mentionsMoney: moneyPattern.test(content)
+    };
+
     return {
       type,
       fileName: path.basename(filePath),
       filePath,
       size: stats.size,
       modifiedAt: stats.mtime.toISOString(),
-      lineCount: lines.length,
-      excerpt: content.slice(0, 4000),
+      findings,
       status: 'Ready for approved AI review'
     };
   }

@@ -1,34 +1,29 @@
-import { createRequire } from 'node:module'
+import { ipcRenderer, contextBridge } from 'electron';
 
-const require = createRequire(import.meta.url)
-const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron')
-const { ipcRenderer, contextBridge } = electron
-
-// --------- Expose some API to the Renderer process ---------
+console.log('[HermsDesk] Preload script initializing...');
 contextBridge.exposeInMainWorld('ipcRenderer', {
-  on(...args: Parameters<typeof ipcRenderer.on>) {
-    const [channel, listener] = args
-    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
+  on(channel: string, listener: (event: Electron.IpcRendererEvent, ...args: any[]) => void) {
+    return ipcRenderer.on(channel, (event: Electron.IpcRendererEvent, ...args: any[]) => listener(event, ...args));
   },
-  off(...args: Parameters<typeof ipcRenderer.off>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.off(channel, ...omit)
+  off(channel: string, ...args: any[]) {
+    // @ts-ignore
+    return ipcRenderer.off(channel, ...args);
   },
-  send(...args: Parameters<typeof ipcRenderer.send>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.send(channel, ...omit)
+  send(channel: string, ...args: any[]) {
+    // @ts-ignore
+    return ipcRenderer.send(channel, ...args);
   },
-  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.invoke(channel, ...omit)
+  invoke(channel: string, ...args: any[]) {
+    // @ts-ignore
+    return ipcRenderer.invoke(channel, ...args);
   },
   removeAllListeners(channel: string) {
-    return ipcRenderer.removeAllListeners(channel)
+    return ipcRenderer.removeAllListeners(channel);
   },
 
   // AI & Local Engine — Built-in Jan + TurboQuant (PRIMARY)
   listModels: () => ipcRenderer.invoke('ai:list-models'),
-  chat: (data: { model: string, messages: any[], provider?: string }) => ipcRenderer.invoke('ai:chat', data),
+  chat: (data: any) => ipcRenderer.invoke('ai:chat', data),
   checkLMStudio: () => ipcRenderer.invoke('ai:check-lmstudio'),
   checkOpenCode: () => ipcRenderer.invoke('ai:check-opencode'),
   listOpenCodeModels: () => ipcRenderer.invoke('ai:list-opencode-models'),
@@ -36,13 +31,13 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   janStatus: () => ipcRenderer.invoke('ai:jan-status'),
   modelHubDiagnostics: () => ipcRenderer.invoke('ai:model-hub-diagnostics'),
   startJan: () => ipcRenderer.invoke('ai:start-jan'),
-  loadJanModel: (model: { name: string, path?: string }) => ipcRenderer.invoke('ai:load-jan-model', model),
+  loadJanModel: (model: any) => ipcRenderer.invoke('ai:load-jan-model', model),
   scanPC: () => ipcRenderer.invoke('ai:scan-pc'),
   getResourceUsage: () => ipcRenderer.invoke('ai:get-resource-usage'),
 
   // ME 1.8 — Full engine status and smart routing
   engineStatus: () => ipcRenderer.invoke('ai:engine-status'),
-  chatBest: (data: { model: string, messages: any[] }) => ipcRenderer.invoke('ai:chat-best', data),
+  chatBest: (data: any) => ipcRenderer.invoke('ai:chat-best', data),
   
   // New Providers & HF
   searchHF: (query: string) => ipcRenderer.invoke('ai:search-hf', query),
@@ -64,7 +59,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   openApp: (appName: string) => ipcRenderer.invoke('app:open', appName),
   selectFiles: () => ipcRenderer.invoke('file:select-files'),
   selectFolder: () => ipcRenderer.invoke('file:select-folder'),
-  analyzeUK: (path: string, type: 'legal' | 'tax') => ipcRenderer.invoke('file:analyze-uk', { path, type }),
+  analyzeUK: (path: string, type: string) => ipcRenderer.invoke('file:analyze-uk', { path, type }),
 
   // Tool Registry
   getTools: () => ipcRenderer.invoke('tools:get-all'),
@@ -86,7 +81,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   // Multi-Agent Orchestrator
   getAgents: () => ipcRenderer.invoke('agents:get-all'),
   updateAgentStatus: (id: string, status: string, background: boolean) => ipcRenderer.invoke('agents:update-status', { id, status, background }),
-  createAgentTask: (input: string, agentId?: string) => ipcRenderer.invoke('agents:create-task', { input, agentId }),
+  createAgentTask: (input: any, agentId: any) => ipcRenderer.invoke('agents:create-task', { input, agentId }),
   getAgentTasks: () => ipcRenderer.invoke('agents:get-tasks'),
 
   // Workspace
@@ -100,53 +95,55 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getWhatsAppChannelSettings: () => ipcRenderer.invoke('whatsapp:settings'),
   saveWhatsAppChannelSettings: (settings: any) => ipcRenderer.invoke('whatsapp:save-settings', settings),
   getWhatsAppRoutes: () => ipcRenderer.invoke('whatsapp:routes'),
-  routeWhatsAppMessage: (text: string, from?: string) => ipcRenderer.invoke('whatsapp:route-message', { text, from }),
+  routeWhatsAppMessage: (text: string, from: any) => ipcRenderer.invoke('whatsapp:route-message', { text, from }),
   composeWhatsAppDraft: (draftId: string) => ipcRenderer.invoke('whatsapp:compose-draft', draftId),
   getScheduledTasks: () => ipcRenderer.invoke('workspace:get-tasks'),
-  saveScheduledTasks: (tasks: any[]) => ipcRenderer.invoke('workspace:save-tasks', tasks),
+  saveScheduledTasks: (tasks: any) => ipcRenderer.invoke('workspace:save-tasks', tasks),
   runScheduledTask: (id: string) => ipcRenderer.invoke('workspace:run-scheduled-task', id),
   getScheduledRuns: () => ipcRenderer.invoke('workspace:get-scheduled-runs'),
   getGeneralSettings: () => ipcRenderer.invoke('workspace:get-settings'),
   saveGeneralSettings: (settings: any) => ipcRenderer.invoke('workspace:save-settings', settings),
   getModelPreset: () => ipcRenderer.invoke('workspace:get-model-preset'),
-  saveModelPreset: (preset: { provider: string, model: string }) => ipcRenderer.invoke('workspace:save-model-preset', preset),
+  saveModelPreset: (preset: any) => ipcRenderer.invoke('workspace:save-model-preset', preset),
   createShortcut: () => ipcRenderer.invoke('desktop:create-shortcut'),
   getComputerOverview: () => ipcRenderer.invoke('desktop:computer-overview'),
-  listDirectory: (folderPath?: string) => ipcRenderer.invoke('desktop:list-directory', folderPath),
+  listDirectory: (folderPath: any) => ipcRenderer.invoke('desktop:list-directory', folderPath),
   revealPath: (targetPath: string) => ipcRenderer.invoke('desktop:reveal-path', targetPath),
   openPath: (targetPath: string) => ipcRenderer.invoke('desktop:open-path', targetPath),
-  openTerminal: (folderPath?: string) => ipcRenderer.invoke('desktop:open-terminal', folderPath),
-  composeWhatsApp: (message: string, phone?: string) => ipcRenderer.invoke('desktop:whatsapp-compose', { message, phone }),
+  openTerminal: (folderPath: any) => ipcRenderer.invoke('desktop:open-terminal', folderPath),
+  composeWhatsApp: (message: string, phone: any) => ipcRenderer.invoke('desktop:whatsapp-compose', { message, phone }),
   getVoiceStackStatus: () => ipcRenderer.invoke('desktop:voice-stack-status'),
-  speakVoiceStack: (text: string, options?: any) => ipcRenderer.invoke('desktop:voice-stack-speak', { text, options }),
+  speakVoiceStack: (text: string, options: any) => ipcRenderer.invoke('desktop:voice-stack-speak', { text, options }),
   diagnoseVoiceStack: () => ipcRenderer.invoke('desktop:voice-stack-diagnose'),
   buildVoiceStack: () => ipcRenderer.invoke('desktop:voice-stack-build'),
-  getSilvaEvents: (limit?: number) => ipcRenderer.invoke('silva-events:get-recent', limit),
+  getSilvaEvents: (limit: any) => ipcRenderer.invoke('silva-events:get-recent', limit),
   getAutomationEvents: () => ipcRenderer.invoke('automation:get-events'),
-  openBrowserAutomation: (target?: string) => ipcRenderer.invoke('automation:open-browser', target),
+  openBrowserAutomation: (target: any) => ipcRenderer.invoke('automation:open-browser', target),
   researchWebAutomation: (query: string) => ipcRenderer.invoke('automation:research-web', query),
   getBrowserOperatorState: () => ipcRenderer.invoke('browser-operator:get-state'),
-  openBrowserOperator: (target?: string, sessionId?: string, label?: string) => ipcRenderer.invoke('browser-operator:open', { target, sessionId, label }),
-  navigateBrowserOperator: (target: string, sessionId?: string) => ipcRenderer.invoke('browser-operator:navigate', { target, sessionId }),
-  readBrowserOperator: (sessionId?: string) => ipcRenderer.invoke('browser-operator:read', sessionId),
-  clickBrowserOperator: (selector: string, sessionId?: string) => ipcRenderer.invoke('browser-operator:click', { selector, sessionId }),
-  typeBrowserOperator: (selector: string, text: string, sessionId?: string) => ipcRenderer.invoke('browser-operator:type', { selector, text, sessionId }),
-  screenshotBrowserOperator: (sessionId?: string) => ipcRenderer.invoke('browser-operator:screenshot', sessionId),
-  inspectBrowserOperator: (sessionId?: string) => ipcRenderer.invoke('browser-operator:inspect', sessionId),
+  openBrowserOperator: (target: any, sessionId: any, label: any) => ipcRenderer.invoke('browser-operator:open', { target, sessionId, label }),
+  navigateBrowserOperator: (target: string, sessionId: any) => ipcRenderer.invoke('browser-operator:navigate', { target, sessionId }),
+  readBrowserOperator: (sessionId: any) => ipcRenderer.invoke('browser-operator:read', sessionId),
+  clickBrowserOperator: (selector: string, sessionId: any) => ipcRenderer.invoke('browser-operator:click', { selector, sessionId }),
+  typeBrowserOperator: (selector: string, text: string, sessionId: any) => ipcRenderer.invoke('browser-operator:type', { selector, text, sessionId }),
+  screenshotBrowserOperator: (sessionId: any) => ipcRenderer.invoke('browser-operator:screenshot', sessionId),
+  inspectBrowserOperator: (sessionId: any) => ipcRenderer.invoke('browser-operator:inspect', sessionId),
   getClassicOutlookStatus: () => ipcRenderer.invoke('outlook:classic-status'),
-  listClassicOutlookMessages: (limit?: number) => ipcRenderer.invoke('outlook:classic-messages', limit),
+  listClassicOutlookMessages: (limit: any) => ipcRenderer.invoke('outlook:classic-messages', limit),
   startMicrosoftGraphLogin: () => ipcRenderer.invoke('microsoft:graph-start-login'),
   completeMicrosoftGraphLogin: () => ipcRenderer.invoke('microsoft:graph-complete-login'),
   getMicrosoftGraphStatus: () => ipcRenderer.invoke('microsoft:graph-status'),
   getMicrosoftMailboxSettings: () => ipcRenderer.invoke('microsoft:graph-mailbox-settings'),
-  listMicrosoftGraphMessages: (limit?: number) => ipcRenderer.invoke('microsoft:graph-messages', limit),
-  listMicrosoftGraphFolders: () => ipcRenderer.invoke('microsoft:graph-folders'),
-  syncEmailIntelligence: (limitPerFolder?: number) => ipcRenderer.invoke('microsoft:graph-sync-email-intelligence', limitPerFolder),
-  syncEmailBatch: (options?: any) => ipcRenderer.invoke('microsoft:graph-sync-email-batch', options),
-  getMailSyncState: () => ipcRenderer.invoke('microsoft:graph-mail-sync-state'),
-  resetMailSyncState: () => ipcRenderer.invoke('microsoft:graph-reset-mail-sync'),
-  runMicrosoftGraphMailAction: (action: any) => ipcRenderer.invoke('microsoft:graph-mail-action', action),
-  disconnectMicrosoftGraph: () => ipcRenderer.invoke('microsoft:graph-disconnect'),
+  listMicrosoftGraphMessages: (limit: any) => ipcRenderer.invoke('microsoft:graph-messages', limit),
+  listMicrosoftGraphFolders: (accountId: any) => ipcRenderer.invoke('microsoft:graph-folders', accountId),
+  syncEmailIntelligence: (accountId: string, limitPerFolder: any) => ipcRenderer.invoke('microsoft:graph-sync-email-intelligence', { accountId, limitPerFolder }),
+  syncEmailBatch: (accountId: string, options: any) => ipcRenderer.invoke('microsoft:graph-sync-email-batch', { accountId, ...options }),
+  getMailSyncState: (accountId: string) => ipcRenderer.invoke('microsoft:graph-mail-sync-state', accountId),
+  resetMailSyncState: (accountId: string) => ipcRenderer.invoke('microsoft:graph-reset-mail-sync', accountId),
+  runMicrosoftGraphMailAction: (accountId: string, action: any) => ipcRenderer.invoke('microsoft:graph-mail-action', { accountId, ...action }),
+  disconnectMicrosoftGraph: (accountId: string) => ipcRenderer.invoke('microsoft:graph-disconnect', accountId),
+  getMicrosoftGraphAccounts: () => ipcRenderer.invoke('microsoft:graph-list-accounts'),
+  searchIndexedEmails: (query: string, accountId?: string) => ipcRenderer.invoke('microsoft:graph-search-index', { query, accountId }),
   getSilvaMemory: () => ipcRenderer.invoke('workspace:get-silva-memory'),
   saveSilvaMemory: (memory: string) => ipcRenderer.invoke('workspace:save-silva-memory', memory),
   getEmailIntelligence: () => ipcRenderer.invoke('workspace:get-email-intelligence'),
@@ -154,11 +151,11 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getProjects: () => ipcRenderer.invoke('workspace:get-projects'),
   saveProject: (project: any) => ipcRenderer.invoke('workspace:save-project', project),
   deleteProject: (id: string) => ipcRenderer.invoke('workspace:delete-project', id),
-  addProjectFiles: (id: string, files: string[]) => ipcRenderer.invoke('workspace:add-project-files', { id, files }),
-  startProjectTask: (id: string, prompt: string, agentId?: string) => ipcRenderer.invoke('workspace:start-project-task', { id, prompt, agentId }),
+  addProjectFiles: (id: string, files: any) => ipcRenderer.invoke('workspace:add-project-files', { id, files }),
+  startProjectTask: (id: string, prompt: string, agentId: any) => ipcRenderer.invoke('workspace:start-project-task', { id, prompt, agentId }),
   getWideResearchRuns: () => ipcRenderer.invoke('wide-research:get-runs'),
-  getWideResearchBlackboard: (runId?: string) => ipcRenderer.invoke('wide-research:get-blackboard', runId),
-  startWideResearch: (brief: string, items?: string[]) => ipcRenderer.invoke('wide-research:start', { brief, items }),
+  getWideResearchBlackboard: (runId: any) => ipcRenderer.invoke('wide-research:get-blackboard', runId),
+  startWideResearch: (brief: string, items: any) => ipcRenderer.invoke('wide-research:start', { brief, items }),
   getConnectorStatuses: () => ipcRenderer.invoke('ai:get-connector-statuses'),
   createSlidesArtifact: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-slides', { title, brief }),
   createWebsiteArtifact: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-website', { title, brief }),
@@ -167,4 +164,4 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   createJusticeCasePack: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-justice-case', { title, brief }),
   createPurchaseProtectionPack: (title: string, brief: string) => ipcRenderer.invoke('artifacts:create-purchase-protection', { title, brief }),
   revealArtifactsRoot: () => ipcRenderer.invoke('artifacts:reveal-root'),
-})
+});
