@@ -456,6 +456,60 @@ function createWindow() {
     if (Array.isArray(m)) await processEmailIntelligence({ syncedAt: new Date().toISOString(), folders: [{ id: 'classic-outlook-inbox', displayName: 'Classic Outlook Inbox', syncedCount: m.length }], messages: m.map((msg: any) => ({ ...msg, id: `classic:${msg.id}`, folderId: `classic:${msg.folderName || 'mailbox'}`, folderName: msg.folderName || 'Classic Outlook Mailbox', categoryId: 'classic-outlook', categoryLabel: 'Classic Outlook', agentId: 'paperclip-full', approvalStatus: 'pending-review' })), summary: { 'classic-outlook': m.length } }, 'Classic Outlook')
     return m
   })
+  ipcMain.handle('outlook:classic-sync-batch', async (_, arg) => {
+    const existingState = store.get('classicMailSyncState', {}) as any;
+    const result = await integrationService.syncClassicOutlookMessagesBatch({
+      batchSize: arg?.batchSize || 1000,
+      reset: Boolean(arg?.reset),
+      state: existingState
+    });
+    if (result?.ok === false) return result;
+    const messages = Array.isArray(result?.messages) ? result.messages : [];
+    const accountsInBatch = new Set(messages.map((m: any) => m.accountId || 'classic-outlook'));
+    for (const accId of accountsInBatch) {
+      const accountMessages = messages.filter((m: any) => (m.accountId || 'classic-outlook') === accId);
+      if (!emailIndexService.getAccountMetadata(accId as string)) {
+        emailIndexService.registerAccount({
+          accountId: accId as string,
+          email: String(accId).replace(/^classic-/, ''),
+          displayName: `Classic: ${String(accId).replace(/^classic-/, '')}`
+        });
+      }
+      await emailIndexService.saveEmails(accId as string, accountMessages);
+    }
+    const processed = await processEmailIntelligence({
+      ok: true,
+      syncedAt: new Date().toISOString(),
+      folders: [{ id: 'classic-outlook-paged', displayName: 'Classic Outlook Mailbox', syncedCount: messages.length }],
+      messages,
+      batchCount: messages.length,
+      complete: Boolean(result?.state?.complete),
+      state: result?.state || {}
+    }, 'Classic Outlook');
+    const stats = emailIndexService.getGlobalStats();
+    const nextState = {
+      ...(result?.state || {}),
+      totalIndexed: processed?.mailboxMemory?.totalIndexed || stats.totalIndexed || 0,
+      globalTotalIndexed: stats.totalIndexed || 0,
+      totalAccounts: stats.totalAccounts || accountsInBatch.size,
+      lastBatchCount: messages.length,
+      updatedAt: new Date().toISOString(),
+      source: 'Classic Outlook'
+    };
+    store.set('classicMailSyncState', nextState);
+    return { ok: true, source: 'Classic Outlook', messages, batchCount: messages.length, complete: nextState.complete, state: nextState };
+  })
+  ipcMain.handle('outlook:classic-sync-state', () => store.get('classicMailSyncState', {
+    source: 'Classic Outlook',
+    complete: false,
+    totalIndexed: 0,
+    totalAccounts: emailIndexService.getGlobalStats()?.totalAccounts || 0,
+    lastBatchCount: 0
+  }))
+  ipcMain.handle('outlook:classic-reset-sync', () => {
+    store.delete('classicMailSyncState');
+    return { ok: true };
+  })
   ipcMain.handle('microsoft:graph-start-login', () => microsoftGraph.startDeviceLogin())
   ipcMain.handle('microsoft:graph-complete-login', () => microsoftGraph.completeDeviceLogin())
   ipcMain.handle('microsoft:graph-status', (_, accountId) => microsoftGraph.getAccountStatus(accountId))

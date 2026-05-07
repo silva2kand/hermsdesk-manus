@@ -149,7 +149,15 @@ export class MicrosoftGraphService {
           await new Promise(resolve => setTimeout(resolve, Math.max((pending.interval || 5) + 5, 5) * 1000));
           continue;
         }
-        return { ok: false, error: error.response?.data?.error_description || error.message };
+        const description = error.response?.data?.error_description || error.message;
+        if (/AADSTS7000218|client_secret|client_assertion/i.test(description)) {
+          return {
+            ok: false,
+            code: 'client_secret_required',
+            error: 'Microsoft accepted the device code, but this Azure app registration requires a client secret. Click Set Secret, save the app client secret, then start Microsoft login again. Or enable public client/device-code flows on the Azure app registration.'
+          };
+        }
+        return { ok: false, error: description };
       }
     }
     return { ok: false, error: 'Still waiting for Microsoft sign-in. Click Complete after approving the code.' };
@@ -446,7 +454,7 @@ export class MicrosoftGraphService {
   }
 
   setSecret(secret: string) {
-    this.store.set('microsoftGraph.clientSecret', secret);
+    this.store.set('microsoftGraph.clientSecret', String(secret || '').trim());
     return { ok: true };
   }
 

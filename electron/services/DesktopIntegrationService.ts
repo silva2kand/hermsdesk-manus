@@ -777,6 +777,111 @@ $messages |
     }
   }
 
+  async syncClassicOutlookMessagesBatch(options: { batchSize?: number; reset?: boolean; state?: any } = {}) {
+    const safeLimit = Math.max(25, Math.min(Number(options.batchSize) || 1000, 2000));
+    const incomingState = options.reset ? { folderCursors: {}, folderCompleted: {}, totalIndexed: 0 } : (options.state || {});
+    const stateJson = JSON.stringify({
+      folderCursors: incomingState.folderCursors || {},
+      folderCompleted: incomingState.folderCompleted || {}
+    }).replace(/'/g, "''");
+
+    const script = `
+$ErrorActionPreference = 'Stop'
+$state = '${stateJson}' | ConvertFrom-Json
+$folderCursors = @{}
+$folderCompleted = @{}
+if ($state.folderCursors) {
+  foreach ($p in $state.folderCursors.PSObject.Properties) { $folderCursors[$p.Name] = [int]$p.Value }
+}
+if ($state.folderCompleted) {
+  foreach ($p in $state.folderCompleted.PSObject.Properties) { $folderCompleted[$p.Name] = [bool]$p.Value }
+}
+$outlook = New-Object -ComObject Outlook.Application
+$ns = $outlook.GetNamespace('MAPI')
+$messages = @()
+$folders = New-Object System.Collections.ArrayList
+function Add-Folders($folder) {
+  try {
+    if ($folder.DefaultItemType -eq 0) { [void]$folders.Add($folder) }
+    foreach ($child in $folder.Folders) { Add-Folders $child }
+  } catch {}
+}
+foreach ($root in $ns.Folders) { Add-Folders $root }
+
+foreach ($folder in $folders) {
+  if ($messages.Count -ge ${safeLimit}) { break }
+  try {
+    $path = [string]$folder.FolderPath
+    if ($folderCompleted[$path]) { continue }
+    $items = $folder.Items
+    $items.Sort('[ReceivedTime]', $true)
+    $start = 1
+    if ($folderCursors.ContainsKey($path) -and $folderCursors[$path] -gt 0) { $start = [int]$folderCursors[$path] }
+    $i = $start
+    while ($i -le $items.Count -and $messages.Count -lt ${safeLimit}) {
+      $item = $items.Item($i)
+      $i++
+      if ($null -eq $item) { continue }
+      if ([string]$item.MessageClass -notlike 'IPM.Note*') { continue }
+      $body = [string]$item.Body
+      $body = ($body -replace '\\s+', ' ').Trim()
+      if ($body.Length -gt 700) { $body = $body.Substring(0, 700) }
+      $parts = $path.Split('\\')
+      $account = if ($parts.Length -gt 2) { $parts[2] } else { $ns.CurrentProfileName }
+      $messages += [pscustomobject]@{
+        id = [string]$item.EntryID
+        accountId = "classic-$account"
+        folderId = "classic:$path"
+        folderName = $path
+        subject = [string]$item.Subject
+        sender = [string]$item.SenderName
+        senderEmail = [string]$item.SenderEmailAddress
+        receivedAt = $item.ReceivedTime.ToString('o')
+        unread = [bool]$item.UnRead
+        hasAttachments = [bool]($item.Attachments.Count -gt 0)
+        bodyPreview = $body
+        categoryId = 'classic-outlook'
+        categoryLabel = 'Classic Outlook'
+        agentId = 'paperclip-full'
+        approvalStatus = 'pending-review'
+      }
+    }
+    $folderCursors[$path] = $i
+    if ($i -gt $items.Count) { $folderCompleted[$path] = $true }
+  } catch {
+    continue
+  }
+}
+
+$cursorObj = [ordered]@{}
+foreach ($k in $folderCursors.Keys) { $cursorObj[$k] = $folderCursors[$k] }
+$completedObj = [ordered]@{}
+foreach ($k in $folderCompleted.Keys) { $completedObj[$k] = $folderCompleted[$k] }
+$allComplete = $true
+foreach ($folder in $folders) {
+  $path = [string]$folder.FolderPath
+  if (-not $folderCompleted[$path]) { $allComplete = $false; break }
+}
+[pscustomobject]@{
+  ok = $true
+  messages = @($messages | Sort-Object {[datetime]$_.receivedAt} -Descending)
+  state = [pscustomobject]@{
+    folderCursors = $cursorObj
+    folderCompleted = $completedObj
+    totalFolders = $folders.Count
+    complete = $allComplete
+    lastBatchCount = $messages.Count
+    updatedAt = (Get-Date).ToString('o')
+  }
+} | ConvertTo-Json -Compress -Depth 6
+`;
+    try {
+      return await this.runPowerShellJson(script);
+    } catch (error: any) {
+      return { ok: false, error: error.message || 'Could not page Classic Outlook mailbox.' };
+    }
+  }
+
   async selectFiles() {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections']

@@ -56,6 +56,9 @@ interface Window {
     inspectBrowserOperator: (sessionId?: string) => Promise<any>;
     getClassicOutlookStatus: () => Promise<any>;
     listClassicOutlookMessages: (limit?: number) => Promise<any[] | { ok: false, error: string }>;
+    syncClassicOutlookBatch?: (arg?: any) => Promise<any>;
+    getClassicOutlookSyncState?: () => Promise<any>;
+    resetClassicOutlookSyncState?: () => Promise<any>;
     startMicrosoftGraphLogin: () => Promise<any>;
     completeMicrosoftGraphLogin: () => Promise<any>;
     setMicrosoftGraphSecret?: (secret: string) => Promise<any>;

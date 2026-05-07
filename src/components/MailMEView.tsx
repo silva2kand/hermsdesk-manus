@@ -80,7 +80,9 @@ export const MailMEView = () => {
   };
 
   const refreshMailSyncState = async () => {
-    const state = await (window.ipcRenderer as any)?.getMailSyncState?.();
+    const graphState = await (window.ipcRenderer as any)?.getMailSyncState?.();
+    const classicState = await (window.ipcRenderer as any)?.getClassicOutlookSyncState?.();
+    const state = graphState?.totalIndexed ? graphState : classicState || graphState;
     if (state) setMailSyncState(state);
     const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
     if (intel?.mailboxMemory || intel?.memory) setMailMemory(intel.mailboxMemory || intel.memory);
@@ -150,15 +152,19 @@ export const MailMEView = () => {
   }, [graphStatus?.connected, mailSyncState?.totalIndexed]);
 
   const indexGraphBatch = async (reset = false) => {
-    if (!(window.ipcRenderer as any)?.syncEmailBatch) return;
+    const canUseGraph = Boolean(graphStatus?.connected && (window.ipcRenderer as any)?.syncEmailBatch);
+    const canUseClassic = Boolean(classicOutlookStatus?.ok && (window.ipcRenderer as any)?.syncClassicOutlookBatch);
+    if (!canUseGraph && !canUseClassic) return;
     setBatchIndexing(true);
     try {
-      const result = await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000, reset });
+      const result = canUseGraph
+        ? await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000, reset })
+        : await (window.ipcRenderer as any).syncClassicOutlookBatch({ batchSize: 1000, reset });
       if (result?.ok === false) throw new Error(result.error || 'Microsoft Graph mailbox indexing failed.');
       setMailSyncState(result?.state || null);
       const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
       if (intel?.mailboxMemory || intel?.memory) setMailMemory(intel.mailboxMemory || intel.memory);
-      showNotice(`Indexed ${result?.batchCount || result?.messages?.length || 0} real Graph emails${result?.complete ? '; mailbox complete.' : '; more batches remain.'}`);
+      showNotice(`Indexed ${result?.batchCount || result?.messages?.length || 0} real ${result?.source || (canUseGraph ? 'Graph' : 'Classic Outlook')} emails${result?.complete ? '; mailbox complete.' : '; more batches remain.'}`);
     } catch (error: any) {
       showNotice(error?.message || 'Could not index Microsoft Graph mailbox.');
     } finally {
@@ -167,7 +173,9 @@ export const MailMEView = () => {
   };
 
   const indexUntilComplete = async () => {
-    if (!(window.ipcRenderer as any)?.syncEmailBatch) return;
+    const canUseGraph = Boolean(graphStatus?.connected && (window.ipcRenderer as any)?.syncEmailBatch);
+    const canUseClassic = Boolean(classicOutlookStatus?.ok && (window.ipcRenderer as any)?.syncClassicOutlookBatch);
+    if (!canUseGraph && !canUseClassic) return;
     setBatchIndexing(true);
     try {
       let complete = false;
@@ -175,7 +183,9 @@ export const MailMEView = () => {
       let safety = 0;
       let latestState: any = null;
       while (!complete && safety < 80) {
-        const result = await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000 });
+        const result = canUseGraph
+          ? await (window.ipcRenderer as any).syncEmailBatch({ batchSize: 1000 })
+          : await (window.ipcRenderer as any).syncClassicOutlookBatch({ batchSize: 1000 });
         if (result?.ok === false) throw new Error(result.error || 'Microsoft Graph mailbox indexing failed.');
         totalThisRun += result?.batchCount || result?.messages?.length || 0;
         complete = Boolean(result?.complete || result?.state?.complete || (result?.batchCount || 0) === 0);
@@ -195,9 +205,10 @@ export const MailMEView = () => {
   };
 
   const resetGraphIndex = async () => {
-    await (window.ipcRenderer as any)?.resetMailSyncState?.();
+    if (graphStatus?.connected) await (window.ipcRenderer as any)?.resetMailSyncState?.();
+    else await (window.ipcRenderer as any)?.resetClassicOutlookSyncState?.();
     await refreshMailSyncState();
-    showNotice('Microsoft Graph mailbox index checkpoint reset. Next run starts from newest mail again.');
+    showNotice('Mailbox index checkpoint reset. Next run starts from newest mail again.');
   };
 
   const copyEmail = () => {
@@ -313,9 +324,13 @@ export const MailMEView = () => {
                 Uses delegated permissions.
               </p>
               <button
-                onClick={() => {
+                onClick={async () => {
                   const s = window.prompt('Enter Microsoft App Client Secret (if required)', '');
-                  if (s !== null) (window.ipcRenderer as any)?.setMicrosoftGraphSecret?.(s);
+                  if (s !== null) {
+                    await (window.ipcRenderer as any)?.setMicrosoftGraphSecret?.(s);
+                    showNotice('Microsoft client secret saved locally. Start Microsoft login again to use it.');
+                    setGraphLogin(null);
+                  }
                 }}
                 className="text-[9px] font-black text-blue-600 hover:underline uppercase tracking-widest"
               >
@@ -428,21 +443,21 @@ export const MailMEView = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => indexGraphBatch(false)}
-              disabled={!graphStatus?.connected || batchIndexing}
+              disabled={(!graphStatus?.connected && !classicOutlookStatus?.ok) || batchIndexing}
               className="px-4 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-gray-800 transition-all disabled:bg-gray-300"
             >
               {batchIndexing ? 'Indexing...' : 'Index next 1,000'}
             </button>
             <button
               onClick={indexUntilComplete}
-              disabled={!graphStatus?.connected || batchIndexing}
+              disabled={(!graphStatus?.connected && !classicOutlookStatus?.ok) || batchIndexing}
               className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all disabled:bg-gray-300"
             >
               Index until complete
             </button>
             <button
               onClick={resetGraphIndex}
-              disabled={!graphStatus?.connected || batchIndexing}
+              disabled={(!graphStatus?.connected && !classicOutlookStatus?.ok) || batchIndexing}
               className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all disabled:text-gray-300"
             >
               Reset checkpoint
@@ -454,7 +469,7 @@ export const MailMEView = () => {
           <IndexStat label="Total indexed" value={(mailSyncState?.totalIndexed || 0).toLocaleString()} />
           <IndexStat label="Last batch" value={(mailSyncState?.lastBatchCount || 0).toLocaleString()} />
           <IndexStat label="Accounts" value={(mailSyncState?.totalAccounts || 0).toString()} />
-          <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected ? 'Crawling' : 'Sync Pending'} />
+          <IndexStat label="Status" value={mailSyncState?.complete ? 'Complete' : graphStatus?.connected || classicOutlookStatus?.ok ? 'Ready / Crawling' : 'Sync Pending'} />
         </div>
 
         {mailMemory && (
@@ -488,7 +503,7 @@ export const MailMEView = () => {
 
         {mailSyncState?.lastError && (
           <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-[10px] font-bold text-red-700">
-            Last Graph indexing error: {mailSyncState.lastError}
+            Last mailbox indexing error: {mailSyncState.lastError}
           </div>
         )}
 
