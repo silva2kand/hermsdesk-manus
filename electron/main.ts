@@ -241,7 +241,7 @@ function createWindow() {
     return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, urgent }
   }
 
-  const processEmailIntelligence = async (data: any, source = 'mailbox') => {
+  const processEmailIntelligence = async (data: any, source = 'mailbox', options: { taskLimit?: number } = {}) => {
     const current = workspaceService.getEmailIntelligence?.() || { messages: [], folders: [], summary: {} }
     const statusById = new Map((current.messages || []).map((m: any) => [m.id, m.approvalStatus]))
     const processed = new Set(store.get('mailProcessedTaskIds', []) as string[])
@@ -265,8 +265,9 @@ function createWindow() {
       message.unread || message.importance === 'high' || message.flagStatus === 'flagged' ||
       ['solicitors', 'visa-sponsors', 'tax-vat-mot', 'council-bills', 'land-registry', 'accountant', 'insurance'].includes(message.categoryId)
     )
+    const taskLimit = Math.max(0, Math.min(Number(options.taskLimit ?? 40), 125))
     const taskCandidates = incomingMessages.filter((message: any) => message.id && !processed.has(message.id) && highValue(message))
-      .sort((a: any, b: any) => Number(highValue(b)) - Number(highValue(a)) || String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))).slice(0, 125)
+      .sort((a: any, b: any) => Number(highValue(b)) - Number(highValue(a)) || String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))).slice(0, taskLimit)
 
     for (const message of taskCandidates) {
       processed.add(message.id)
@@ -316,11 +317,11 @@ function createWindow() {
               agentId: 'paperclip-full'
             })));
           }
-          await processEmailIntelligence({ 
-            syncedAt: new Date().toISOString(), 
-            folders: Array.from(accountsInBatch).map(id => ({ id, displayName: id, syncedCount: messages.filter((m: any) => m.accountId === id).length })), 
-            messages 
-          }, 'Classic Outlook');
+          await processEmailIntelligence({
+            syncedAt: new Date().toISOString(),
+            folders: Array.from(accountsInBatch).map(id => ({ id, displayName: id, syncedCount: messages.filter((m: any) => m.accountId === id).length })),
+            messages
+          }, 'Classic Outlook', { taskLimit: 20 });
         }
       }
     } catch (error: any) { appLog('error', `Mail ME Classic Outlook auto-sync failed: ${error?.message || error}`) }
@@ -485,7 +486,7 @@ function createWindow() {
       batchCount: messages.length,
       complete: Boolean(result?.state?.complete),
       state: result?.state || {}
-    }, 'Classic Outlook');
+    }, 'Classic Outlook', { taskLimit: 20 });
     const stats = emailIndexService.getGlobalStats();
     const nextState = {
       ...(result?.state || {}),

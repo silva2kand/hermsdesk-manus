@@ -22,7 +22,7 @@ const VOICE_STACK_MODELS = path.join(VOICE_STACK_ROOT, 'models');
 const VOICE_STACK_PYTHON = path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
 
 export class DesktopIntegrationService {
-  private async runPowerShellJson(script: string) {
+  private async runPowerShellJson(script: string, timeout = 30000, maxBufferMb = 5) {
     const { stdout, stderr } = await execFileAsync('powershell.exe', [
       '-NoProfile',
       '-ExecutionPolicy',
@@ -30,8 +30,8 @@ export class DesktopIntegrationService {
       '-Command',
       script
     ], {
-      timeout: 30000,
-      maxBuffer: 1024 * 1024 * 5,
+      timeout,
+      maxBuffer: 1024 * 1024 * maxBufferMb,
       windowsHide: true
     });
     if (stderr && !stdout) throw new Error(stderr);
@@ -778,7 +778,7 @@ $messages |
   }
 
   async syncClassicOutlookMessagesBatch(options: { batchSize?: number; reset?: boolean; state?: any } = {}) {
-    const safeLimit = Math.max(25, Math.min(Number(options.batchSize) || 1000, 2000));
+    const safeLimit = Math.max(25, Math.min(Number(options.batchSize) || 500, 1000));
     const incomingState = options.reset ? { folderCursors: {}, folderCompleted: {}, totalIndexed: 0 } : (options.state || {});
     const stateJson = JSON.stringify({
       folderCursors: incomingState.folderCursors || {},
@@ -876,7 +876,7 @@ foreach ($folder in $folders) {
 } | ConvertTo-Json -Compress -Depth 6
 `;
     try {
-      return await this.runPowerShellJson(script);
+      return await this.runPowerShellJson(script, 180000, 50);
     } catch (error: any) {
       return { ok: false, error: error.message || 'Could not page Classic Outlook mailbox.' };
     }
