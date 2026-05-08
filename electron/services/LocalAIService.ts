@@ -277,6 +277,7 @@ export class LocalAIService {
 
     return {
       engine: 'Jan + TurboQuant',
+      optimizer: 'DFLASH/DFALSH + TurboQuant',
       role: 'Primary Built-in Engine',
       apiOnline: isOnline,
       installed: runtime.installed || isOnline,
@@ -297,6 +298,9 @@ export class LocalAIService {
       portOccupiedByOther,
       models,
       turboQuant: {
+        dflash: true,
+        dfalsh: true,
+        label: 'DFLASH/DFALSH + TurboQuant adaptive scheduler',
         policy: this.store.get('turboQuant.lastPolicy', null),
         metrics: this.store.get('turboQuant.lastMetrics', null)
       },
@@ -414,7 +418,7 @@ export class LocalAIService {
     const selectedModel = this.chooseBestJanModel(modelIds, model);
     const response = await axios.post(`${this.janUrl}/chat/completions`, { model: selectedModel, messages: messages.map(m => ({ role: m.role, content: m.content })), stream: false }, { timeout: 120000, headers: this.getJanAuthHeaders() });
     const metrics = this.saveJanMetrics(response.data, selectedModel);
-    return { message: { content: response.data?.choices?.[0]?.message?.content || '' }, engine: 'Jan + TurboQuant', model: selectedModel, metrics };
+    return { message: { content: response.data?.choices?.[0]?.message?.content || '' }, engine: 'Jan + TurboQuant + DFLASH', model: selectedModel, metrics };
   }
 
   async chatWithBestAvailable(model: string, messages: any[], options: { preferred?: 'jan' | 'ollama' | 'lmstudio' } = {}): Promise<any> {
@@ -432,12 +436,22 @@ export class LocalAIService {
       if (ollamaCheck.status === 200) return await this.chatWithOllama(model, messages);
     } catch (e) {}
 
+    try {
+      const lmStudio = await this.checkLMStudio();
+      if (lmStudio?.online) return await this.chatWithLMStudio(model, messages);
+    } catch (e) {}
+
+    try {
+      const openCode = await this.checkOpenCode();
+      if (openCode?.online) return await this.chatWithOpenCode(model, messages);
+    } catch (e) {}
+
     return { message: { content: 'No local AI engine is available.' }, engine: 'None' };
   }
 
   async getFullEngineStatus() {
     const [janOnline, ollamaModels, lmStudio, openCode] = await Promise.all([this.checkJanEngine().catch(() => false), this.listOllamaModels().catch(() => []), this.checkLMStudio().catch(() => null), this.checkOpenCode().catch(() => null)]);
-    return { primary: { name: 'Jan + TurboQuant', online: janOnline, activeModel: this.activeJanModel }, ollama: { name: 'Ollama', online: ollamaModels.length > 0 }, lmStudio: { name: 'LM Studio', online: lmStudio?.online || false } };
+    return { primary: { name: 'Jan + TurboQuant + DFLASH', online: janOnline, activeModel: this.activeJanModel }, ollama: { name: 'Ollama', online: ollamaModels.length > 0 }, lmStudio: { name: 'LM Studio', online: lmStudio?.online || false }, openCode: { name: 'OpenCode', online: openCode?.online || false } };
   }
 
   async listOllamaModels(): Promise<Model[]> {

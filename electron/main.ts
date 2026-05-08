@@ -87,7 +87,7 @@ function initializeStoreAndServices() {
         theme: 'Quantum Blue',
         appearance: 'Dark',
         notifications: { productUpdates: true, earlyAccess: false, taskEmail: true },
-        modelPreset: { provider: 'Jan', model: 'Auto local model' }
+        modelPreset: { provider: 'Auto', model: 'Auto mix' }
       },
       knowledge: []
     }
@@ -377,12 +377,62 @@ function createWindow() {
   schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
 
   ipcMain.handle('ai:list-models', () => aiService.listOllamaModels())
+  const chatWithAutoProviders = async (model: string, messages: any[]) => {
+    const attempts: any[] = [];
+    const tryRoute = async (label: string, task: () => Promise<any>) => {
+      const started = Date.now();
+      try {
+        const result = await task();
+        const content = result?.message?.content || result?.content || result?.choices?.[0]?.message?.content || '';
+        attempts.push({ label, ok: Boolean(content), durationMs: Date.now() - started, model: result?.model || model || 'auto' });
+        if (content) return { ...result, content, message: result.message || { content }, routeAttempts: attempts };
+      } catch (error: any) {
+        attempts.push({ label, ok: false, error: error?.message || String(error), durationMs: Date.now() - started });
+      }
+      return null;
+    };
+
+    const local = await tryRoute('Jan + TurboQuant + DFLASH', () => aiService.chatWithBestAvailable(model, messages, { preferred: 'jan' }));
+    if (local) return { ...local, engine: local.engine || 'Jan + TurboQuant + DFLASH' };
+
+    const ollama = await tryRoute('Ollama external local', () => aiService.chatWithOllama(model, messages));
+    if (ollama) return { ...ollama, engine: ollama.engine || 'Ollama external local' };
+
+    const lm = await tryRoute('LM Studio external local', () => aiService.chatWithLMStudio(model, messages));
+    if (lm) return { ...lm, engine: lm.engine || 'LM Studio external local' };
+
+    const openCode = await tryRoute('OpenCode external local', () => aiService.chatWithOpenCode(model, messages));
+    if (openCode) return { ...openCode, engine: openCode.engine || 'OpenCode external local' };
+
+    const apiKeys = await providerService.getAPIKeys().catch(() => ({}));
+    if (apiKeys.openrouter) {
+      const openrouter = await tryRoute('OpenRouter free cloud', async () => {
+        const result = await providerService.chatOpenRouter(apiKeys.openrouter, 'openrouter/auto-free', messages);
+        return { content: result?.choices?.[0]?.message?.content || '', engine: 'OpenRouter free', model: 'openrouter/auto-free' };
+      });
+      if (openrouter) return openrouter;
+    }
+    if (apiKeys.nvidia) {
+      const nvidia = await tryRoute('NVIDIA NIM free cloud', async () => {
+        const result = await providerService.chatNvidiaNIM(apiKeys.nvidia, 'meta/llama-3.1-8b-instruct', messages);
+        return { content: result?.choices?.[0]?.message?.content || '', engine: 'NVIDIA NIM free', model: 'meta/llama-3.1-8b-instruct' };
+      });
+      if (nvidia) return nvidia;
+    }
+
+    return {
+      message: { content: `No AI provider responded. Auto tried: ${attempts.map(item => `${item.label}${item.error ? ` (${item.error})` : ''}`).join(' -> ')}` },
+      engine: 'Auto provider router',
+      routeAttempts: attempts
+    };
+  };
+
   ipcMain.handle('ai:chat', async (_, { model, messages, provider }) => {
     const sessionId = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`; const startedAt = Date.now();
     eventBus?.emit('session.started', 'local-ai', { sessionId, engine: provider || 'Jan+TurboQuant', model: model || 'auto', streaming: false }, sessionId);
     const p = (provider || '').toLowerCase().replace(/\s+/g, '')
     try {
-      let result; if (p === 'ollama') result = await aiService.chatWithOllama(model, messages); else if (p === 'lmstudio') result = await aiService.chatWithLMStudio(model, messages); else if (p === 'jan' || p === 'jan+turboquant') result = await aiService.chatWithBestAvailable(model, messages, { preferred: 'jan' }); else result = await aiService.chatWithBestAvailable(model, messages);
+      let result; if (p === 'auto' || p === 'automix' || p === '') result = await chatWithAutoProviders(model, messages); else if (p === 'ollama') result = await aiService.chatWithOllama(model, messages); else if (p === 'lmstudio') result = await aiService.chatWithLMStudio(model, messages); else if (p === 'opencode') result = await aiService.chatWithOpenCode(model, messages); else if (p === 'jan' || p === 'jan+turboquant') result = await aiService.chatWithBestAvailable(model, messages, { preferred: 'jan' }); else result = await chatWithAutoProviders(model, messages);
       const content = result?.message?.content || result?.content || '';
       eventBus?.emit('session.finished', 'local-ai', { sessionId, engine: result?.engine || provider || 'local-ai', model: model || 'auto', durationMs: Date.now() - startedAt, outputChars: content.length }, sessionId);
       return result;
@@ -453,7 +503,7 @@ function createWindow() {
   ipcMain.handle('ai:chat-best', async (_, { model, messages }) => {
     const sessionId = `smart-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`; const startedAt = Date.now();
     eventBus?.emit('session.started', 'smart-router', { sessionId, model: model || 'auto' }, sessionId);
-    const result = await aiService.chatWithBestAvailable(model, messages); const content = result?.message?.content || result?.content || '';
+    const result = await chatWithAutoProviders(model, messages); const content = result?.message?.content || result?.content || '';
     eventBus?.emit('session.finished', 'smart-router', { sessionId, engine: result?.engine || 'smart-router', durationMs: Date.now() - startedAt, outputChars: content.length }, sessionId);
     return result;
   })

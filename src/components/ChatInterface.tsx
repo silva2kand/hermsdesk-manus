@@ -17,9 +17,9 @@ const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }
 );
 
 const connectorId = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
-const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name;
+const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name === 'Auto' ? 'Auto' : name;
 const preferJanModel = (models: string[]) => models.find(m => /qwen/i.test(m)) || models.find(m => /phi/i.test(m)) || models[0] || 'Auto local model';
-const providerLabel = (name: string) => name === 'Jan' ? 'Jan + TurboQuant (built-in)' : name;
+const providerLabel = (name: string) => name === 'Auto' ? 'Auto Mix (local first + free cloud)' : name === 'Jan' ? 'Jan + TurboQuant + DFLASH (built-in)' : name;
 
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
@@ -72,14 +72,15 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [messages, setMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [researchSteps, setResearchSteps] = useState<string[]>([]);
-  const [provider, setProvider] = useState(initialModel?.provider || 'Jan');
-  const [model, setModel] = useState(initialModel?.model || 'Auto local model');
+  const [provider, setProvider] = useState(initialModel?.provider || 'Auto');
+  const [model, setModel] = useState(initialModel?.model || 'Auto mix');
   const [voicePreset, setVoicePreset] = useState('tamil-jaffna');
   const [showConnectorPanel, setShowConnectorPanel] = useState(false);
   const [chatConnectors, setChatConnectors] = useState<{[key: string]: boolean}>({});
   const handledInitialPrompt = useRef('');
   const [engineStatus, setEngineStatus] = useState<{[key: string]: 'online' | 'offline' | 'checking'}>({
     'Jan + TurboQuant': 'checking',
+    Auto: 'checking',
     Ollama: 'checking',
     'LM Studio': 'checking',
     OpenCode: 'checking'
@@ -101,9 +102,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             setProvider(initialModel.provider);
             setModel(initialModel.model);
           } else {
-            const savedPreset = await window.ipcRenderer.getModelPreset?.().catch(() => ({ provider: 'Jan', model: 'Auto local model' }));
+            const savedPreset = await window.ipcRenderer.getModelPreset?.().catch(() => ({ provider: 'Auto', model: 'Auto mix' }));
             const sessionProviderChanged = window.sessionStorage.getItem('hermsdesk.provider.changed') === 'true';
-            const preset = sessionProviderChanged ? savedPreset : { provider: 'Jan', model: 'Auto local model' };
+            const preset = sessionProviderChanged ? savedPreset : { provider: 'Auto', model: 'Auto mix' };
             if (preset?.provider) {
               setProvider(preset.provider);
               setModel(preset.model || 'Auto local model');
@@ -120,7 +121,18 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
             const janModels = jan?.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
 
-            if (preset?.provider === 'Jan') {
+            if (preset?.provider === 'Auto') {
+              setProvider('Auto');
+              setModel('Auto mix');
+              setEngineStatus(prev => ({
+                ...prev,
+                Auto: jan?.apiOnline || ollama?.length || lmstudio?.online || openCode?.online ? 'online' : 'checking',
+                'Jan + TurboQuant': jan?.apiOnline ? 'online' : jan?.installed ? 'checking' : 'offline',
+                Ollama: ollama?.length ? 'online' : 'offline',
+                'LM Studio': lmstudio?.online ? 'online' : 'offline',
+                OpenCode: openCode?.online ? 'online' : 'offline'
+              }));
+            } else if (preset?.provider === 'Jan') {
               setProvider('Jan');
               const presetModel = preset.model && preset.model !== 'Auto local model' ? preset.model : '';
               setModel(presetModel || preferJanModel(janModels));
@@ -162,13 +174,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     const timeout = window.setTimeout(() => {
       window.ipcRenderer.saveModelPreset({
         provider,
-        model: model || 'Auto local model'
+        model: model || (provider === 'Auto' ? 'Auto mix' : 'Auto local model')
       }).catch(() => {});
     }, 500);
     return () => window.clearTimeout(timeout);
   }, [provider, model, initialModel]);
 
   const [providerModels, setProviderModels] = useState<{[key: string]: string[]}>({
+    'Auto': ['Auto mix', 'Local first', 'Free cloud fallback'],
     'Ollama': [],
     'LM Studio': [],
     'OpenCode': [],
@@ -183,6 +196,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       'qwen/qwen-2-7b-instruct:free'
     ],
     'Nvidia': [
+      'meta/llama-3.1-8b-instruct',
       'meta/llama3-70b-instruct',
       'meta/llama3-8b-instruct',
       'mistralai/mistral-7b-instruct-v0.2',
@@ -374,7 +388,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const checkEngines = async () => {
     if (!window.ipcRenderer) return;
     
-    setEngineStatus(prev => ({ ...prev, Ollama: 'checking', 'LM Studio': 'checking', 'Jan + TurboQuant': 'checking', OpenCode: 'checking' }));
+    setEngineStatus(prev => ({ ...prev, Auto: 'checking', Ollama: 'checking', 'LM Studio': 'checking', 'Jan + TurboQuant': 'checking', OpenCode: 'checking' }));
     
     try {
       const ollamaModels = await window.ipcRenderer.listModels();
@@ -384,9 +398,20 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       const libraryModels = await window.ipcRenderer.listLibraryModels();
       const janApiModels = janStatus?.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
       const openCodeModels = openCodeStatus?.models?.map((m: any) => m.id || m.name).filter(Boolean) || [];
+      const ollamaNames = ollamaModels?.map((m: any) => m.name) || [];
+      const janNames = libraryModels?.map((m: any) => m.name) || [];
 
       setProviderModels(prev => ({
         ...prev,
+        Auto: [
+          'Auto mix',
+          janStatus?.apiOnline ? `Jan: ${preferJanModel(janApiModels.length ? janApiModels : libraryModels?.map((m: any) => m.name) || [])}` : '',
+          ollamaNames.length ? `Ollama: ${ollamaNames[0]}` : '',
+          lmStudioStatus?.online ? 'LM Studio: auto' : '',
+          openCodeStatus?.online ? `OpenCode: ${openCodeModels[0] || 'auto'}` : '',
+          'OpenRouter: openrouter/auto-free',
+          'NVIDIA NIM: meta/llama-3.1-8b-instruct'
+        ].filter(Boolean),
         Ollama: ollamaModels?.length ? ollamaModels.map((m: any) => m.name) : prev.Ollama,
         'LM Studio': lmStudioStatus?.data?.length ? lmStudioStatus.data.map((m: any) => m.id) : prev['LM Studio'],
         Jan: ['Auto local model', ...(() => {
@@ -396,9 +421,6 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         })()],
         OpenCode: openCodeModels.length ? openCodeModels : prev.OpenCode
       }));
-
-      const ollamaNames = ollamaModels?.map((m: any) => m.name) || [];
-      const janNames = libraryModels?.map((m: any) => m.name) || [];
 
       if (provider === 'Ollama' && ollamaNames.length > 0 && !ollamaNames.includes(model)) {
         setModel(ollamaNames[0]);
@@ -411,6 +433,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       }
 
       setEngineStatus({
+        Auto: janStatus?.apiOnline || (ollamaModels && ollamaModels.length > 0) || Boolean(lmStudioStatus) || Boolean(openCodeStatus?.online) ? 'online' : 'checking',
         'Jan + TurboQuant': janStatus && janStatus.apiOnline ? 'online' : 'offline',
         Ollama: ollamaModels && ollamaModels.length > 0 ? 'online' : 'offline',
         'LM Studio': lmStudioStatus ? 'online' : 'offline',
@@ -419,6 +442,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     } catch (e) {
       console.error('Engine check failed:', e);
       setEngineStatus({
+        Auto: 'offline',
         'Jan + TurboQuant': 'offline',
         Ollama: 'offline',
         'LM Studio': 'offline',
@@ -690,9 +714,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         let response;
         const normalizedProvider = provider.toLowerCase().replace(/\s+/g, '');
 
-        if (['ollama', 'lmstudio', 'jan', 'jan+turboquant', 'opencode'].includes(normalizedProvider)) {
+        if (['auto', 'automix', 'ollama', 'lmstudio', 'jan', 'jan+turboquant', 'opencode'].includes(normalizedProvider)) {
           response = await window.ipcRenderer.chat({ 
-            model: model === 'Auto local model'
+            model: model === 'Auto local model' || model === 'Auto mix' || model.startsWith('Jan:') || model.startsWith('Ollama:') || model.startsWith('LM Studio:') || model.startsWith('OpenCode:') || model.startsWith('OpenRouter:') || model.startsWith('NVIDIA NIM:')
               ? ''
               : normalizedProvider === 'ollama' && model && !model.includes(':')
                 ? `${model}:latest`
@@ -940,7 +964,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           <span className={`text-[8px] font-black uppercase tracking-widest ${
             engineStatus['Jan + TurboQuant'] === 'online' ? 'text-green-700' : 'text-orange-700'
           }`}>
-            {engineStatus['Jan + TurboQuant'] === 'online' ? 'Jan online' : 'Jan offline'}
+            {engineStatus['Jan + TurboQuant'] === 'online' ? 'Jan + DFLASH online' : 'Jan standby'}
           </span>
         </div>
 
