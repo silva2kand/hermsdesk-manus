@@ -100,6 +100,7 @@ const SidebarItem = ({
 );
 
 const iconMap: Record<string, any> = {
+  'general-agent': Brain,
   'hermes-full': Rocket,
   'paperclip-full': Paperclip,
   'solicitor-agent': Scale,

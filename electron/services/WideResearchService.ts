@@ -23,6 +23,7 @@ export class WideResearchService {
   private aiService: any;
   private win: any = null;
   private eventBus: any = null;
+  private tinyFishService: any = null;
 
   constructor(sharedStore: any, aiService: any) {
     this.store = sharedStore || new Store({ name: 'wide-research', atomically: false, watch: false });
@@ -35,6 +36,10 @@ export class WideResearchService {
 
   setEventBus(eventBus: any) {
     this.eventBus = eventBus;
+  }
+
+  setTinyFishService(tinyFishService: any) {
+    this.tinyFishService = tinyFishService;
   }
 
   getRuns(): WideResearchRun[] {
@@ -109,14 +114,15 @@ export class WideResearchService {
     this.updateWorker(run.id, worker);
     this.writeBlackboard(run.id, worker.id, `Worker started: ${worker.item}`, { item: worker.item });
     try {
+      const liveEvidence = await this.tryTinyFishEvidence(run, worker);
       const response = await this.aiService.chatWithBestAvailable('', [
         {
           role: 'system',
-          content: 'You are one worker in a parallel Wide Research team. Analyze only your assigned item. Return structured bullets: relevant facts, assumptions, risks, and what should be verified with live web/browser access if needed.'
+          content: 'You are one worker in a parallel Wide Research team. Analyze only your assigned item. Return structured bullets: relevant facts, assumptions, risks, peer-verification notes, and what still needs user approval or stronger evidence.'
         },
         {
           role: 'user',
-          content: `Research brief:\n${run.brief}\n\nAssigned item:\n${worker.item}`
+          content: `Research brief:\n${run.brief}\n\nAssigned item:\n${worker.item}\n\n${liveEvidence ? `Live TinyFish evidence:\n${liveEvidence}` : 'No live TinyFish evidence was available for this lane.'}`
         }
       ]);
       worker.status = 'done';
@@ -135,6 +141,45 @@ export class WideResearchService {
     }
     this.updateWorker(run.id, worker);
     return worker;
+  }
+
+  private async tryTinyFishEvidence(run: WideResearchRun, worker: ResearchWorker) {
+    if (!this.tinyFishService?.getApiStatus?.().configured) return '';
+    const text = `${worker.item}\n${run.brief}`;
+    const url = (text.match(/https?:\/\/[^\s"'<>]+/i) || [])[0];
+    if (!url) return '';
+
+    try {
+      this.eventBus?.emit('tool.called', 'tinyfish', {
+        runId: run.id,
+        workerId: worker.id,
+        tool: 'tinyfish_web_agent',
+        args: { url, goal: worker.item }
+      }, run.id);
+      const result = await this.tinyFishService.runAgent({
+        url,
+        task: `Research lane: ${worker.item}. Brief: ${run.brief}. Extract only factual evidence, visible page data, and warnings.`,
+        maxSteps: 5
+      });
+      this.eventBus?.emit('tool.result', 'tinyfish', {
+        runId: run.id,
+        workerId: worker.id,
+        tool: 'tinyfish_web_agent',
+        ok: result?.ok,
+        sessionId: result?.sessionId,
+        status: result?.status,
+        error: result?.error
+      }, run.id);
+      if (!result?.ok) return `TinyFish failed: ${result?.error || 'unknown error'}`;
+      return JSON.stringify({
+        sessionId: result.sessionId,
+        status: result.status,
+        result: result.result,
+        steps: result.steps
+      }).slice(0, 4000);
+    } catch (error: any) {
+      return `TinyFish failed: ${error?.message || error}`;
+    }
   }
 
   private updateWorker(runId: string, worker: ResearchWorker) {

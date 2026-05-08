@@ -42,6 +42,28 @@ export interface Task {
 // ═══════════════════════════════════════════════════════════════════
 
 const PERSONALITIES: Record<string, string> = {
+  'general-agent': `You are General ME, the front-door coordinator for HermesDesk ME 1.8.
+
+Your purpose is to receive unclear or mixed tasks, clarify the goal, split the work, choose the right specialist agents, and verify the final answer before it reaches Silva.
+
+Your capabilities:
+- Route tasks to Hermes, Paperclips, Solicitor, Accountant, Space, OpenClaw, Justice Case Builder, and Purchase Guardian
+- Use mailbox memory summaries, installed skills, local model routing, web research, and TinyFish web automation when configured
+- Ask one short clarification only when a missing fact blocks real progress
+- Coordinate peer checks and produce a practical final action plan
+
+Rules:
+- Prefer action over talk.
+- Do not pretend a connector is connected unless live status/API/OAuth confirms it.
+- Destructive actions, money, legal filings, external messages, and account changes require approval.
+- When a task spans multiple domains, name the lead agent and verifier clearly.
+
+Available tools:
+- [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")]
+- [TOOL: read_file(path="document/path")]
+- [TOOL: list_dir(path="folder/path")]
+- [TOOL: open_app(app="URL or app name")]`,
+
   'hermes-full': `You are Hermes, the System Architect & Coder agent for HermesDesk ME 1.8.
 
 Your capabilities:
@@ -226,9 +248,22 @@ export class MultiAgentOrchestrator {
   private aiService: any;
   private skillsEngine: any;
   private eventBus: any = null;
+  private tinyFishService: any = null;
   private cancelFlags: Map<string, boolean> = new Map();
 
   private agents: Agent[] = [
+    {
+      id: 'general-agent',
+      name: 'General ME',
+      role: 'Coordinator, Clarifier & Verifier',
+      description: 'Front-door agent that splits mixed tasks, chooses specialists, coordinates peer checks, and verifies completion.',
+      personality: PERSONALITIES['general-agent'],
+      tools: ['jan-turboquant', 'outlook-mail', 'google-search', 'tinyfish', 'file-system'],
+      status: 'idle',
+      version: '1.8.0',
+      type: 'research',
+      background: false
+    },
     {
       id: 'hermes-full',
       name: 'Hermes Agent',
@@ -356,6 +391,10 @@ export class MultiAgentOrchestrator {
     this.eventBus = eventBus;
   }
 
+  setTinyFishService(tinyFishService: any) {
+    this.tinyFishService = tinyFishService;
+  }
+
   private emitThought(task: Task, agent: Agent, phase: 'PLAN' | 'THINK' | 'TOOL_CALL' | 'OBSERVATION' | 'REVISE' | 'DONE' | 'ERROR', content: string, payload: any = {}) {
     const eventPayload = {
       taskId: task.id,
@@ -396,6 +435,124 @@ export class MultiAgentOrchestrator {
       || normalized.includes('move')
       || normalized.includes('send')
       || normalized.includes('open');
+  }
+
+  private getCollaborationPlan(agent: Agent, input: string) {
+    const text = `${agent.id} ${agent.type} ${input}`.toLowerCase();
+    const collaborators = new Set<string>();
+
+    if (agent.id !== 'paperclip-full') collaborators.add('paperclip-full');
+    if (/legal|court|appeal|justice|solicitor|council|landlord|tenant|hmrc|evidence|complaint/.test(text)) {
+      collaborators.add('justice-case-agent');
+      collaborators.add('solicitor-agent');
+    }
+    if (/invoice|vat|tax|bill|payment|receipt|hmrc|account|ledger|bank/.test(text)) {
+      collaborators.add('accountant-agent');
+    }
+    if (/buy|purchase|seller|refund|chargeback|scam|price|product|order|parcel/.test(text)) {
+      collaborators.add('purchase-guardian-agent');
+    }
+    if (/security|password|hack|malware|risk|fraud|suspicious/.test(text)) {
+      collaborators.add('openclaw-full');
+    }
+    if (/pc|performance|freeze|slow|cpu|ram|gpu|process|jan|model/.test(text)) {
+      collaborators.add('space-agent-full');
+    }
+
+    collaborators.delete(agent.id);
+    return Array.from(collaborators).slice(0, 4).map(id => {
+      const peer = this.agents.find(item => item.id === id);
+      return {
+        id,
+        name: peer?.name || id,
+        role: peer?.role || 'Peer verifier'
+      };
+    });
+  }
+
+  private pickVerifier(agent: Agent, task: Task) {
+    const plan = this.getCollaborationPlan(agent, task.input);
+    return plan.find(peer => peer.id !== 'paperclip-full') || plan[0] || null;
+  }
+
+  private async peerVerifyFinal(agent: Agent, task: Task, answer: string, engine: string) {
+    const verifier = this.pickVerifier(agent, task);
+    if (!verifier || !this.aiService?.chatWithBestAvailable) return '';
+
+    const verifierAgent = this.agents.find(item => item.id === verifier.id);
+    const startedAt = Date.now();
+    this.emitThought(task, agent, 'REVISE', `${verifier.name} is checking the answer before completion.`, {
+      verifierId: verifier.id,
+      engine
+    });
+
+    try {
+      const response = await this.aiService.chatWithBestAvailable('', [
+        {
+          role: 'system',
+          content: `${verifierAgent?.personality || 'You are a careful peer verifier.'}
+
+You are verifying another HermesDesk agent output. Be concise. Check for missing facts, risk, approvals required, and next best action. Do not invent connector access.`
+        },
+        {
+          role: 'user',
+          content: `Original task:\n${task.input}\n\nDraft answer to verify:\n${answer.slice(0, 6000)}\n\nReturn a short peer check with: OK / concerns / recommended next action.`
+        }
+      ]);
+      const review = String(response?.message?.content || '').trim();
+      if (!review) return '';
+      this.eventBus?.emit('agent.peer_verified', 'agent-orchestrator', {
+        taskId: task.id,
+        agentId: agent.id,
+        verifierId: verifier.id,
+        durationMs: Date.now() - startedAt,
+        reviewPreview: review.slice(0, 1000)
+      }, task.id);
+      return review;
+    } catch (error: any) {
+      const message = error?.message || 'Peer verification failed.';
+      this.emitThought(task, agent, 'ERROR', `${verifier.name} verification failed: ${message}`, {
+        verifierId: verifier.id
+      });
+      return '';
+    }
+  }
+
+  private async runTinyFishTool(task: Task, agent: Agent, params: any) {
+    if (!this.tinyFishService?.getApiStatus?.().configured) {
+      return {
+        ok: false,
+        error: 'TinyFish API key is not configured in this app profile.'
+      };
+    }
+
+    const url = String(params.url || params.website || params.page || '').trim();
+    const goal = String(params.task || params.goal || params.instruction || task.input).trim();
+    if (!/^https?:\/\//i.test(url)) {
+      return {
+        ok: false,
+        error: 'TinyFish needs a real http/https URL.'
+      };
+    }
+
+    this.eventBus?.emit('tool.called', 'tinyfish', {
+      taskId: task.id,
+      agentId: agent.id,
+      tool: 'tinyfish_web_agent',
+      args: { url, goal }
+    }, task.id);
+    const result = await this.tinyFishService.runAgent({ url, task: goal, maxSteps: 6 });
+    this.eventBus?.emit('tool.result', 'tinyfish', {
+      taskId: task.id,
+      agentId: agent.id,
+      tool: 'tinyfish_web_agent',
+      ok: result?.ok,
+      sessionId: result?.sessionId,
+      status: result?.status,
+      error: result?.error,
+      resultPreview: JSON.stringify(result?.result || result?.steps || '').slice(0, 1200)
+    }, task.id);
+    return result;
   }
 
   getAgents() {
@@ -482,6 +639,14 @@ export class MultiAgentOrchestrator {
 
     const skillGuidance = this.skillsEngine?.getSkillGuidance?.();
     const silvaMemory = this.workspaceService?.getSilvaMemory?.() || '';
+    const collaborationPlan = this.getCollaborationPlan(agent, task.input);
+    const tinyFishStatus = this.tinyFishService?.getApiStatus?.();
+    this.eventBus?.emit('agent.collaboration', 'agent-orchestrator', {
+      taskId: task.id,
+      leadAgentId: agent.id,
+      collaborators: collaborationPlan,
+      tinyFishConfigured: Boolean(tinyFishStatus?.configured)
+    }, task.id);
     
     const messages: any[] = [
       { 
@@ -495,6 +660,8 @@ ${silvaMemory}
 - **AUTO-ORGANIZATION**: You are empowered to organize files, documents, and emails into their logical categories.
 - **NO DELETION**: You are NEVER allowed to delete, remove, or trash any email, file, or data. This is a strict constraint.
 - **APPROVAL FIRST**: Destructive actions, money transfers, or external communication require explicit user approval.
+- **COLLABORATION**: Treat this as a shared HermesDesk task. Lead agent: ${agent.name}. Peer agents available for clarification/verification: ${collaborationPlan.length ? collaborationPlan.map(peer => `${peer.name} (${peer.role})`).join('; ') : 'none selected'}.
+- **TINYFISH WEB AGENT**: ${tinyFishStatus?.configured ? 'Available for real web automation on specific URLs. Use [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")] when a task needs live page inspection.' : 'Not available until a TinyFish API key is saved.'}
 
 ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : ''}` 
       },
@@ -575,6 +742,20 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
             });
 
             try {
+              const normalizedTool = String(toolCall.name || '').toLowerCase();
+              if (['tinyfish_web_agent', 'tinyfish', 'web_agent'].includes(normalizedTool)) {
+                const result = await this.runTinyFishTool(task, agent, toolCall.params);
+                const resultStr = JSON.stringify(result || {}).slice(0, 2500);
+                sendUpdate(resultStr, result?.ok ? 'result' : 'error');
+                this.emitThought(task, agent, result?.ok ? 'OBSERVATION' : 'ERROR', 'TinyFish web agent returned.', {
+                  tool: toolCall.name,
+                  resultPreview: resultStr.slice(0, 1200)
+                });
+                messages.push({ role: 'assistant', content });
+                messages.push({ role: 'user', content: `TinyFish result:\n${resultStr}\n\nContinue the task with this live web evidence.` });
+                continue;
+              }
+
               const action = this.skillsEngine.proposeAction({
                 name: toolCall.name,
                 type: this.getToolType(toolCall.name),
@@ -622,12 +803,14 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
           }
         } else {
           // No tool calls — this is the agent's final response
-          sendUpdate(content, 'info');
+          const peerReview = await this.peerVerifyFinal(agent, task, content, engine);
+          const finalContent = peerReview ? `${content}\n\nPeer verification:\n${peerReview}` : content;
+          sendUpdate(finalContent, 'info');
           this.emitThought(task, agent, 'DONE', 'Agent produced a final response.', {
-            outputPreview: content.slice(0, 1000),
+            outputPreview: finalContent.slice(0, 1000),
             engine
           });
-          task.history.push({ role: 'assistant', content, engine, iteration: iterations });
+          task.history.push({ role: 'assistant', content: finalContent, engine, iteration: iterations, peerReview });
           completed = true;
           break;
         }

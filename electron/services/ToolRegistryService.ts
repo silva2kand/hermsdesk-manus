@@ -28,12 +28,13 @@ export interface Connector {
 
 // Which tools each agent is allowed to use
 const AGENT_TOOL_MAP: Record<string, string[]> = {
-  'hermes-full':      ['jan-turboquant', 'file-system', 'os-control', 'github', 'terminal', 'google-search'],
-  'paperclip-full':   ['jan-turboquant', 'file-system', 'outlook-mail', 'gmail', 'google-drive'],
-  'solicitor-agent':  ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search'],
-  'accountant-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'stripe', 'xero'],
-  'space-agent-full': ['jan-turboquant', 'os-control', 'google-search', 'terminal'],
-  'openclaw-full':    ['jan-turboquant', 'os-control', 'terminal', 'file-system']
+  'general-agent':    ['jan-turboquant', 'outlook-mail', 'google-search', 'tinyfish', 'file-system'],
+  'hermes-full':      ['jan-turboquant', 'file-system', 'os-control', 'github', 'terminal', 'google-search', 'tinyfish'],
+  'paperclip-full':   ['jan-turboquant', 'file-system', 'outlook-mail', 'gmail', 'google-drive', 'tinyfish'],
+  'solicitor-agent':  ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search', 'tinyfish'],
+  'accountant-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'stripe', 'xero', 'tinyfish'],
+  'space-agent-full': ['jan-turboquant', 'os-control', 'google-search', 'terminal', 'tinyfish'],
+  'openclaw-full':    ['jan-turboquant', 'os-control', 'terminal', 'file-system', 'tinyfish']
 };
 
 export class ToolRegistryService {
@@ -46,6 +47,7 @@ export class ToolRegistryService {
     { id: 'gmail', name: 'Gmail', category: 'email', description: 'Email access and drafts' },
     { id: 'outlook-mail', name: 'Outlook Mail', category: 'email', description: 'Microsoft Graph and Classic Outlook mail indexing, drafts, and approval-gated actions' },
     { id: 'graphify', name: 'Graphify', category: 'research', description: 'Local relationship graph builder for agents, tasks, mail intelligence, cases, and evidence' },
+    { id: 'tinyfish', name: 'TinyFish Web Agent', category: 'research', description: 'Real external web automation for inspecting specific pages when a TinyFish API key is saved' },
     { id: 'github', name: 'GitHub', category: 'custom_api', description: 'Repo and code management' },
     { id: 'file-system', name: 'File System', category: 'storage', description: 'Local file operations (read, write, list)' },
     { id: 'os-control', name: 'OS Control', category: 'os', description: 'Open apps, URLs, and system commands' },
@@ -164,7 +166,7 @@ export class ToolRegistryService {
       'xero': true, 'airtable': true, 'dify': true, 'cloudflare': true, 'posthog': true,
       'playwright': true, 'jam': true, 'canva': true, 'webflow': true, 'wix': true,
       'granola': true, 'fireflies': true, 'tldv': true, 'firecrawl': true,
-      'todoist': true, 'zoominfo': true, 'metabase': true, 'explorium': true,
+      'todoist': true, 'zoominfo': true, 'metabase': true, 'explorium': true, 'tinyfish': true,
       'serena': true, 'heygen': true, 'context7': true, 'hume': true, 'line': true,
       'jotform': true, 'pophive': true, 'minimax': true
     };
@@ -180,6 +182,7 @@ export class ToolRegistryService {
       { id: 'ollama', name: 'Ollama', enabled: enabled['ollama'] ?? true, status: 'available', type: 'local-engine' },
       { id: 'lm-studio', name: 'LM Studio', enabled: enabled['lm-studio'] ?? true, status: 'available', type: 'local-engine' },
       { id: 'opencode', name: 'OpenCode', enabled: enabled['opencode'] ?? true, status: 'needs-auth', type: 'local-engine' },
+      { id: 'tinyfish', name: 'TinyFish Web Agent', enabled: enabled['tinyfish'] ?? true, status: 'needs-auth', type: 'cloud-api' },
       { id: 'openrouter', name: 'OpenRouter', enabled: enabled['openrouter'] ?? true, status: 'needs-auth', type: 'cloud-api' },
       { id: 'google-gemini', name: 'Google Gemini', enabled: enabled['google-gemini'] ?? true, status: 'available', type: 'cloud-api' },
       { id: 'github', name: 'GitHub', enabled: enabled['github'] ?? true, status: 'needs-auth', type: 'oauth' },

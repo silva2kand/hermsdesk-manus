@@ -51,6 +51,7 @@ import { hermesAgents } from './data/hermesAgents';
 
 const iconMap: Record<string, any> = {
   'hermes-full': Rocket,
+  'general-agent': Brain,
   'paperclip-full': Paperclip,
   'solicitor-agent': Scale,
   'accountant-agent': Calculator,

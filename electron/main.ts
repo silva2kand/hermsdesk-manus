@@ -59,7 +59,7 @@ function initializeStoreAndServices() {
        defaults: {
       connectors: {
         'my-browser': true, 'ollama': true, 'lm-studio': true, 'google-gemini': true,
-        'opencode': true, 'openrouter': true, 'instagram': true, 'instagram-marketplace': true,
+        'opencode': true, 'openrouter': true, 'tinyfish': true, 'instagram': true, 'instagram-marketplace': true,
         'meta-ads': true, 'gmail': true, 'google-calendar': true, 'google-drive': true,
         'outlook-mail': true, 'outlook-calendar': true, 'github': true, 'slack': true,
         'notion': true, 'zapier': true, 'asana': true, 'monday': true, 'make': true,
@@ -111,6 +111,8 @@ function initializeStoreAndServices() {
   webResearchService = new SilvaWebResearchService(eventBus)
   whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus)
   tinyFish = new TinyFishService(store)
+  orchestrator.setTinyFishService?.(tinyFish)
+  wideResearchService.setTinyFishService?.(tinyFish)
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      store = { get: (key: string, def: any) => def, set: () => {}, delete: () => {} };
@@ -131,6 +133,9 @@ function initializeStoreAndServices() {
      eventBus = new EventBusService(store);
      webResearchService = new SilvaWebResearchService(eventBus);
      whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus);
+     tinyFish = new TinyFishService(store);
+     orchestrator.setTinyFishService?.(tinyFish);
+     wideResearchService.setTinyFishService?.(tinyFish);
    }
 }
 
@@ -673,7 +678,7 @@ function createWindow() {
   ipcMain.handle('ai:save-api-key', (_, { provider, key }) => providerService.saveAPIKey(provider, key))
   ipcMain.handle('ai:get-api-keys', () => providerService.getAPIKeys())
   ipcMain.handle('ai:get-connector-statuses', async () => {
-    const [routes, keys, graph, outlook, jan, ollama, lm, openCode, browser] = await Promise.all([
+    const [routes, keys, graph, outlook, jan, ollama, lm, openCode, browser, tinyFishStatus] = await Promise.all([
       toolRegistry.getConnectors().catch(() => ({})),
       providerService.getAPIKeys().catch(() => ({})),
       microsoftGraph.getAccountStatus().catch(() => ({ connected: false })),
@@ -682,9 +687,10 @@ function createWindow() {
       aiService.listOllamaModels().catch(() => []),
       aiService.checkLMStudio().catch(() => null),
       aiService.checkOpenCode().catch(() => null),
-      Promise.resolve(browserOperator.getState()).catch(() => ({}))
+      Promise.resolve(browserOperator.getState()).catch(() => ({})),
+      tinyFish.getApiStatus().catch(() => ({ configured: false }))
     ])
-    const known = Array.from(new Set([...Object.keys(routes || {}), 'jan-turboquant', 'ollama', 'lm-studio', 'opencode', 'my-browser', 'outlook-mail', 'outlook-calendar', 'google-gemini', 'openrouter', 'nvidia', 'huggingface']))
+    const known = Array.from(new Set([...Object.keys(routes || {}), 'jan-turboquant', 'ollama', 'lm-studio', 'opencode', 'my-browser', 'outlook-mail', 'outlook-calendar', 'tinyfish', 'google-gemini', 'openrouter', 'nvidia', 'huggingface']))
     const apiKeyProvider: Record<string, string> = {
       'google-gemini': 'gemini',
       openrouter: 'openrouter',
@@ -695,6 +701,7 @@ function createWindow() {
     const makeStatus = (id: string) => {
       const routeEnabled = routes?.[id] !== false;
       const apiKeySaved = Boolean(apiKeyProvider[id] && keys?.[apiKeyProvider[id]]);
+      const tinyFishConfigured = id === 'tinyfish' && Boolean(tinyFishStatus?.configured);
       const oauthConnected = (
         (['outlook-mail', 'outlook-calendar'].includes(id) && Boolean(graph.connected)) ||
         (id === 'classic-outlook' && Boolean(outlook.ok))
@@ -705,6 +712,7 @@ function createWindow() {
         (id === 'lm-studio' && Boolean(lm?.online || lm?.data)) ||
         (id === 'opencode' && Boolean(openCode?.online) && !openCode?.authRequired) ||
         (id === 'my-browser' && Boolean(browser?.online)) ||
+        tinyFishConfigured ||
         oauthConnected
       );
       return {
@@ -718,6 +726,8 @@ function createWindow() {
           ? (jan.apiOnline ? `Jan + TurboQuant API verified at ${jan.apiUrl || 'localhost:6767/v1'}` : jan.installed ? 'Bundled Jan runtime found; start/load a GGUF model' : 'Bundled Jan runtime missing')
           : ['outlook-mail', 'outlook-calendar'].includes(id)
             ? (graph.connected ? `Microsoft Graph connected: ${graph.profile?.mail || graph.profile?.userPrincipalName || graph.accountId || 'account'}` : 'Microsoft Graph OAuth not connected')
+            : id === 'tinyfish'
+              ? (tinyFishConfigured ? `TinyFish API key saved locally (${tinyFishStatus.keyPrefix || 'configured'})` : 'TinyFish API key missing')
             : id === 'my-browser'
               ? (browser?.online ? `Browser Operator open: ${browser.url || 'active session'}` : 'Browser Operator not opened yet')
               : apiKeyProvider[id]

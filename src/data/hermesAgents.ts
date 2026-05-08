@@ -1,7 +1,7 @@
 import {
   Scale, Calculator, Home, Mail, Monitor, Code, Search, Shield,
   Paperclip, Rocket, Brain, FileText, Wrench, Building2, Receipt,
-  Car, Landmark, Bell, CreditCard
+  Car, Landmark, Bell, CreditCard, Workflow
 } from 'lucide-react';
 
 export type HermesAgentStatus = 'ready' | 'needs-connector' | 'needs-approval';
@@ -20,6 +20,18 @@ export interface HermesAgent {
 }
 
 export const hermesAgents: HermesAgent[] = [
+  {
+    id: 'general-agent',
+    name: 'General ME',
+    group: 'Hermes',
+    role: 'Coordinator, Clarifier & Verifier',
+    capability: 'Receives unclear/mixed tasks, splits work across specialist agents, checks connector truth, coordinates peer verification, and returns the final action plan.',
+    connector: 'Jan + TurboQuant, Mail ME memory, TinyFish, Browser Operator, Skills',
+    approval: 'Approval gated for sending, deleting, filing, purchases, legal submissions, and external actions.',
+    status: 'ready',
+    icon: Workflow,
+    color: 'bg-zinc-900'
+  },
   {
     id: 'hermes-full',
     name: 'Hermes Agent',
