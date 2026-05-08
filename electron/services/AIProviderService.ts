@@ -238,17 +238,17 @@ export class AIProviderService {
     try {
       // Popular free models on OpenRouter
       const freeModels = [
-        "google/gemma-2-9b-it:free",
-        "mistralai/mistral-7b-instruct:free",
-        "meta-llama/llama-3-8b-instruct:free",
-        "microsoft/phi-3-mini-128k-instruct:free",
-        "qwen/qwen-2-7b-instruct:free",
-        "openrouter/auto-free"
+        "openai/gpt-oss-20b:free",
+        "openai/gpt-oss-120b:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "minimax/minimax-m2.5:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free"
       ];
       
       let targetModel = model;
       if (!model || !model.includes(':free')) {
-        targetModel = "openrouter/auto-free";
+        targetModel = "openai/gpt-oss-20b:free";
       }
 
       console.log(`Routing to OpenRouter Free: ${targetModel}`);

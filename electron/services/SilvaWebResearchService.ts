@@ -24,7 +24,7 @@ export class SilvaWebResearchService {
       const results: any[] = [];
       const blocks = String(response.data).split(/<div class="result results_links/).slice(1, 9);
       blocks.forEach((block, index) => {
-        const href = this.decodeHtml((block.match(/class="result__a"[^>]+href="([^"]+)"/) || [])[1] || '');
+        const href = this.cleanResultUrl(this.decodeHtml((block.match(/class="result__a"[^>]+href="([^"]+)"/) || [])[1] || ''));
         const rawTitle = (block.match(/class="result__a"[^>]*>([\s\S]*?)<\/a>/) || [])[1] || '';
         const rawSnippet = (block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/) || block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || '';
         const title = this.textFromHtml(rawTitle);
@@ -80,5 +80,19 @@ export class SilvaWebResearchService {
       .replace(/&#39;/g, "'")
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>');
+  }
+
+  private cleanResultUrl(value: string) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const absolute = raw.startsWith('//') ? `https:${raw}` : raw;
+    try {
+      const url = new URL(absolute);
+      const redirected = url.searchParams.get('uddg');
+      if (redirected) return decodeURIComponent(redirected);
+      return absolute;
+    } catch {
+      return raw;
+    }
   }
 }

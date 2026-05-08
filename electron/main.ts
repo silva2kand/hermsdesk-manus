@@ -430,8 +430,8 @@ function createWindow() {
     }
     if (apiKeys.openrouter) {
       const openrouter = await tryRoute('OpenRouter free cloud', async () => {
-        const result = await providerService.chatOpenRouter(apiKeys.openrouter, 'openrouter/auto-free', messages);
-        return { content: result?.choices?.[0]?.message?.content || '', engine: 'OpenRouter free', model: 'openrouter/auto-free' };
+        const result = await providerService.chatOpenRouter(apiKeys.openrouter, 'openai/gpt-oss-20b:free', messages);
+        return { content: result?.choices?.[0]?.message?.content || '', engine: 'OpenRouter free', model: 'openai/gpt-oss-20b:free' };
       });
       if (openrouter) return openrouter;
     }

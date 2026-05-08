@@ -213,12 +213,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     'Jan': ['Auto local model'],
     'Gemini': ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'],
     'OpenRouter': [
-      'openrouter/auto-free',
-      'google/gemma-2-9b-it:free', 
-      'mistralai/mistral-7b-instruct:free', 
-      'meta-llama/llama-3-8b-instruct:free',
-      'microsoft/phi-3-mini-128k-instruct:free',
-      'qwen/qwen-2-7b-instruct:free'
+      'openai/gpt-oss-20b:free',
+      'openai/gpt-oss-120b:free',
+      'google/gemma-4-26b-a4b-it:free',
+      'minimax/minimax-m2.5:free',
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free'
     ],
     'Nvidia': [
       'meta/llama-3.1-8b-instruct',
@@ -788,8 +788,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         } else if (['gemini', 'nvidia', 'openrouter'].includes(normalizedProvider)) {
           // Cloud providers — force free tier if not already specified
           let cloudModel = model;
-          if (normalizedProvider === 'openrouter' && (!model.includes(':free') || model === 'openrouter/auto')) {
-            cloudModel = 'openrouter/auto-free';
+          if (normalizedProvider === 'openrouter' && (!model.includes(':free') || model === 'openrouter/auto' || model === 'openrouter/auto-free')) {
+            cloudModel = 'openai/gpt-oss-20b:free';
           } else if (normalizedProvider === 'nvidia' && !model.includes('/')) {
             cloudModel = 'meta/llama-3.1-8b-instruct';
           }
