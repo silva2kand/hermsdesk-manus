@@ -285,6 +285,37 @@ export class SkillsEngineService {
       return `WhatsApp UI Inspection:\nURL: ${inspection.url}\nVisible Text: ${inspection.visibleText.slice(0, 2000)}\nNote: I have captured a screenshot for visual confirmation.`;
     }
 
+    if (name === 'graphify') {
+      const input = String(params.input || params.text || '').trim();
+      if (!input) throw new Error('Graphify needs relationship text such as "Mail ME -> Paperclips Agent".');
+      const title = String(params.title || 'HermesDesk Graphify Map').trim();
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'graphify-map';
+      const folder = path.join(app.getPath('documents'), 'HermesDesk ME Artifacts', `${new Date().toISOString().slice(0, 10)}-graphify-${slug}`);
+      fs.mkdirSync(folder, { recursive: true });
+      const nodes = new Map<string, any>();
+      const edges: any[] = [];
+      const addNode = (label: string) => {
+        const clean = label.trim().slice(0, 80);
+        const id = clean.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `node-${nodes.size + 1}`;
+        if (!nodes.has(id)) nodes.set(id, { id, label: clean });
+        return nodes.get(id);
+      };
+      input.split(/\r?\n/).map(line => line.trim()).filter(Boolean).forEach(line => {
+        const [left, right] = line.split(/\s*(?:->|=>|-->| to | routes to | uses )\s*/i);
+        if (!right) {
+          addNode(left);
+          return;
+        }
+        const source = addNode(left);
+        const target = addNode(right);
+        edges.push({ id: `edge-${edges.length + 1}`, source: source.id, target: target.id });
+      });
+      const graph = { title, createdAt: new Date().toISOString(), nodes: Array.from(nodes.values()), edges };
+      fs.writeFileSync(path.join(folder, 'graph.json'), JSON.stringify(graph, null, 2));
+      fs.writeFileSync(path.join(folder, 'graph.md'), `# ${title}\n\n${input}\n\n## Summary\n- Nodes: ${graph.nodes.length}\n- Links: ${graph.edges.length}\n`);
+      return `Graphify created ${graph.nodes.length} nodes and ${graph.edges.length} links.\nFolder: ${folder}\nFiles: graph.json, graph.md`;
+    }
+
     // --- EXPERT OS TOOLS ---
     if (name === 'os_control_expert') {
       if (params.action === 'list_windows') {

@@ -671,8 +671,8 @@ export const MailMEView = () => {
                 }
                 showNotice('Testing TinyFish with a small live request...');
                 const result = await window.ipcRenderer?.runTinyFishAgent?.({
-                  url: 'https://example.com',
-                  task: 'Read the page title and return a one sentence status.',
+                  url: 'https://www.gov.uk/',
+                  task: 'Read the page title and return a one sentence status for this official UK government page.',
                   maxSteps: 3
                 });
                 showNotice(result?.ok ? 'TinyFish API responded successfully.' : `TinyFish test failed: ${result?.error || 'unknown error'}`);

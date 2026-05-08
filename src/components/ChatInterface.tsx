@@ -278,6 +278,50 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     return ['Continue', 'Make it shorter', 'Give exact steps', 'Research web', 'Create action plan'];
   };
 
+  const buildMailboxEvidenceAnswer = (prompt: string, mailboxMemory: any, matches: any[]) => {
+    const lower = prompt.toLowerCase();
+    const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium)/i.test(prompt);
+    if (!isMailQuestion) return '';
+
+    const total = mailboxMemory?.totalIndexed?.toLocaleString?.() || mailboxMemory?.totalIndexed || 'indexed';
+    const updated = mailboxMemory?.generatedAt ? new Date(mailboxMemory.generatedAt).toLocaleString() : 'recently';
+    const evidence = matches.slice(0, 8);
+    const title = /car|vehicle|mot|insurance|renewal|policy|premium/i.test(lower)
+      ? 'Here is the strongest vehicle/insurance evidence I found in your indexed mailbox memory'
+      : /bill|payment|pay|invoice|deadline|due/i.test(lower)
+        ? 'Here are the strongest bill/payment/deadline items I found in your indexed mailbox memory'
+        : 'Here are the strongest email matches I found in your indexed mailbox memory';
+
+    if (!evidence.length) {
+      const bills = (mailboxMemory?.billsToPay || []).slice(0, 8);
+      const deadlines = (mailboxMemory?.deadlines || []).slice(0, 8);
+      if (!bills.length && !deadlines.length) return '';
+      return [
+        `I checked your local indexed mailbox memory (${total} emails, updated ${updated}). I did not find an exact search hit for this wording, so I used the current bills/deadlines memory instead.`,
+        '',
+        ...[...bills, ...deadlines].slice(0, 8).map((email: any, index: number) => (
+          `${index + 1}. ${email.subject || '(no subject)'}\nFrom: ${email.sender || email.senderEmail || 'unknown'}\nReceived: ${email.receivedAt ? new Date(email.receivedAt).toLocaleString() : 'unknown'}\nFolder/category: ${email.folderName || 'unknown'} / ${email.categoryLabel || 'unknown'}\n${email.preview ? `Preview: ${String(email.preview).slice(0, 260)}` : ''}`
+        )),
+        '',
+        'I will not move, delete, send, unsubscribe, pay, or contact anyone without your approval.'
+      ].join('\n');
+    }
+
+    return [
+      `${title}.`,
+      `Mailbox memory checked: ${total} emails, updated ${updated}.`,
+      '',
+      ...evidence.map((email: any, index: number) => (
+        `${index + 1}. ${email.subject || '(no subject)'}\nFrom: ${email.sender || email.senderEmail || 'unknown'}\nReceived: ${email.receivedAt ? new Date(email.receivedAt).toLocaleString() : 'unknown'}\nAccount/folder: ${email.accountId || 'unknown'} / ${email.folderName || 'unknown'}\nCategory: ${email.categoryLabel || 'unknown'}\n${email.bodyPreview ? `Preview: ${String(email.bodyPreview).slice(0, 260)}` : ''}`
+      )),
+      '',
+      /car|vehicle|mot|insurance|renewal|policy|premium/i.test(lower)
+        ? 'Current read: I found renewal/insurance evidence, but I do not see a confirmed future due date in the indexed preview text. The safest next step is to open the matching insurer/comparison email or policy attachment before relying on the date.'
+        : 'Current read: these are evidence matches from the local index. I can draft replies, reminders, or folder actions, but approval is required before anything external changes.',
+      'I will not move, delete, send, unsubscribe, pay, or contact anyone without your approval.'
+    ].join('\n');
+  };
+
   const copyMessage = async (content: string) => {
     await navigator.clipboard?.writeText(content);
     addNotice('Copied response');
@@ -812,9 +856,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         if (response) {
           let content = response.content || response.message?.content || (response.choices && response.choices[0]?.message?.content) || "No response content received.";
           const engine = response.engine || provider;
-          if (needsMailMemory && matchingEmails.length > 0 && /no local ai engine is available|no response content/i.test(content)) {
-            const top = matchingEmails.slice(0, 6);
-            content = `I searched your local indexed mailbox memory (${memoryContext?.totalIndexed?.toLocaleString?.() || memoryContext?.totalIndexed || 'indexed'} emails) and found these relevant items:\n\n${top.map((email: any, index: number) => `${index + 1}. ${email.subject || '(no subject)'}\nFrom: ${email.sender || email.senderEmail || 'unknown'}\nReceived: ${email.receivedAt ? new Date(email.receivedAt).toLocaleString() : 'unknown'}\nAccount/folder: ${email.accountId || 'unknown'} / ${email.folderName || 'unknown'}\n${email.bodyPreview ? `Preview: ${String(email.bodyPreview).slice(0, 220)}` : ''}`).join('\n\n')}\n\nBest current read: your strongest recent car-insurance evidence is the Comparethemarket/Go.Compare renewal sequence around late August to October 2025. I do not see a confirmed future due date in the indexed preview text, so treat this as a reminder to check the actual policy document or insurer portal before relying on it.`;
+          const mailboxEvidenceAnswer = needsMailMemory ? buildMailboxEvidenceAnswer(outgoing, memoryContext, matchingEmails) : '';
+          if (mailboxEvidenceAnswer && (/no local ai engine is available|no response content|please tell me more|what information you'd like/i.test(content) || matchingEmails.length > 0)) {
+            content = mailboxEvidenceAnswer;
           }
           const engineText = String(engine || '').toLowerCase();
           if (engineText.includes('jan') || engineText.includes('turboquant') || engineText.includes('dflash') || engineText.includes('dfalsh')) {

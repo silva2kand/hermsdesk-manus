@@ -142,8 +142,8 @@ const SettingsShell = ({ title, desc }: { title: string, desc: string }) => {
       { label: 'Open Release Folder', detail: 'Open packaged app outputs.', run: async () => window.ipcRenderer?.openPath?.('release') }
     ],
     'Purchased Domains': [
-      { label: 'Save Domain Record', detail: 'Store domain notes locally.', run: async () => { const domain = window.prompt('Domain name', 'example.com'); if (!domain) return; saveLocalRecord('hermsdesk.domains', { domain, status: 'saved' }); showNotice(`${domain} saved locally.`); } },
-      { label: 'Open DNS Lookup', detail: 'Research domain/DNS in browser.', run: async () => { const domain = window.prompt('Domain to check', 'example.com'); if (domain) await window.ipcRenderer?.openBrowserAutomation?.(`dns lookup ${domain}`); } },
+      { label: 'Save Domain Record', detail: 'Store domain notes locally.', run: async () => { const domain = window.prompt('Domain name', 'yourdomain.co.uk'); if (!domain) return; saveLocalRecord('hermsdesk.domains', { domain, status: 'saved' }); showNotice(`${domain} saved locally.`); } },
+      { label: 'Open DNS Lookup', detail: 'Research domain/DNS in browser.', run: async () => { const domain = window.prompt('Domain to check', 'yourdomain.co.uk'); if (domain) await window.ipcRenderer?.openBrowserAutomation?.(`dns lookup ${domain}`); } },
       { label: 'Copy Deployment Checklist', detail: 'Copy DNS/deployment checklist.', run: async () => { await navigator.clipboard?.writeText('Domain checklist:\nRegistrar:\nDNS provider:\nA/CNAME:\nSSL:\nDeployment URL:\nRenewal date:'); showNotice('Domain checklist copied.'); } }
     ]
   };
