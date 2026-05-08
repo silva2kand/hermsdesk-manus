@@ -20,6 +20,7 @@ const VOICE_STACK_ROOT = fs.existsSync('C:\\Users\\Silva\\WorkSpace\\voicelcl\\s
 const VOICE_STACK_LAUNCHER = path.join(VOICE_STACK_ROOT, 'run_server.bat');
 const VOICE_STACK_MODELS = path.join(VOICE_STACK_ROOT, 'models');
 const VOICE_STACK_PYTHON = path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
+const VOICE_STACK_URL = 'http://127.0.0.1:7100';
 
 export class DesktopIntegrationService {
   private classicOutlookStatusCache: { value: any; at: number } | null = null;
@@ -304,7 +305,7 @@ export class DesktopIntegrationService {
 
   private async startVoiceStackServer() {
     try {
-      await axios.get('http://localhost:7100/', { timeout: 700, validateStatus: status => status >= 200 && status < 500 });
+      await axios.get(`${VOICE_STACK_URL}/`, { timeout: 1200, validateStatus: status => status >= 200 && status < 500 });
       return { ok: true, alreadyRunning: true };
     } catch {
       // Ensure folder and server files exist
@@ -318,7 +319,7 @@ export class DesktopIntegrationService {
       for (let attempt = 0; attempt < 15; attempt += 1) {
         await new Promise(resolve => setTimeout(resolve, 2000));
         try {
-          await axios.get('http://localhost:7100/', { timeout: 1500, validateStatus: status => status >= 200 && status < 500 });
+          await axios.get(`${VOICE_STACK_URL}/`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 });
           return { ok: true, started: true };
         } catch {
           // Voice models can take a moment to initialize.
@@ -570,13 +571,13 @@ if not exist "venv_311\\Scripts\\python.exe" py -3.11 -m venv venv_311
     try {
       await this.startVoiceStackServer();
       const [home, profiles, accents] = await Promise.all([
-        axios.get('http://localhost:7100/', { timeout: 900, validateStatus: status => status >= 200 && status < 500 }),
-        axios.get('http://localhost:7100/tts/profiles', { timeout: 900, validateStatus: status => status >= 200 && status < 500 }).catch(() => null),
-        axios.get('http://localhost:7100/tts/accents', { timeout: 900, validateStatus: status => status >= 200 && status < 500 }).catch(() => null)
+        axios.get(`${VOICE_STACK_URL}/`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }),
+        axios.get(`${VOICE_STACK_URL}/tts/profiles`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }).catch(() => null),
+        axios.get(`${VOICE_STACK_URL}/tts/accents`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }).catch(() => null)
       ]);
-      return { ok: true, ready: true, url: 'http://localhost:7100/', status: home.status, profiles: profiles?.data || null, accents: accents?.data || null };
+      return { ok: true, ready: true, url: `${VOICE_STACK_URL}/`, status: home.status, profiles: profiles?.data || null, accents: accents?.data || null };
     } catch (error: any) {
-      return { ok: false, url: 'http://localhost:7100/', error: error.message };
+      return { ok: false, url: `${VOICE_STACK_URL}/`, error: error.message };
     }
   }
 
@@ -619,6 +620,12 @@ $speaker.Speak('${escaped}')
     const payload = {
       text: cleanText,
       accent_id,
+      accentId: accent_id,
+      voice,
+      language,
+      accent: options.accent || options.style || undefined,
+      rate: options.rate || 1,
+      style: options.style || 'professional'
     };
 
     const endpoints = ['/tts/synthesize', '/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
@@ -628,8 +635,8 @@ $speaker.Speak('${escaped}')
 
     for (const endpoint of endpoints) {
       try {
-        const response = await axios.post(`http://localhost:7100${endpoint}`, payload, {
-          timeout: 30000,
+        const response = await axios.post(`${VOICE_STACK_URL}${endpoint}`, payload, {
+          timeout: 60000,
           responseType: 'arraybuffer',
           validateStatus: status => status >= 200 && status < 300
         });
@@ -655,7 +662,9 @@ $speaker.Speak('${escaped}')
         const body = Buffer.from(response.data).toString('utf8');
         let parsed: any = {};
         try { parsed = JSON.parse(body); } catch { parsed = { message: body }; }
-        return { ok: true, mode: 'silva-premium-voice-stack', endpoint, voice, language, response: parsed };
+        const responseMode = String(parsed?.mode || parsed?.engine || '').toLowerCase();
+        const fallback = responseMode.includes('sapi') || responseMode.includes('fallback');
+        return { ok: true, mode: fallback ? 'windows-sapi-from-voice-stack' : 'silva-premium-voice-stack', endpoint, voice, language, response: parsed };
       } catch (error: any) {
         if (error?.code === 'ECONNABORTED') {
           return { ok: true, mode: 'silva-voice-stack-queued', endpoint, voice, language };
@@ -672,7 +681,7 @@ $speaker.Speak('${escaped}')
 
     return {
       ok: false,
-      url: 'http://localhost:7100/',
+      url: `${VOICE_STACK_URL}/`,
       error: `Silva Voice Stack did not accept known speak endpoints and Windows speech fallback failed. Last error: ${lastError || 'offline'}`
     };
   }
