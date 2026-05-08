@@ -1,9 +1,7 @@
-import { createRequire } from 'node:module';
+import electron from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const require = createRequire(import.meta.url);
-const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
 const { app, shell } = electron;
 
 type ArtifactKind = 'slides' | 'website' | 'design' | 'data-analysis' | 'justice-case' | 'purchase-protection';

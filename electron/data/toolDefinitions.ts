@@ -95,5 +95,17 @@ export const toolDefinitions = [
       },
       required: ['input']
     }
+  },
+  {
+    name: 'tinyfish_web_agent',
+    description: 'Run a real TinyFish web agent on a specific URL when a TinyFish API key is saved. Use it for live page inspection, extraction, and verification.',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The http/https page to inspect.' },
+        task: { type: 'string', description: 'What the web agent should inspect, extract, or verify.' }
+      },
+      required: ['url', 'task']
+    }
   }
 ];

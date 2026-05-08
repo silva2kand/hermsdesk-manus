@@ -1,12 +1,10 @@
-import { createRequire } from 'node:module';
+import electron from 'electron';
 import fs from 'fs';
 import path from 'path';
 import Store from 'electron-store';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
-const require = createRequire(import.meta.url);
-const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
 const { shell, dialog, app } = electron;
 
 const execAsync = promisify(exec);
@@ -48,6 +46,8 @@ export class SkillsEngineService {
     'mythos-pc-operator',
     'mythos-whatsapp-reply',
     'mythos-truthful-connectors',
+    'mythos-taste-engine',
+    'mythos-audience-drafting',
     'mythos-justice-casework',
     'mythos-purchase-protection'
   ];
@@ -95,6 +95,13 @@ export class SkillsEngineService {
     if (installed.includes('mythos-truthful-connectors')) {
       rules.push('Mythos Connector Truth: distinguish enabled routes from authenticated connections. Use [TOOL: outlook_list_accounts()] to see connected Outlook accounts.');
     }
+    if (installed.includes('mythos-taste-engine')) {
+      rules.push('TASTE Engine: infer the real goal, check memory/context first, then work through PLAN -> DRAFT -> REVISE -> PRESENT. Be intentional, autonomous, audience-aware, and evidence-led. For complex work, name the lead agent, collaborating agents, risks, and verification route.');
+      rules.push('TASTE Evolution: learn from approvals, denials, edits, ignored suggestions, recurring senders, and repeated workflows. Strengthen useful patterns, reduce noisy ones, and keep outputs practical rather than decorative.');
+    }
+    if (installed.includes('mythos-audience-drafting')) {
+      rules.push('Audience Drafting: when drafting messages, documents, cases, reports, or presentations, identify audience, purpose, tone, desired outcome, and provide a safe version plus a stronger/persuasive version when useful.');
+    }
     if (installed.includes('mythos-justice-casework')) {
       rules.push('Mythos Justice Casework: for legal/public-interest issues, build evidence-first case packs, chronology, issue lists, appeal/review route maps, complaint drafts, and deadline checks.');
     }
@@ -121,6 +128,8 @@ export class SkillsEngineService {
       'mythos-pc-operator': 'Operate local PC/browser/tool routes with visible evidence.',
       'mythos-whatsapp-reply': 'Draft professional WhatsApp replies and open the real composer.',
       'mythos-truthful-connectors': 'Separate enabled routes from authenticated live connections.',
+      'mythos-taste-engine': 'Inject Manus-style behavioural quality: intention, autonomy, style, targeted intelligence, and evolution.',
+      'mythos-audience-drafting': 'Create audience-aware drafts with safe, creative, and stronger variants where useful.',
       'mythos-justice-casework': 'Build evidence-first legal, appeal, review, and complaint packs.',
       'mythos-purchase-protection': 'Research sellers/products and build refund or chargeback packs.'
     };

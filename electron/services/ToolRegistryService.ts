@@ -34,7 +34,9 @@ const AGENT_TOOL_MAP: Record<string, string[]> = {
   'solicitor-agent':  ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search', 'tinyfish'],
   'accountant-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'stripe', 'xero', 'tinyfish'],
   'space-agent-full': ['jan-turboquant', 'os-control', 'google-search', 'terminal', 'tinyfish'],
-  'openclaw-full':    ['jan-turboquant', 'os-control', 'terminal', 'file-system', 'tinyfish']
+  'openclaw-full':    ['jan-turboquant', 'os-control', 'terminal', 'file-system', 'tinyfish'],
+  'justice-case-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search', 'tinyfish', 'graphify'],
+  'purchase-guardian-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search', 'tinyfish', 'graphify']
 };
 
 export class ToolRegistryService {

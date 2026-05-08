@@ -1,10 +1,8 @@
 import Store from 'electron-store';
+import electron from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
 const { app } = electron;
 
 export interface IndexedEmail {

@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import electron from 'electron';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -7,8 +7,6 @@ import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
 
-const require = createRequire(import.meta.url);
-const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron');
 const { shell, dialog, app } = electron;
 
 const execFileAsync = promisify(execFile);

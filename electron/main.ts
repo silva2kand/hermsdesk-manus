@@ -1,12 +1,11 @@
-import type { BrowserWindow as BrowserWindowType, Tray as TrayType } from 'electron'
-import { createRequire } from 'node:module'
+import electron from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Store from 'electron-store'
 
-const require = createRequire(import.meta.url)
-const electron = ((globalThis as any).__electronModule || require('electron')) as typeof import('electron')
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage } = electron
+type BrowserWindowType = InstanceType<typeof BrowserWindow>
+type TrayType = InstanceType<typeof Tray>
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
