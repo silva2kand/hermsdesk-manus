@@ -131,6 +131,8 @@ interface Window {
     getPendingSkills: () => Promise<any[]>;
     approveSkill: (id: string) => Promise<any>;
     denySkill: (id: string) => Promise<boolean>;
+    getSelfImprovementState: () => Promise<any>;
+    runSelfImprovementCheck: (reason?: string) => Promise<any>;
 
     // Multi-Agent Orchestrator
     getAgents: () => Promise<any[]>;

@@ -46,9 +46,11 @@ import { SilvaWebResearchService } from './services/SilvaWebResearchService'
 import { WhatsAppChannelService } from './services/WhatsAppChannelService'
 import { EmailIndexService } from './services/EmailIndexService'
 import { TinyFishService } from './services/TinyFishService'
+import { SelfImprovementService } from './services/SelfImprovementService'
 
 let emailIndexService: any;
 let tinyFish: any;
+let selfImprovementService: any;
 
 function initializeStoreAndServices() {
    try {
@@ -112,6 +114,17 @@ function initializeStoreAndServices() {
   tinyFish = new TinyFishService(store)
   orchestrator.setTinyFishService?.(tinyFish)
   wideResearchService.setTinyFishService?.(tinyFish)
+  selfImprovementService = new SelfImprovementService(store, {
+    aiService,
+    emailIndexService,
+    workspaceService,
+    eventBus,
+    skillsEngine,
+    tinyFish,
+    whatsAppChannelService,
+    browserOperator,
+    providerService
+  })
 } catch (error) {
      console.error('CRITICAL: Failed to initialize ElectronStore:', error);
      store = { get: (key: string, def: any) => def, set: () => {}, delete: () => {} };
@@ -135,6 +148,17 @@ function initializeStoreAndServices() {
      tinyFish = new TinyFishService(store);
      orchestrator.setTinyFishService?.(tinyFish);
      wideResearchService.setTinyFishService?.(tinyFish);
+     selfImprovementService = new SelfImprovementService(store, {
+       aiService,
+       emailIndexService,
+       workspaceService,
+       eventBus,
+       skillsEngine,
+       tinyFish,
+       whatsAppChannelService,
+       browserOperator,
+       providerService
+     });
    }
 }
 
@@ -373,7 +397,7 @@ function createWindow() {
     isSyncingMail = false;
   }
 
-  schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
+  schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); selfImprovementService?.setWindow(win); selfImprovementService?.start?.(); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
 
   ipcMain.handle('ai:list-models', () => aiService.listOllamaModels())
   const isPersonalOrPrivatePrompt = (messages: any[]) => {
@@ -836,6 +860,8 @@ function createWindow() {
   ipcMain.handle('skills:get-pending', () => skillsEngine.getPendingActions())
   ipcMain.handle('skills:approve', (_, id) => skillsEngine.approveAction(id))
   ipcMain.handle('skills:deny', (_, id) => skillsEngine.denyAction(id))
+  ipcMain.handle('self-improvement:get-state', () => selfImprovementService.getState())
+  ipcMain.handle('self-improvement:run-now', (_, reason) => selfImprovementService.runAudit(reason || 'Manual self-improvement check'))
   ipcMain.handle('agents:get-all', () => orchestrator.getAgents())
   ipcMain.handle('agents:update-status', (_, { id, status, background }) => orchestrator.updateAgentStatus(id, status, background))
   ipcMain.handle('agents:create-task', async (_, { input, agentId }) => orchestrator.createTask(input, agentId, win))

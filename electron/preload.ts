@@ -77,6 +77,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getPendingSkills: () => ipcRenderer.invoke('skills:get-pending'),
   approveSkill: (id: string) => ipcRenderer.invoke('skills:approve', id),
   denySkill: (id: string) => ipcRenderer.invoke('skills:deny', id),
+  getSelfImprovementState: () => ipcRenderer.invoke('self-improvement:get-state'),
+  runSelfImprovementCheck: (reason?: string) => ipcRenderer.invoke('self-improvement:run-now', reason),
 
   // Multi-Agent Orchestrator
   getAgents: () => ipcRenderer.invoke('agents:get-all'),

@@ -270,6 +270,14 @@ export class SkillsEngineService {
       return `Subject: ${data.subject}\nFrom: ${data.from?.emailAddress?.name} <${data.from?.emailAddress?.address}>\nDate: ${data.receivedDateTime}\n\n${data.body?.content || data.bodyPreview}`;
     }
 
+    if (name === 'self_improvement_proposal' || name === 'self-improvement-proposal') {
+      const title = params.title || 'Self-improvement proposal';
+      const area = params.area || 'System';
+      const severity = params.severity || 'info';
+      const proposal = params.proposal || 'Review and decide the next safe action.';
+      return `Accepted self-improvement proposal for review.\nArea: ${area}\nSeverity: ${severity}\nTitle: ${title}\nProposal: ${proposal}\n\nNo code, files, external messages, installs, payments, or destructive actions were executed.`;
+    }
+
     // --- WHATSAPP TOOLS ---
     if (name === 'whatsapp_inspect_ui') {
       if (!this.browserOperator) throw new Error('Browser operator not initialized');

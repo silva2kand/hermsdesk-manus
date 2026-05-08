@@ -125,6 +125,20 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     }
   };
 
+  const runDoctor = async () => {
+    setNotice('Self-Improvement Doctor is checking routes...');
+    const result = await window.ipcRenderer?.runSelfImprovementCheck?.('Manual cockpit check').catch((error: any) => ({ ok: false, error: error?.message }));
+    if (result?.ok) {
+      const findings = result.run?.weaknesses?.length || 0;
+      const high = result.run?.weaknesses?.filter((item: any) => item.severity === 'high').length || 0;
+      setNotice(`Doctor completed: ${findings} findings, ${high} high priority.`);
+      refresh();
+    } else {
+      setNotice(result?.error || 'Self-Improvement Doctor failed.');
+    }
+    window.setTimeout(() => setNotice(''), 5000);
+  };
+
   const approveSkill = async (id: string) => {
     await window.ipcRenderer?.approveSkill?.(id);
     refresh();
@@ -221,6 +235,13 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
               title="Start Wide Research"
             >
               <Search className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={runDoctor}
+              className="flex-1 h-8 rounded-xl bg-blue-500 hover:bg-blue-400 flex items-center justify-center"
+              title="Run Self-Improvement Doctor"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
             </button>
           </div>
         </section>
