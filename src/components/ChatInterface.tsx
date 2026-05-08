@@ -751,6 +751,22 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         if (response) {
           const content = response.content || response.message?.content || (response.choices && response.choices[0]?.message?.content) || "No response content received.";
           const engine = response.engine || provider;
+          const engineText = String(engine || '').toLowerCase();
+          if (engineText.includes('jan') || engineText.includes('turboquant') || engineText.includes('dflash') || engineText.includes('dfalsh')) {
+            setEngineStatus(prev => ({
+              ...prev,
+              Auto: 'online',
+              'Jan + TurboQuant': 'online'
+            }));
+          } else if (engineText.includes('ollama')) {
+            setEngineStatus(prev => ({ ...prev, Auto: 'online', Ollama: 'online' }));
+          } else if (engineText.includes('lm studio')) {
+            setEngineStatus(prev => ({ ...prev, Auto: 'online', 'LM Studio': 'online' }));
+          } else if (engineText.includes('opencode')) {
+            setEngineStatus(prev => ({ ...prev, Auto: 'online', OpenCode: 'online' }));
+          } else if (engineText.includes('openrouter') || engineText.includes('nvidia')) {
+            setEngineStatus(prev => ({ ...prev, Auto: 'online' }));
+          }
           setMessages(prev => [...prev, { role: 'assistant', content, engine }]);
         } else {
         setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${provider} returned an empty response. Open Model Hub and refresh engine status before retrying.` }]);
