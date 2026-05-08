@@ -377,8 +377,14 @@ function createWindow() {
   schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
 
   ipcMain.handle('ai:list-models', () => aiService.listOllamaModels())
+  const isPersonalOrPrivatePrompt = (messages: any[]) => {
+    const text = (messages || []).map(message => String(message?.content || '')).join('\n').toLowerCase();
+    return /(email|mailbox|inbox|outlook|gmail|whatsapp|phone|address|bank|card|payment|invoice|bill|tax|hmrc|council|insurance|mot|passport|visa|legal|court|solicitor|case|personal|private|silva|kandasamy|@|postcode|account number|sort code)/i.test(text);
+  };
+
   const chatWithAutoProviders = async (model: string, messages: any[]) => {
     const attempts: any[] = [];
+    const privateData = isPersonalOrPrivatePrompt(messages);
     const tryRoute = async (label: string, task: () => Promise<any>) => {
       const started = Date.now();
       try {
@@ -404,7 +410,24 @@ function createWindow() {
     const openCode = await tryRoute('OpenCode external local', () => aiService.chatWithOpenCode(model, messages));
     if (openCode) return { ...openCode, engine: openCode.engine || 'OpenCode external local' };
 
+    if (privateData) {
+      return {
+        message: { content: `I kept this task local because it appears to include private/personal data. Local providers did not respond. Auto tried: ${attempts.map(item => `${item.label}${item.error ? ` (${item.error})` : ''}`).join(' -> ')}` },
+        engine: 'Auto provider router - local privacy guard',
+        routeAttempts: attempts,
+        privacyGuard: true
+      };
+    }
+
     const apiKeys = await providerService.getAPIKeys().catch(() => ({}));
+    if (apiKeys.gemini) {
+      const gemini = await tryRoute('Gemini free API', async () => {
+        const result = await providerService.chatGemini(apiKeys.gemini, messages, 'gemini-2.5-flash');
+        const content = result?.candidates?.[0]?.content?.parts?.[0]?.text || result?.content || '';
+        return { content, engine: 'Gemini free API', model: 'gemini-2.5-flash' };
+      });
+      if (gemini) return gemini;
+    }
     if (apiKeys.openrouter) {
       const openrouter = await tryRoute('OpenRouter free cloud', async () => {
         const result = await providerService.chatOpenRouter(apiKeys.openrouter, 'openrouter/auto-free', messages);
@@ -468,7 +491,7 @@ function createWindow() {
     try {
       let result;
       if (provider === 'gemini') {
-        result = await providerService.chatGemini(key, messages); const content = result.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+        result = await providerService.chatGemini(key, messages, model || 'gemini-2.5-flash'); const content = result.candidates?.[0]?.content?.parts?.[0]?.text || result.content || "No response";
         eventBus?.emit('session.finished', 'cloud-ai', { sessionId, provider, model, durationMs: Date.now() - startedAt, outputChars: content.length }, sessionId);
         return { content };
       }

@@ -182,15 +182,16 @@ export class AIProviderService {
     return true;
   }
 
-  async chatGemini(apiKey: string, messages: any[]) {
-    // Implementation for Google Gemini API
+  async chatGemini(apiKey: string, messages: any[], model = 'gemini-2.5-flash') {
     try {
-      const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const targetModel = String(model || 'gemini-2.5-flash').replace(/^models\//, '');
+      const response = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
         contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
       });
       return response.data;
-    } catch (e) {
-      return { content: "Gemini error - check API key" };
+    } catch (e: any) {
+      const message = e?.response?.data?.error?.message || e?.message || 'Gemini error';
+      return { content: `Gemini error: ${message}` };
     }
   }
 

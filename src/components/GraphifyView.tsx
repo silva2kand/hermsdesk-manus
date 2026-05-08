@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Download, Network, RefreshCw } from 'lucide-react';
+import { Copy, Database, Download, Network, RefreshCw } from 'lucide-react';
 
 type NodeKind = 'agent' | 'system' | 'task' | 'document' | 'concept';
 
@@ -77,6 +77,7 @@ const parseGraph = (text: string) => {
 
 export const GraphifyView = () => {
   const [input, setInput] = useState(starter);
+  const [notice, setNotice] = useState('');
   const graph = useMemo(() => parseGraph(input), [input]);
   const graphJson = useMemo(() => JSON.stringify(graph, null, 2), [graph]);
 
@@ -90,6 +91,36 @@ export const GraphifyView = () => {
     URL.revokeObjectURL(url);
   };
 
+  const loadMailMemoryGraph = async () => {
+    const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
+    const memory = intel?.mailboxMemory || intel?.memory || {};
+    if (!memory?.totalIndexed) {
+      setNotice('No indexed mailbox memory found yet.');
+      return;
+    }
+    const lines = [
+      `Mail Memory ${memory.totalIndexed} emails -> General ME`,
+      'General ME -> Paperclips Agent',
+      'General ME -> Accountant Agent',
+      'General ME -> Solicitor Agent',
+      'General ME -> Justice Case Builder',
+      'General ME -> Purchase Guardian',
+      `Unread ${memory.unreadCount || 0} -> Paperclips Agent`,
+      `Bills Payments ${memory.billsToPay?.length || 0} -> Accountant Agent`,
+      `Deadlines ${memory.deadlines?.length || 0} -> General ME`
+    ];
+    (memory.billsToPay || []).slice(0, 12).forEach((item: any) => {
+      lines.push(`Bill: ${item.subject || 'payment'} -> ${item.agentId === 'accountant-agent' ? 'Accountant Agent' : 'Paperclips Agent'}`);
+      if (item.sender) lines.push(`${item.sender} -> Bill: ${item.subject || 'payment'}`);
+    });
+    (memory.deadlines || []).slice(0, 12).forEach((item: any) => {
+      lines.push(`Deadline: ${item.subject || 'deadline'} -> General ME`);
+      if (item.sender) lines.push(`${item.sender} -> Deadline: ${item.subject || 'deadline'}`);
+    });
+    setInput(lines.join('\n'));
+    setNotice(`Loaded live mailbox graph from ${memory.totalIndexed.toLocaleString()} indexed emails.`);
+  };
+
   return (
     <div className="min-h-full bg-[#f7f8fb] p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -101,10 +132,12 @@ export const GraphifyView = () => {
           </div>
           <div className="flex gap-2">
             <button onClick={() => setInput(starter)} className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-black flex items-center gap-2"><RefreshCw className="w-3.5 h-3.5" /> Reset</button>
+            <button onClick={loadMailMemoryGraph} className="px-4 py-2 bg-white border border-purple-200 text-purple-700 rounded-xl text-xs font-black flex items-center gap-2"><Database className="w-3.5 h-3.5" /> Load Mail Memory</button>
             <button onClick={copyJson} className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-black flex items-center gap-2"><Copy className="w-3.5 h-3.5" /> Copy JSON</button>
             <button onClick={exportJson} className="px-4 py-2 bg-gray-950 text-white rounded-xl text-xs font-black flex items-center gap-2"><Download className="w-3.5 h-3.5" /> Export</button>
           </div>
         </div>
+        {notice && <div className="rounded-xl border border-purple-100 bg-purple-50 px-4 py-3 text-xs font-bold text-purple-700">{notice}</div>}
 
         <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6">
           <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm space-y-4">

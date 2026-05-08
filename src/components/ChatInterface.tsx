@@ -29,7 +29,7 @@ const chooseAgentForPrompt = (prompt: string) => {
   if (/(security|virus|defender|firewall|forensic|breach|malware|audit)/.test(text)) return 'openclaw-full';
   if (/(email|mail|document|file|organize|summarize|folder|workflow)/.test(text)) return 'paperclip-full';
   if (/(research|browser|web|pc|computer|monitor|system|performance|cpu|ram|gpu)/.test(text)) return 'space-agent-full';
-  return 'hermes-full';
+  return 'general-agent';
 };
 
 const ConnectorIcon = ({ icon: Icon, label, color }: { icon: any, label: string, color: string }) => (
@@ -186,7 +186,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     'LM Studio': [],
     'OpenCode': [],
     'Jan': ['Auto local model'],
-    'Gemini': ['gemini-1.5-pro', 'gemini-1.5-flash'],
+    'Gemini': ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'],
     'OpenRouter': [
       'openrouter/auto-free',
       'google/gemma-2-9b-it:free', 

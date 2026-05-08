@@ -10,6 +10,8 @@ type Route = {
 };
 
 const ROUTES: Route[] = [
+  { prefix: 'me', agentId: 'general-agent', label: 'General ME' },
+  { prefix: 'general', agentId: 'general-agent', label: 'General ME' },
   { prefix: 'gent', agentId: 'hermes-full', label: 'GENT Workstation' },
   { prefix: 'hermes', agentId: 'hermes-full', label: 'Hermes Agent' },
   { prefix: 'paperclips', agentId: 'paperclip-full', label: 'Paperclips' },
@@ -38,7 +40,7 @@ export class WhatsAppChannelService {
   getSettings() {
     return this.store.get('whatsappChannelSettings', {
       alwaysActive: true,
-      defaultAgentId: 'hermes-full',
+      defaultAgentId: 'general-agent',
       manualSendOnly: true,
       broadcastMode: 'multi-section',
       enabled: true

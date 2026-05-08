@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, X, RefreshCw, ShieldCheck, Mail, Bot, FolderOpen, Activity, Globe, Search, CalendarClock, Monitor, Scale, CreditCard, Radio } from 'lucide-react';
 
 const agentNames: Record<string, string> = {
+  'general-agent': 'General ME',
   'hermes-full': 'Hermes',
   'paperclip-full': 'Paperclips',
   'solicitor-agent': 'Solicitor',
