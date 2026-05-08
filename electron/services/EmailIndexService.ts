@@ -92,8 +92,14 @@ export class EmailIndexService {
   }
 
   async searchEmails(query: string, accountId?: string): Promise<IndexedEmail[]> {
-    const cleanQuery = query.toLowerCase();
-    const results: IndexedEmail[] = [];
+    const cleanQuery = String(query || '').toLowerCase().trim();
+    const tokens = Array.from(new Set(cleanQuery
+      .replace(/[^a-z0-9@.\-£$]+/gi, ' ')
+      .split(/\s+/)
+      .map(token => token.trim())
+      .filter(token => token.length > 2 && !['tell', 'about', 'what', 'when', 'that', 'this', 'from', 'have', 'need', 'know', 'please'].includes(token))));
+    const scored = new Map<string, { email: IndexedEmail, score: number }>();
+    if (!cleanQuery && tokens.length === 0) return [];
     
     const accountIds = accountId ? [accountId] : Object.keys(this.store.get('accounts', {}));
     
@@ -102,23 +108,49 @@ export class EmailIndexService {
       if (fs.existsSync(indexPath)) {
         try {
           const emails = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as IndexedEmail[];
-          const matches = emails.filter(e => 
-            e.subject.toLowerCase().includes(cleanQuery) ||
-            e.sender.toLowerCase().includes(cleanQuery) ||
-            e.senderEmail.toLowerCase().includes(cleanQuery) ||
-            e.bodyPreview.toLowerCase().includes(cleanQuery) ||
-            e.categoryLabel.toLowerCase().includes(cleanQuery)
-          );
-          results.push(...matches);
+          for (const e of emails) {
+            const subject = String(e.subject || '').toLowerCase();
+            const sender = `${e.sender || ''} ${e.senderEmail || ''}`.toLowerCase();
+            const body = String(e.bodyPreview || '').toLowerCase();
+            const category = String(e.categoryLabel || '').toLowerCase();
+            const haystack = `${subject} ${sender} ${body} ${category}`;
+            if (/\bcar\b|\bvehicle\b|\bmotor\b/i.test(query) && /insurance|renew|renewal|policy|premium/i.test(query)) {
+              if (!/(car|vehicle|motor)/i.test(haystack) || !/(insurance|renew|renewal|policy|premium)/i.test(haystack)) continue;
+            }
+            let score = cleanQuery && haystack.includes(cleanQuery) ? 100 : 0;
+            for (const token of tokens) {
+              if (subject.includes(token)) score += 8;
+              if (sender.includes(token)) score += 6;
+              if (category.includes(token)) score += 5;
+              if (body.includes(token)) score += 2;
+            }
+            if (/(renew|renewal|expires?|due|mot|insurance|premium|policy|vehicle|car)/i.test(query)) {
+              if (/(renew|renewal|expires?|due|mot|insurance|premium|policy|vehicle|car)/i.test(`${e.subject || ''} ${e.sender || ''} ${e.bodyPreview || ''} ${e.categoryLabel || ''}`)) score += 10;
+            }
+            const receivedMs = new Date(e.receivedAt).getTime();
+            if (Number.isFinite(receivedMs)) {
+              const ageDays = (Date.now() - receivedMs) / 86400000;
+              if (ageDays >= 0 && ageDays <= 30) score += 20;
+              else if (ageDays <= 90) score += 16;
+              else if (ageDays <= 365) score += 12;
+              else if (ageDays <= 730) score += 6;
+            }
+            if (score > 0) {
+              const key = e.id || `${id}:${e.receivedAt}:${e.subject}`;
+              const existing = scored.get(key);
+              if (!existing || score > existing.score) scored.set(key, { email: e, score });
+            }
+          }
         } catch (e) {
           console.error(`Failed to read index for ${id}:`, e);
         }
       }
     }
     
-    return results.sort((a, b) => 
-      new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    ).slice(0, 50); // Limit to top 50 results
+    return Array.from(scored.values())
+      .sort((a, b) => b.score - a.score || new Date(b.email.receivedAt).getTime() - new Date(a.email.receivedAt).getTime())
+      .map(item => item.email)
+      .slice(0, 50);
   }
 
   getAccountMetadata(accountId: string): AccountSyncState | null {

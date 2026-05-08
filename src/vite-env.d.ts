@@ -74,6 +74,7 @@ interface Window {
     resetMailSyncState: (accountId?: string) => Promise<any>;
     runMicrosoftGraphMailAction: (arg: any, action?: any) => Promise<any>;
     disconnectMicrosoftGraph: (accountId?: string) => Promise<{ ok: boolean }>;
+    searchIndexedEmails?: (query: string, accountId?: string) => Promise<any[]>;
     getSilvaMemory: () => Promise<string>;
     saveSilvaMemory: (memory: string) => Promise<boolean>;
     getEmailIntelligence: () => Promise<any>;

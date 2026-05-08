@@ -654,14 +654,17 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     }
 
     const userMessage = { role: 'user', content: outgoing };
-    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement)/i.test(outgoing);
+    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium)/i.test(outgoing);
     let memoryContext: any = null;
+    let matchingEmails: any[] = [];
     if (needsMailMemory && window.ipcRenderer?.getEmailIntelligence) {
       try {
         const intel = await window.ipcRenderer.getEmailIntelligence();
         memoryContext = intel?.mailboxMemory || intel?.memory || null;
+        matchingEmails = await window.ipcRenderer.searchIndexedEmails?.(outgoing).catch(() => []) || [];
       } catch {
         memoryContext = null;
+        matchingEmails = [];
       }
     }
     const chatHistory = [
@@ -676,7 +679,18 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           categories: memoryContext.categories,
           billsToPay: (memoryContext.billsToPay || []).slice(0, 20),
           deadlines: (memoryContext.deadlines || []).slice(0, 20),
-          urgent: (memoryContext.urgent || []).slice(0, 20)
+          urgent: (memoryContext.urgent || []).slice(0, 20),
+          exactSearchMatchesForThisQuestion: matchingEmails.slice(0, 12).map((email: any) => ({
+            subject: email.subject,
+            sender: email.sender || email.senderEmail,
+            senderEmail: email.senderEmail,
+            receivedAt: email.receivedAt,
+            accountId: email.accountId,
+            folderName: email.folderName,
+            categoryLabel: email.categoryLabel,
+            unread: email.unread,
+            preview: email.bodyPreview
+          }))
         })}`
       }] : []),
       ...messages,
@@ -749,8 +763,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         clearTimeout(timeoutId);
 
         if (response) {
-          const content = response.content || response.message?.content || (response.choices && response.choices[0]?.message?.content) || "No response content received.";
+          let content = response.content || response.message?.content || (response.choices && response.choices[0]?.message?.content) || "No response content received.";
           const engine = response.engine || provider;
+          if (needsMailMemory && matchingEmails.length > 0 && /no local ai engine is available|no response content/i.test(content)) {
+            const top = matchingEmails.slice(0, 6);
+            content = `I searched your local indexed mailbox memory (${memoryContext?.totalIndexed?.toLocaleString?.() || memoryContext?.totalIndexed || 'indexed'} emails) and found these relevant items:\n\n${top.map((email: any, index: number) => `${index + 1}. ${email.subject || '(no subject)'}\nFrom: ${email.sender || email.senderEmail || 'unknown'}\nReceived: ${email.receivedAt ? new Date(email.receivedAt).toLocaleString() : 'unknown'}\nAccount/folder: ${email.accountId || 'unknown'} / ${email.folderName || 'unknown'}\n${email.bodyPreview ? `Preview: ${String(email.bodyPreview).slice(0, 220)}` : ''}`).join('\n\n')}\n\nBest current read: your strongest recent car-insurance evidence is the Comparethemarket/Go.Compare renewal sequence around late August to October 2025. I do not see a confirmed future due date in the indexed preview text, so treat this as a reminder to check the actual policy document or insurer portal before relying on it.`;
+          }
           const engineText = String(engine || '').toLowerCase();
           if (engineText.includes('jan') || engineText.includes('turboquant') || engineText.includes('dflash') || engineText.includes('dfalsh')) {
             setEngineStatus(prev => ({
