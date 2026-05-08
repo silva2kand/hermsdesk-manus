@@ -46,15 +46,16 @@ const ToolButton = ({ label, icon: Icon, onClick }: any) => (
   </button>
 );
 
-const AppIcon = ({ icon: Icon, label, color }: any) => (
-  <div className="relative group cursor-pointer">
+const AppIcon = ({ icon: Icon, label, color, status, onClick }: any) => (
+  <button type="button" onClick={onClick} className="relative group cursor-pointer" title={`${label}: ${status?.detail || status?.status || 'route'}`}>
     <div className={`w-5 h-5 rounded-md ${color} flex items-center justify-center text-white shadow-sm transition-all group-hover:scale-110`}>
       <Icon className="w-3 h-3" />
     </div>
+    <span className={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white ${status?.liveVerified ? 'bg-green-500' : status?.apiKeySaved || status?.oauthConnected ? 'bg-blue-500' : 'bg-orange-400'}`} />
     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-[8px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 font-bold uppercase tracking-wider">
       {label}
     </div>
-  </div>
+  </button>
 );
 
 export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onNavigate }: any) => {
@@ -62,6 +63,7 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
   const [showUploads, setShowUploads] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isPreparing, setIsPreparing] = useState(false);
+  const [connectorStatuses, setConnectorStatuses] = useState<Record<string, any>>({});
 
   const startTask = (text = prompt, agentic = true) => {
     const trimmed = text.trim();
@@ -111,6 +113,13 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
   const openVideoCall = () => window.ipcRenderer?.openApp?.('video call');
   const openVoiceStack = () => window.ipcRenderer?.openApp?.('voice stack');
   const openResearch = () => window.ipcRenderer?.researchWebAutomation?.(prompt || 'HermesDesk ME research');
+  const openConnector = (id: string, url?: string) => {
+    if (url) {
+      window.ipcRenderer?.openApp?.(url);
+      return;
+    }
+    onOpenConnectors?.();
+  };
   const createSlides = async () => window.ipcRenderer?.createSlidesArtifact?.('HermesDesk ME Deck', prompt || 'Create a researched presentation.').then(() => onNavigate?.('projects'));
   const createWebsite = async () => window.ipcRenderer?.createWebsiteArtifact?.('HermesDesk ME Website', prompt || 'Build a production website starter.').then(() => onNavigate?.('websites'));
   const createDesign = async () => window.ipcRenderer?.createDesignArtifact?.('HermesDesk ME Design', prompt || 'Create an editable design preview.').then(() => onNavigate?.('apps'));
@@ -132,11 +141,17 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
 
   React.useEffect(() => {
     if (window.ipcRenderer) {
-      window.ipcRenderer.getConnectors().then((c: any) => {
-        setActiveConnectorsCount(Object.values(c).filter(Boolean).length);
+      Promise.all([
+        window.ipcRenderer.getConnectors(),
+        window.ipcRenderer.getConnectorStatuses?.().catch(() => ({}))
+      ]).then(([c, statuses]: any[]) => {
+        setActiveConnectorsCount(Object.values(c || {}).filter(Boolean).length);
+        setConnectorStatuses(statuses || {});
       });
     }
   }, []);
+
+  const liveToolCount = Object.values(connectorStatuses).filter((status: any) => status?.liveVerified).length;
 
   if (isPreparing) {
     return (
@@ -249,25 +264,27 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
             </div>
 
             {/* App Connectors Strip */}
-            <div 
-              onClick={onOpenConnectors}
-              className="px-6 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
-            >
+            <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Puzzle className="w-3.5 h-3.5 text-gray-400" />
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Enable real tool routes and logins</span>
+                <button onClick={onOpenConnectors} className="text-[10px] font-bold text-gray-500 uppercase tracking-widest hover:text-gray-900">
+                  Real tool routes and logins
+                </button>
+                <span className="text-[9px] font-black text-green-600">{liveToolCount} live</span>
               </div>
               <div className="flex items-center space-x-2">
-                <AppIcon icon={Globe} label="Browser" color="bg-blue-500" />
-                <AppIcon icon={MsgIcon} label="WhatsApp" color="bg-green-500" />
-                <AppIcon icon={Palette} label="Canva" color="bg-purple-500" />
-                <AppIcon icon={Mail} label="Gmail" color="bg-red-500" />
-                <AppIcon icon={Calendar} label="Calendar" color="bg-blue-600" />
-                <AppIcon icon={Cloud} label="Drive" color="bg-green-600" />
-                <AppIcon icon={Github} label="GitHub" color="bg-gray-900" />
-                <AppIcon icon={Layout} label="Notion" color="bg-gray-400" />
+                <AppIcon icon={Globe} label="Browser" color="bg-blue-500" status={connectorStatuses['my-browser']} onClick={() => window.ipcRenderer?.openBrowserOperator?.(prompt || 'https://www.google.com', `dashboard-browser-${Date.now()}`, 'Dashboard Browser')} />
+                <AppIcon icon={MsgIcon} label="WhatsApp" color="bg-green-500" status={connectorStatuses.whatsapp} onClick={() => onNavigate?.('whatsapp')} />
+                <AppIcon icon={Palette} label="Canva" color="bg-purple-500" status={connectorStatuses.canva} onClick={() => openConnector('canva', 'https://www.canva.com/')} />
+                <AppIcon icon={Mail} label="Gmail" color="bg-red-500" status={connectorStatuses.gmail} onClick={() => openConnector('gmail', 'https://mail.google.com/')} />
+                <AppIcon icon={Calendar} label="Calendar" color="bg-blue-600" status={connectorStatuses['google-calendar']} onClick={() => openConnector('google-calendar', 'https://calendar.google.com/')} />
+                <AppIcon icon={Cloud} label="Drive" color="bg-green-600" status={connectorStatuses['google-drive']} onClick={() => openConnector('google-drive', 'https://drive.google.com/')} />
+                <AppIcon icon={Github} label="GitHub" color="bg-gray-900" status={connectorStatuses.github} onClick={() => openConnector('github', 'https://github.com/')} />
+                <AppIcon icon={Layout} label="Notion" color="bg-gray-400" status={connectorStatuses.notion} onClick={() => openConnector('notion', 'https://www.notion.so/')} />
                 <div className="w-px h-3 bg-gray-200 mx-1" />
-                <X className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500 cursor-pointer transition-colors" />
+                <button onClick={onOpenConnectors} title="Open connector manager">
+                  <X className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500 cursor-pointer transition-colors" />
+                </button>
               </div>
             </div>
           </div>

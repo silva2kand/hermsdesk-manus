@@ -760,7 +760,7 @@ function createWindow() {
   ipcMain.handle('ai:save-api-key', (_, { provider, key }) => providerService.saveAPIKey(provider, key))
   ipcMain.handle('ai:get-api-keys', () => providerService.getAPIKeys())
   ipcMain.handle('ai:get-connector-statuses', async () => {
-    const [routes, keys, graph, outlook, jan, ollama, lm, openCode, browser, tinyFishStatus] = await Promise.all([
+    const [routes, keys, graph, outlook, jan, ollama, lm, openCode, browser, tinyFishStatus, whatsappStatus] = await Promise.all([
       toolRegistry.getConnectors().catch(() => ({})),
       providerService.getAPIKeys().catch(() => ({})),
       microsoftGraph.getAccountStatus().catch(() => ({ connected: false })),
@@ -770,7 +770,8 @@ function createWindow() {
       aiService.checkLMStudio().catch(() => null),
       aiService.checkOpenCode().catch(() => null),
       Promise.resolve(browserOperator.getState()).catch(() => ({})),
-      tinyFish.getApiStatus().catch(() => ({ configured: false }))
+      tinyFish.getApiStatus().catch(() => ({ configured: false })),
+      whatsAppChannelService.getStatus().catch(() => ({ ok: false }))
     ])
     const known = Array.from(new Set([...Object.keys(routes || {}), 'jan-turboquant', 'ollama', 'lm-studio', 'opencode', 'my-browser', 'outlook-mail', 'outlook-calendar', 'tinyfish', 'google-gemini', 'openrouter', 'nvidia', 'huggingface']))
     const apiKeyProvider: Record<string, string> = {
@@ -794,6 +795,7 @@ function createWindow() {
         (id === 'lm-studio' && Boolean(lm?.online || lm?.data)) ||
         (id === 'opencode' && Boolean(openCode?.online) && !openCode?.authRequired) ||
         (id === 'my-browser' && Boolean(browser?.online)) ||
+        (id === 'whatsapp' && Boolean(whatsappStatus?.ok)) ||
         tinyFishConfigured ||
         oauthConnected
       );
@@ -810,6 +812,8 @@ function createWindow() {
             ? (graph.connected ? `Microsoft Graph connected: ${graph.profile?.mail || graph.profile?.userPrincipalName || graph.accountId || 'account'}` : 'Microsoft Graph OAuth not connected')
             : id === 'tinyfish'
               ? (tinyFishConfigured ? `TinyFish API key saved locally (${tinyFishStatus.keyPrefix || 'configured'})` : 'TinyFish API key missing')
+            : id === 'whatsapp'
+              ? (whatsappStatus?.ok ? `WhatsApp channel active (${whatsappStatus.manualSendOnly ? 'manual send' : 'send route'})` : 'WhatsApp route enabled; open WhatsApp Desktop/Web')
             : id === 'my-browser'
               ? (browser?.online ? `Browser Operator open: ${browser.url || 'active session'}` : 'Browser Operator not opened yet')
               : apiKeyProvider[id]
