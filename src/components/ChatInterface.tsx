@@ -16,6 +16,19 @@ const ResearchStep = ({ label, done = false }: { label: string, done?: boolean }
   </div>
 );
 
+const traceLine = (event: any) => {
+  const payload = event?.payload || {};
+  if (event?.type === 'search.query') return `Search: ${payload.query || 'query'} (${payload.engine || event.source})`;
+  if (event?.type === 'search.result') return `Result #${payload.rank || ''}: ${payload.title || payload.url || payload.snippet || 'source'}`;
+  if (event?.type === 'tool.called') return `Tool: ${payload.tool || payload.detail || event.source}`;
+  if (event?.type === 'tool.result') return `Tool result: ${payload.resultCount ?? payload.status ?? payload.error ?? payload.detail ?? event.source}`;
+  if (event?.type === 'session.started') return `Session started: ${payload.engine || payload.model || event.source}`;
+  if (event?.type === 'session.finished') return `Session finished: ${payload.engine || event.source} (${payload.durationMs || 0}ms)`;
+  if (event?.type === 'agent.step' || event?.type === 'agent.thought') return payload.message || payload.step || 'Agent step';
+  if (event?.type === 'memory.read') return `Memory read: ${payload.query || payload.source || event.source}`;
+  return payload.message || payload.query || payload.tool || payload.detail || event?.type || 'Event';
+};
+
 const connectorId = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
 const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name === 'Auto' ? 'Auto' : name;
 const preferJanModel = (models: string[]) => models.find(m => /qwen/i.test(m)) || models.find(m => /phi/i.test(m)) || models[0] || 'Auto local model';
@@ -72,6 +85,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [messages, setMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [researchSteps, setResearchSteps] = useState<string[]>([]);
+  const [liveTrace, setLiveTrace] = useState<any[]>([]);
   const [provider, setProvider] = useState(initialModel?.provider || 'Auto');
   const [model, setModel] = useState(initialModel?.model || 'Auto mix');
   const [voicePreset, setVoicePreset] = useState('tamil-jaffna');
@@ -85,6 +99,17 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     'LM Studio': 'checking',
     OpenCode: 'checking'
   });
+
+  useEffect(() => {
+    const onSilvaEvent = (_: any, event: any) => {
+      setLiveTrace(prev => [event, ...prev].slice(0, 40));
+    };
+    window.ipcRenderer?.getSilvaEvents?.(30).then(events => setLiveTrace(events || [])).catch(() => {});
+    window.ipcRenderer?.on?.('silva:event', onSilvaEvent);
+    return () => {
+      window.ipcRenderer?.off?.('silva:event', onSilvaEvent);
+    };
+  }, []);
 
   // Update when initialModel changes
   React.useEffect(() => {
@@ -526,8 +551,15 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const openWebResearch = async (query?: string) => {
     const target = (query || input || getLastUserPrompt()).trim();
-    const result = await window.ipcRenderer?.openBrowserOperator?.(target);
-    addNotice(result?.ok ? 'Opened live Browser Operator research window.' : (result?.error || 'Could not open browser research.'));
+    setResearchSteps(['Opening live browser computer', 'Sending real web search query', 'Capturing search trace']);
+    const [browser, trace]: any[] = await Promise.all([
+      window.ipcRenderer?.openBrowserOperator?.(target).catch((error: any) => ({ ok: false, error: error?.message })),
+      window.ipcRenderer?.researchWebAutomation?.(target).catch((error: any) => ({ ok: false, error: error?.message }))
+    ]);
+    addNotice(browser?.ok || trace?.trace?.ok
+      ? `Live web research started. ${trace?.trace?.results?.length || 0} sources traced in Event Bus.`
+      : (browser?.error || trace?.error || 'Could not open browser research.'));
+    window.setTimeout(() => setResearchSteps([]), 5000);
   };
 
   const startAutoResearch = async () => {
@@ -655,6 +687,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
     const userMessage = { role: 'user', content: outgoing };
     const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium)/i.test(outgoing);
+    const wantsLiveWeb = !needsMailMemory && /(research|web|internet|latest|current|today|news|official|source|cite|verify online|search online|browser)/i.test(outgoing);
     let memoryContext: any = null;
     let matchingEmails: any[] = [];
     if (needsMailMemory && window.ipcRenderer?.getEmailIntelligence) {
@@ -666,6 +699,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         memoryContext = null;
         matchingEmails = [];
       }
+    }
+    let webTrace: any = null;
+    if (wantsLiveWeb && window.ipcRenderer?.researchWebAutomation) {
+      setResearchSteps(['Sending real web search query', 'Fetching source results', 'Streaming research trace']);
+      webTrace = await window.ipcRenderer.researchWebAutomation(outgoing).catch((error: any) => ({ ok: false, error: error?.message, trace: null }));
     }
     const chatHistory = [
       { role: 'system', content: systemPrompt },
@@ -691,6 +729,15 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             unread: email.unread,
             preview: email.bodyPreview
           }))
+        })}`
+      }] : []),
+      ...(webTrace?.trace?.results?.length ? [{
+        role: 'system',
+        content: `Live web research was performed for this user question. Use these real fetched search results as evidence. Do not pretend you visited pages that are not listed here. Cite titles/URLs when useful.\n\n${JSON.stringify({
+          query: webTrace.trace.query,
+          engine: webTrace.trace.engine,
+          durationMs: webTrace.trace.durationMs,
+          results: webTrace.trace.results.slice(0, 8)
         })}`
       }] : []),
       ...messages,
@@ -877,10 +924,25 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
                         Web research
                       </button>
                     </div>
-                    <div className="px-4 py-2 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <ResearchStep label="Read task context" done />
-                      <ResearchStep label="Check local model route" done={!isTyping} />
-                      <ResearchStep label="Web research available" done />
+                    <div className="px-4 py-2 bg-white space-y-1">
+                      <div className="flex items-center justify-between pb-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Real EventBus trace</span>
+                        <span className="text-[9px] font-black text-blue-500">{liveTrace.length} events</span>
+                      </div>
+                      {liveTrace.length === 0 ? (
+                        <ResearchStep label="No live tool/search events captured for this answer yet" done={false} />
+                      ) : liveTrace.slice(0, 6).map((event) => (
+                        <div key={`${msg.role}-${idx}-${event.id}`} className="flex items-start gap-2 rounded-lg border border-gray-100 bg-gray-50 px-2 py-1.5">
+                          <div className={`mt-0.5 h-2 w-2 rounded-full ${event.type?.startsWith('search.') ? 'bg-blue-500' : event.type?.startsWith('tool.') ? 'bg-purple-500' : event.type?.startsWith('session.') ? 'bg-green-500' : 'bg-gray-400'}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 truncate">{event.type}</span>
+                              <span className="text-[8px] text-gray-400 shrink-0">{new Date(event.createdAt).toLocaleTimeString()}</span>
+                            </div>
+                            <p className="text-[10px] font-semibold text-gray-700 truncate">{traceLine(event)}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 

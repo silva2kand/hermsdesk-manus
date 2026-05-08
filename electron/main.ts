@@ -664,7 +664,16 @@ function createWindow() {
   ipcMain.handle('microsoft:graph-complete-login', () => microsoftGraph.completeDeviceLogin())
   ipcMain.handle('microsoft:graph-status', (_, accountId) => microsoftGraph.getAccountStatus(accountId))
   ipcMain.handle('microsoft:graph-list-accounts', () => emailIndexService.getAllAccounts())
-  ipcMain.handle('microsoft:graph-search-index', (_, { query, accountId }) => emailIndexService.searchEmails(query, accountId))
+  ipcMain.handle('microsoft:graph-search-index', async (_, { query, accountId }) => {
+    const results = await emailIndexService.searchEmails(query, accountId);
+    eventBus?.emit('memory.read', 'mail-memory', {
+      query,
+      accountId,
+      resultCount: results.length,
+      topSubjects: results.slice(0, 5).map((item: any) => item.subject)
+    });
+    return results;
+  })
   ipcMain.handle('microsoft:graph-mailbox-settings', (_, accountId) => microsoftGraph.getMailboxSettings(accountId))
   ipcMain.handle('microsoft:graph-messages', (_, arg) => {
     const payload = typeof arg === 'object' && arg !== null ? arg : { limit: arg };
