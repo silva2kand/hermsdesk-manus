@@ -25,6 +25,7 @@ export class LocalAIService {
   private store: any;
   private janUrl = 'http://127.0.0.1:6767/v1';
   private activeJanModel = '';
+  private janStartPromise: Promise<any> | null = null;
   private modelsPath = path.join(app.getPath('userData'), 'models');
   private ollamaUrl = 'http://localhost:11434/api';
   private lmStudioUrl = 'http://localhost:1234/v1';
@@ -304,6 +305,14 @@ export class LocalAIService {
   }
 
   async startJanEngine() {
+    if (this.janStartPromise) return this.janStartPromise;
+    this.janStartPromise = this.startJanEngineInternal().finally(() => {
+      this.janStartPromise = null;
+    });
+    return this.janStartPromise;
+  }
+
+  private async startJanEngineInternal() {
     const status = await this.getJanEngineStatus();
     if (status.apiOnline) return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in engine is already running.', status };
     if (status.portOccupiedByOther) return { ok: false, engine: 'Jan + TurboQuant', error: 'Jan API port is occupied by another service.' };
@@ -378,7 +387,7 @@ export class LocalAIService {
       if (!target) throw new Error(`Model ${model.name} not found in library.`);
 
       const runtime = this.getJanRuntimeDiagnostics();
-      if (runtime.janCliPath && (!status.apiOnline || this.janUrl.includes(':6767'))) {
+      if (runtime.janCliPath && !status.apiOnline) {
         const started = await this.startJanCliServe(target.path, target.name || model.name);
         if (!started.ok) return { ok: false, error: started.error, status: await this.getJanEngineStatus() };
         this.activeJanModel = model.name;

@@ -174,6 +174,29 @@ export class WorkspaceService {
     });
   }
 
+  getEmailIntelligenceSummary() {
+    const current = this.getEmailIntelligence();
+    const memory = current.mailboxMemory || current.memory || {};
+    if ((current.messages || []).length > 2500 || (current.folders || []).length > 250) {
+      this.store.set('emailIntelligence', {
+        ...current,
+        folders: (current.folders || []).slice(0, 250),
+        messages: (current.messages || []).slice(0, 2500),
+        memory,
+        mailboxMemory: memory
+      });
+    }
+    return {
+      syncedAt: current.syncedAt || null,
+      folders: (current.folders || []).slice(0, 200),
+      summary: current.summary || {},
+      memory,
+      mailboxMemory: memory,
+      latestMessages: (current.messages || []).slice(0, 100),
+      messageCount: (current.messages || []).length
+    };
+  }
+
   saveEmailIntelligence(data: any) {
     this.store.set('emailIntelligence', data);
     return true;

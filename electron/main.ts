@@ -245,23 +245,45 @@ function createWindow() {
   }
 
   const processEmailIntelligence = async (data: any, source = 'mailbox', options: { taskLimit?: number } = {}) => {
-    const current = workspaceService.getEmailIntelligence?.() || { messages: [], folders: [], summary: {} }
-    const statusById = new Map((current.messages || []).map((m: any) => [m.id, m.approvalStatus]))
+    const current = workspaceService.getEmailIntelligenceSummary?.() || { latestMessages: [], folders: [], summary: {}, mailboxMemory: {} }
+    const statusById = new Map((current.latestMessages || current.messages || []).map((m: any) => [m.id, m.approvalStatus]))
     const processed = new Set(store.get('mailProcessedTaskIds', []) as string[])
     const incomingMessages = (data.messages || []).map((message: any) => ({
       ...message, source, approvalStatus: statusById.get(message.id) || message.approvalStatus || 'pending-review',
       actionPolicy: 'approval-required-for-send-delete-move-pay-file-submit-contact'
     }))
     const incomingIds = new Set(incomingMessages.map((message: any) => message.id))
-    const retainedMessages = (current.messages || []).filter((message: any) => message.id && !incomingIds.has(message.id))
-    const messages = [...incomingMessages, ...retainedMessages].sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))).slice(0, 100000)
+    const retainedMessages = (current.latestMessages || current.messages || []).filter((message: any) => message.id && !incomingIds.has(message.id))
+    const messages = [...incomingMessages, ...retainedMessages].sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))).slice(0, 2500)
     const foldersByKey = new Map<string, any>()
     ;[...(current.folders || []), ...(data.folders || [])].forEach((folder: any) => {
       const key = folder.id || `${source}:${folder.displayName || 'folder'}`
       foldersByKey.set(key, { ...foldersByKey.get(key), ...folder, source: folder.source || source })
     })
     const memory = buildEmailMemory(messages)
-    const merged = { ...data, folders: Array.from(foldersByKey.values()), messages, summary: memory.categories, memory, mailboxMemory: memory }
+    const stats = emailIndexService.getGlobalStats?.() || {};
+    const previousMemory = current.mailboxMemory || current.memory || {};
+    const latestPossibleBills = [
+      ...(memory.billsToPay || []),
+      ...(previousMemory.billsToPay || [])
+    ].filter((item: any, index: number, all: any[]) => item?.id && all.findIndex(other => other.id === item.id) === index)
+      .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+      .slice(0, 80);
+    const latestDeadlines = [
+      ...(memory.deadlines || []),
+      ...(previousMemory.deadlines || [])
+    ].filter((item: any, index: number, all: any[]) => item?.id && all.findIndex(other => other.id === item.id) === index)
+      .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+      .slice(0, 80);
+    const compactMemory = {
+      ...previousMemory,
+      ...memory,
+      totalIndexed: Math.max(Number(stats.totalIndexed || 0), Number(previousMemory.totalIndexed || 0), Number(memory.totalIndexed || 0)),
+      unreadCount: Math.max(Number(previousMemory.unreadCount || 0), Number(memory.unreadCount || 0)),
+      billsToPay: latestPossibleBills,
+      deadlines: latestDeadlines
+    };
+    const merged = { ...data, folders: Array.from(foldersByKey.values()).slice(0, 250), messages, summary: compactMemory.categories, memory: compactMemory, mailboxMemory: compactMemory }
     workspaceService.saveEmailIntelligence(merged)
 
     const highValue = (message: any) => (
@@ -738,7 +760,7 @@ function createWindow() {
   ipcMain.handle('workspace:save-model-preset', (_, p) => workspaceService.saveModelPreset(p))
   ipcMain.handle('workspace:get-silva-memory', () => workspaceService.getSilvaMemory())
   ipcMain.handle('workspace:save-silva-memory', (_, m) => workspaceService.saveSilvaMemory(m))
-  ipcMain.handle('workspace:get-email-intelligence', () => workspaceService.getEmailIntelligence())
+  ipcMain.handle('workspace:get-email-intelligence', () => workspaceService.getEmailIntelligenceSummary())
   ipcMain.handle('workspace:approve-email-route', (_, { messageId, status }) => workspaceService.approveEmailRoute(messageId, status))
   ipcMain.handle('workspace:get-projects', () => workspaceService.getProjects())
   ipcMain.handle('workspace:save-project', (_, p) => workspaceService.saveProject(p))

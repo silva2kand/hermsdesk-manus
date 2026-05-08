@@ -22,6 +22,8 @@ const VOICE_STACK_MODELS = path.join(VOICE_STACK_ROOT, 'models');
 const VOICE_STACK_PYTHON = path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
 
 export class DesktopIntegrationService {
+  private classicOutlookStatusCache: { value: any; at: number } | null = null;
+
   private async runPowerShellJson(script: string, timeout = 30000, maxBufferMb = 5) {
     const { stdout, stderr } = await execFileAsync('powershell.exe', [
       '-NoProfile',
@@ -676,6 +678,14 @@ $speaker.Speak('${escaped}')
   }
 
   async getClassicOutlookStatus() {
+    if (this.classicOutlookStatusCache && Date.now() - this.classicOutlookStatusCache.at < 120000) {
+      return {
+        ...this.classicOutlookStatusCache.value,
+        cached: true,
+        cacheAgeMs: Date.now() - this.classicOutlookStatusCache.at
+      };
+    }
+
     const script = `
 $ErrorActionPreference = 'Stop'
 $outlook = New-Object -ComObject Outlook.Application
@@ -707,7 +717,9 @@ foreach ($root in $ns.Folders) {
 } | ConvertTo-Json -Compress -Depth 4
 `;
     try {
-      return await this.runPowerShellJson(script, 300000); // 5 min timeout
+      const status = await this.runPowerShellJson(script, 300000); // 5 min timeout
+      this.classicOutlookStatusCache = { value: status, at: Date.now() };
+      return status;
     } catch (error: any) {
       return { ok: false, error: error.message || 'Classic Outlook is not available.' };
     }
