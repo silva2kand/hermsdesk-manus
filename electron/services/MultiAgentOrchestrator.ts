@@ -44,16 +44,21 @@ export interface Task {
 const PERSONALITIES: Record<string, string> = {
   'general-agent': `You are General ME, the front-door coordinator for HermesDesk ME 1.8.
 
-Your purpose is to receive unclear or mixed tasks, clarify the goal, split the work, choose the right specialist agents, and verify the final answer before it reaches Silva.
+Your purpose is to act as Mythos: the director, router, coordinator, memory gatekeeper, and quality controller for Silva's personal-business AI OS. Receive unclear or mixed tasks, infer the real goal, split the work, choose the right specialist agents, and verify the final answer before it reaches Silva.
 
 Your capabilities:
 - Route tasks to Hermes, Paperclips, Solicitor, Accountant, Space, OpenClaw, Justice Case Builder, and Purchase Guardian
 - Use mailbox memory summaries, installed skills, local model routing, web research, and TinyFish web automation when configured
+- Track and route renewals, bills, HMRC/VAT, Lancaster/council matters, land registry, solicitor/conveyancing work, suppliers, staff invoices, shop/business operations, insurance policies, and WhatsApp drafts
 - Ask one short clarification only when a missing fact blocks real progress
 - Coordinate peer checks and produce a practical final action plan
 
 Rules:
 - Prefer action over talk.
+- Memory first: check indexed mail/workspace memory before asking Silva to repeat context.
+- Route first: if the work belongs to a specialist, name the lead specialist and verifier.
+- TASTE always: PLAN -> DRAFT -> REVISE -> PRESENT for non-trivial work.
+- Dreams are proposal-only: self-improvement can diagnose and propose, but must not silently edit code, install packages, submit forms, pay, send, delete, or contact anyone.
 - Do not pretend a connector is connected unless live status/API/OAuth confirms it.
 - Destructive actions, money, legal filings, external messages, and account changes require approval.
 - When a task spans multiple domains, name the lead agent and verifier clearly.
@@ -442,15 +447,18 @@ export class MultiAgentOrchestrator {
     const collaborators = new Set<string>();
 
     if (agent.id !== 'paperclip-full') collaborators.add('paperclip-full');
-    if (/legal|court|appeal|justice|solicitor|council|landlord|tenant|hmrc|evidence|complaint/.test(text)) {
+    if (/legal|court|appeal|justice|solicitor|council|lancaster|landlord|tenant|hmrc|evidence|complaint|land registry|conveyancer|freeholder|leasehold/.test(text)) {
       collaborators.add('justice-case-agent');
       collaborators.add('solicitor-agent');
     }
-    if (/invoice|vat|tax|bill|payment|receipt|hmrc|account|ledger|bank/.test(text)) {
+    if (/invoice|vat|tax|bill|payment|receipt|hmrc|account|ledger|bank|staff invoice|payroll|supplier invoice|direct debit/.test(text)) {
       collaborators.add('accountant-agent');
     }
-    if (/buy|purchase|seller|refund|chargeback|scam|price|product|order|parcel/.test(text)) {
+    if (/buy|purchase|seller|refund|chargeback|scam|price|product|order|parcel|insurance|renewal|quote|policy|mot|supplier|wholesale|stock|shop/.test(text)) {
       collaborators.add('purchase-guardian-agent');
+    }
+    if (/email|mail|outlook|gmail|whatsapp|staff|supplier|invoice|receipt|attachment|organize|remember|memory/.test(text)) {
+      collaborators.add('paperclip-full');
     }
     if (/security|password|hack|malware|risk|fraud|suspicious/.test(text)) {
       collaborators.add('openclaw-full');
@@ -473,6 +481,17 @@ export class MultiAgentOrchestrator {
   private pickVerifier(agent: Agent, task: Task) {
     const plan = this.getCollaborationPlan(agent, task.input);
     return plan.find(peer => peer.id !== 'paperclip-full') || plan[0] || null;
+  }
+
+  private routeTaskToAgent(input: string) {
+    const text = String(input || '').toLowerCase();
+    if (/code|build|fix|bug|repo|git|typescript|electron|jan|turboquant|dfalsh|model hub|voice|runtime|crash|freeze|test|terminal/.test(text)) return 'hermes-full';
+    if (/legal|solicitor|court|appeal|justice|land registry|conveyancer|freeholder|leasehold|council dispute|complaint|evidence|hmcts/.test(text)) return 'general-agent';
+    if (/invoice|receipt|vat|hmrc|tax|accountant|payroll|bookkeeping|bill|payment|direct debit|statement|staff invoice|supplier invoice/.test(text)) return 'general-agent';
+    if (/insurance|renewal|quote|policy|mot|road tax|supplier|wholesale|stock|purchase|refund|chargeback|seller|parcel|order/.test(text)) return 'general-agent';
+    if (/security|hack|password|malware|fraud|suspicious|forensic/.test(text)) return 'openclaw-full';
+    if (/pc|cpu|ram|gpu|vram|performance|slow|process|storage/.test(text)) return 'space-agent-full';
+    return 'general-agent';
   }
 
   private async peerVerifyFinal(agent: Agent, task: Task, answer: string, engine: string) {
@@ -581,7 +600,7 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
   }
 
   async createTask(input: string, agentId?: string, win?: any) {
-    const assignedId = agentId || 'hermes-full';
+    const assignedId = agentId || this.routeTaskToAgent(input);
     const task: Task = {
       id: Math.random().toString(36).substring(7),
       input,
@@ -639,6 +658,8 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
 
     const skillGuidance = this.skillsEngine?.getSkillGuidance?.();
     const silvaMemory = this.workspaceService?.getSilvaMemory?.() || '';
+    const emailSummary = this.workspaceService?.getEmailIntelligenceSummary?.() || {};
+    const mailboxMemory = emailSummary.mailboxMemory || emailSummary.memory || {};
     const collaborationPlan = this.getCollaborationPlan(agent, task.input);
     const tinyFishStatus = this.tinyFishService?.getApiStatus?.();
     this.eventBus?.emit('agent.collaboration', 'agent-orchestrator', {
@@ -656,6 +677,20 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
 ### BASE MEMORY OF SILVA KANDASAMY
 ${silvaMemory}
 
+### LIVE MAIL MEMORY SNAPSHOT
+Use this before asking Silva to reread mail. It is a compact index summary, not permission to send/move/delete.
+${JSON.stringify({
+  syncedAt: emailSummary.syncedAt || null,
+  totalIndexed: mailboxMemory.totalIndexed || 0,
+  latestReceivedAt: mailboxMemory.latestReceivedAt || null,
+  billsToPay: (mailboxMemory.billsToPay || []).slice(0, 10),
+  deadlines: (mailboxMemory.deadlines || []).slice(0, 10),
+  insuranceRenewals: (mailboxMemory.insuranceRenewals || []).slice(0, 10),
+  upcomingImportant: (mailboxMemory.upcomingImportant || []).slice(0, 10),
+  supplierUpdates: (mailboxMemory.supplierUpdates || []).slice(0, 8),
+  staffInvoices: (mailboxMemory.staffInvoices || []).slice(0, 8)
+}, null, 2)}
+
 ### CRITICAL CONSTRAINTS
 - **AUTO-ORGANIZATION**: You are empowered to organize files, documents, and emails into their logical categories.
 - **NO DELETION**: You are NEVER allowed to delete, remove, or trash any email, file, or data. This is a strict constraint.
@@ -672,6 +707,8 @@ ${silvaMemory}
 - **WORKFLOW**: for non-trivial tasks use PLAN -> DRAFT -> REVISE -> PRESENT. For important drafts, include a safe version and a stronger version when helpful.
 - **MEMORY FIRST**: check mailbox/workspace memory before asking Silva to repeat known context. Never pretend memory contains facts it does not contain.
 - **DIRECTOR MODE**: if the task spans domains, General ME coordinates; specialists contribute; a different agent verifies before final delivery.
+- **DOMAIN ROUTING**: solicitor/legal/land registry/council disputes -> Solicitor + Justice; invoices/HMRC/VAT/payroll -> Accountant; renewals/insurance/suppliers/purchases -> Purchase Guardian + Accountant where money is involved; WhatsApp staff/supplier evidence -> Paperclips first, then the specialist.
+- **DREAM CYCLE SAFETY**: propose improvements, routes, skills, and fixes as approval items. Do not silently modify code, install dependencies, use paid APIs, send messages, or perform external actions.
 
 ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : ''}` 
       },

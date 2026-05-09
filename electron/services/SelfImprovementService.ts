@@ -155,6 +155,62 @@ export class SelfImprovementService {
         proposal: 'Rebuild the compact mailbox memory summary from the persisted email index so chat answers use the latest evidence.'
       });
     }
+    if (emailMemory.totalIndexed >= 1000) {
+      const renewalCount = Number(emailMemory.insuranceRenewals?.length || 0);
+      const upcomingCount = Number(emailMemory.upcomingImportant?.length || 0);
+      const supplierCount = Number(emailMemory.supplierUpdates?.length || 0);
+      const staffInvoiceCount = Number(emailMemory.staffInvoices?.length || 0);
+      if (!renewalCount) {
+        add({
+          id: 'renewal-memory-empty',
+          severity: 'medium',
+          area: 'Mail Memory',
+          title: 'Renewal memory has no tracked items',
+          detail: 'The mailbox is indexed, but no insurance/MOT/policy renewal items are exposed in the compact memory.',
+          proposal: 'Run a renewal-focused memory refresh across indexed mail and route car, shop/business, pet, property, and life insurance items to Purchase Guardian with Accountant verification.'
+        });
+      }
+      if (!upcomingCount) {
+        add({
+          id: 'upcoming-memory-empty',
+          severity: 'medium',
+          area: 'Mail Memory',
+          title: 'Upcoming important view is empty',
+          detail: 'Bills, deadlines, renewals, official notices, and unread high-value mail are not being surfaced together.',
+          proposal: 'Populate the Upcoming Important memory bucket and expose review controls for important/not important, reply drafting, and WhatsApp notification drafts.'
+        });
+      }
+      if (!supplierCount) {
+        add({
+          id: 'supplier-memory-empty',
+          severity: 'info',
+          area: 'Business Operations',
+          title: 'Supplier updates are not visible yet',
+          detail: 'No supplier/order/wholesale updates are currently highlighted from indexed memory.',
+          proposal: 'Tune supplier patterns and route supplier updates to Purchase Guardian/Paperclips for shop stock, orders, and supplier follow-up.'
+        });
+      }
+      if (!staffInvoiceCount) {
+        add({
+          id: 'staff-invoice-memory-empty',
+          severity: 'info',
+          area: 'Business Operations',
+          title: 'Staff invoice memory is not populated yet',
+          detail: 'No staff invoice/receipt/expense items are highlighted yet. WhatsApp staff group attachments may need manual-send/UI approval capture.',
+          proposal: 'Route staff invoice evidence from WhatsApp drafts/attachments and indexed mail to Paperclips first, then Accountant for bookkeeping review.'
+        });
+      }
+    }
+    if (Number(emailMemory.unreadCount || 0) > 5000) {
+      add({
+        id: 'unread-backlog-large',
+        severity: 'medium',
+        area: 'Mail Operations',
+        title: 'Unread mailbox backlog is very large',
+        detail: `${emailMemory.unreadCount} unread messages are in memory. Important items may be hidden inside noise.`,
+        proposal: 'Use Mythos to propose a safe triage plan: official/legal/accounting/renewal first, newsletters/promotions last, with no delete/move/send until approval.'
+      });
+    }
 
     const events = checks.events?.value || [];
     const errorEvents = events.filter((event: any) => {

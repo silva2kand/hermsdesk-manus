@@ -53,6 +53,44 @@ HermesDesk operates on an **Approval-First Workflow**:
 
 Read-only tasks such as indexing, searching, and summarizing can run in the background. Risk-bearing actions such as PowerShell execution, file writes, app/window control, outgoing messages, mail moves, deletes, submissions, or payments must pause for approval.
 
+## Mythos + TASTE + Dream Cycles
+
+HermesDesk uses three linked behaviour layers. These are not decoration; they are runtime policy.
+
+### Mythos Orchestrator
+- General ME is the default front-door brain for unassigned tasks.
+- Mythos receives mail memory, WhatsApp messages, staff invoice evidence, supplier updates, renewals, bills, legal/council/HMRC/land-registry matters, user commands, and system health events.
+- Mythos routes work to specialist agents instead of trying to solve every domain alone:
+  - Legal, land registry, council disputes, conveyancing, appeals: Solicitor Agent + Justice Case Builder.
+  - Bills, invoices, VAT, HMRC, payroll, staff receipts: Accountant Agent + Paperclips.
+  - Insurance renewals, MOT, shop suppliers, purchases, quotes, refunds: Purchase Guardian + Accountant when money is involved.
+  - System/build/runtime/voice/model work: Hermes Agent + Space Agent where performance is involved.
+  - Security, scams, suspicious messages: OpenClaw + Purchase Guardian.
+- Mythos must use indexed memory first. It should not ask Silva to reread known emails unless the relevant evidence is absent.
+
+### TASTE Engine
+- Every non-trivial task follows PLAN -> DRAFT -> REVISE -> PRESENT.
+- Agents infer the real goal, audience, risk, and desired outcome before drafting.
+- Agents produce practical work products: summaries, evidence lists, reply drafts, quote/research plans, case packs, VAT/HMRC packs, renewal checklists, and WhatsApp-ready messages.
+- Outputs must be evidence-led and connector-honest. If a route is not authenticated or verified, the agent says so and uses an available fallback.
+- User feedback is memory: important/not-important decisions, approvals, denials, edits, repeated senders, and repeated workflows tune future priority.
+
+### Dream Cycles
+- Dream cycles are safe self-improvement audits, not autonomous code mutation.
+- They run on startup/hourly/manual trigger and inspect Jan, mail memory, WhatsApp, TinyFish, browser operator, EventBus errors, API keys, approvals, and business memory buckets.
+- They detect missing or weak areas such as empty renewal memory, supplier memory, staff invoice memory, unread backlog, mail-memory drift, connector failures, and engine downtime.
+- They create approval-first proposals only. They must not install packages, edit code, submit forms, send messages, move/delete mail, pay, file legal/accounting documents, or contact third parties without Silva approval.
+
+The target operating loop is:
+
+1. Ingest real data.
+2. Classify and store it locally.
+3. Mythos routes it.
+4. Specialists analyse and draft.
+5. A peer verifies.
+6. Silva approves external/risky actions.
+7. Dream cycles find gaps and propose improvements.
+
 ## Security & Privacy
 
 - **Local-First**: Primary intelligence and the mail memory index are local. Optional cloud/API routes are explicit connectors.
