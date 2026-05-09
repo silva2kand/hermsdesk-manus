@@ -1044,8 +1044,9 @@ Use the controlled browser session if available. Keep every step visible in Even
     const assignedAgentId = chooseAgentForPrompt(outgoing);
     if (researchSteps.length === 0) {
       setResearchSteps([
-        'Creating local agent task',
+        'Asking Mythos Manager to route task',
         `Routing to ${assignedAgentId}`,
+        'Applying approval gates and peer checks',
         'Starting built-in Jan+TurboQuant first',
         'Streaming work to Live Operations'
       ]);

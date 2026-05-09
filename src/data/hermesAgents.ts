@@ -22,10 +22,10 @@ export interface HermesAgent {
 export const hermesAgents: HermesAgent[] = [
   {
     id: 'general-agent',
-    name: 'General ME',
+    name: 'General ME / Mythos Manager',
     group: 'Hermes',
-    role: 'Coordinator, Clarifier & Verifier',
-    capability: 'Receives unclear/mixed tasks, splits work across specialist agents, checks connector truth, coordinates peer verification, and returns the final action plan.',
+    role: 'Manager, Router, Clarifier & Verifier',
+    capability: 'Receives every unclear/mixed task, chooses the lead specialist, adds collaborators, checks connector truth, enforces approval gates, coordinates peer verification, and returns the final action plan.',
     connector: 'Jan + TurboQuant, Mail ME memory, TinyFish, Browser Operator, Skills',
     approval: 'Approval gated for sending, deleting, filing, purchases, legal submissions, and external actions.',
     status: 'ready',

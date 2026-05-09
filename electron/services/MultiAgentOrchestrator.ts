@@ -32,6 +32,17 @@ export interface Task {
   input: string;
   status: 'planning' | 'running' | 'done' | 'failed' | 'cancelled';
   assignedAgentId: string;
+  manager?: {
+    managerId: string;
+    managerName: string;
+    requestedAgentId?: string;
+    assignedAgentId: string;
+    routeReason: string;
+    collaborators: { id: string; name: string; role: string }[];
+    approvalGates: string[];
+    priority: 'normal' | 'important' | 'urgent';
+    decidedAt: number;
+  };
   steps: { label: string; status: 'pending' | 'running' | 'done' }[];
   history: any[];
   createdAt: number;
@@ -42,7 +53,7 @@ export interface Task {
 // ═══════════════════════════════════════════════════════════════════
 
 const PERSONALITIES: Record<string, string> = {
-  'general-agent': `You are General ME, the front-door coordinator for HermesDesk ME 1.8.
+  'general-agent': `You are General ME / Mythos Manager, the front-door coordinator for HermesDesk ME 1.8.
 
 Your purpose is to act as Mythos: the director, router, coordinator, memory gatekeeper, and quality controller for Silva's personal-business AI OS. Receive unclear or mixed tasks, infer the real goal, split the work, choose the right specialist agents, and verify the final answer before it reaches Silva.
 
@@ -281,9 +292,9 @@ export class MultiAgentOrchestrator {
   private agents: Agent[] = [
     {
       id: 'general-agent',
-      name: 'General ME',
-      role: 'Coordinator, Clarifier & Verifier',
-      description: 'Front-door agent that splits mixed tasks, chooses specialists, coordinates peer checks, and verifies completion.',
+      name: 'General ME / Mythos Manager',
+      role: 'Manager, Router, Clarifier & Verifier',
+      description: 'Front-door manager that receives tasks, chooses specialists, checks connector truth, coordinates peer checks, enforces approvals, and verifies completion.',
       personality: PERSONALITIES['general-agent'],
       tools: ['jan-turboquant', 'outlook-mail', 'google-search', 'tinyfish', 'file-system'],
       status: 'idle',
@@ -530,6 +541,50 @@ export class MultiAgentOrchestrator {
     if (/security|hack|password|malware|fraud|suspicious|forensic/.test(text)) return 'openclaw-full';
     if (/pc|cpu|ram|gpu|vram|performance|slow|process|storage/.test(text)) return 'space-agent-full';
     return 'general-agent';
+  }
+
+  private getApprovalGates(input: string) {
+    const text = String(input || '').toLowerCase();
+    const gates = new Set<string>();
+    if (/send|reply|email|whatsapp|message|contact|call|notify/.test(text)) gates.add('external communication');
+    if (/pay|payment|buy|purchase|checkout|order|subscribe|book|quote/.test(text)) gates.add('money/purchase/booking');
+    if (/delete|remove|move|archive|unsubscribe|mark read|mark unread|file\b|folder/.test(text)) gates.add('mail/file state change');
+    if (/court|hmcts|appeal|submit|filing|legal|solicitor|hmrc|vat|tax|council|land registry/.test(text)) gates.add('legal/accounting/government submission');
+    if (/password|bank|card|credential|login|api key|secret/.test(text)) gates.add('credential/private-data entry');
+    if (!gates.size) gates.add('approval before irreversible external action');
+    return Array.from(gates);
+  }
+
+  private decideWithManager(input: string, requestedAgentId?: string) {
+    const inferredAgentId = this.routeTaskToAgent(input);
+    const requestedExists = requestedAgentId && this.agents.some(agent => agent.id === requestedAgentId);
+    const assignedAgentId = requestedExists && requestedAgentId !== 'general-agent'
+      ? requestedAgentId
+      : inferredAgentId;
+    const text = String(input || '').toLowerCase();
+    const priority: 'normal' | 'important' | 'urgent' = /urgent|asap|deadline|court|hmrc|overdue|renewal|insurance|payment due|final notice|today|tomorrow/.test(text)
+      ? 'urgent'
+      : /important|invoice|bill|tax|legal|solicitor|supplier|staff|whatsapp|complaint|appeal/.test(text)
+        ? 'important'
+        : 'normal';
+    const collaborators = this.getCollaborationPlan(
+      this.agents.find(agent => agent.id === assignedAgentId) || this.agents[0],
+      input
+    );
+    const routeReason = requestedExists && requestedAgentId !== 'general-agent'
+      ? `Silva or an upstream route requested ${requestedAgentId}; Mythos Manager keeps that lead and adds oversight.`
+      : `Mythos Manager inferred ${assignedAgentId} from task intent and safety rules.`;
+    return {
+      managerId: 'general-agent',
+      managerName: 'General ME / Mythos Manager',
+      requestedAgentId,
+      assignedAgentId,
+      routeReason,
+      collaborators,
+      approvalGates: this.getApprovalGates(input),
+      priority,
+      decidedAt: Date.now()
+    };
   }
 
   private async peerVerifyFinal(agent: Agent, task: Task, answer: string, engine: string) {
@@ -793,14 +848,17 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
   }
 
   async createTask(input: string, agentId?: string, win?: any) {
-    const assignedId = agentId || this.routeTaskToAgent(input);
+    const managerDecision = this.decideWithManager(input, agentId);
+    const assignedId = managerDecision.assignedAgentId;
     const task: Task = {
       id: Math.random().toString(36).substring(7),
       input,
       status: 'running',
       assignedAgentId: assignedId,
+      manager: managerDecision,
       steps: [
-        { label: 'Initializing ME 1.8 Runtime', status: 'done' },
+        { label: 'Mythos Manager route decision', status: 'done' },
+        { label: `Lead agent: ${assignedId}`, status: 'done' },
         { label: 'Agent Loop Active', status: 'running' }
       ],
       history: [],
@@ -825,6 +883,18 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
       });
     };
 
+    this.eventBus?.emit('manager.decision', 'mythos-manager', {
+      taskId: task.id,
+      ...managerDecision
+    }, task.id);
+    win?.webContents.send('agent:update', {
+      agentId: 'general-agent',
+      taskId: task.id,
+      type: 'info',
+      content: `Mythos Manager routed task to ${assignedId}. Priority: ${managerDecision.priority}. Reason: ${managerDecision.routeReason}`,
+      time: new Date().toLocaleTimeString()
+    });
+
     const agent = this.agents.find(a => a.id === assignedId);
     if (!agent) {
       task.status = 'failed';
@@ -844,9 +914,13 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     this.updateAgentStatus(agent.id, 'running', agent.background);
     agent.currentTask = task.input.slice(0, 100);
     sendUpdate(`${agent.name} v${agent.version} starting...`, 'info');
+    if (task.manager) {
+      sendUpdate(`Managed by ${task.manager.managerName}. Priority: ${task.manager.priority}. Approval gates: ${task.manager.approvalGates.join(', ')}.`, 'info');
+    }
     this.emitThought(task, agent, 'PLAN', `${agent.name} accepted task and started the local agent loop.`, {
       steps: task.steps,
-      inputPreview: task.input.slice(0, 500)
+      inputPreview: task.input.slice(0, 500),
+      manager: task.manager
     });
 
     const skillGuidance = this.skillsEngine?.getSkillGuidance?.();
