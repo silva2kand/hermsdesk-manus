@@ -91,11 +91,18 @@ export class EmailIndexService {
 
   async searchEmails(query: string, accountId?: string): Promise<IndexedEmail[]> {
     const cleanQuery = String(query || '').toLowerCase().trim();
+    const genericTokens = new Set([
+      'tell', 'about', 'what', 'when', 'that', 'this', 'from', 'have', 'need', 'know', 'please',
+      'email', 'emails', 'mail', 'last', 'latest', 'said', 'says', 'say', 'she', 'her', 'him', 'his',
+      'they', 'them', 'their', 'message', 'messages', 'sent', 'received', 'reply', 'replied'
+    ]);
     const tokens = Array.from(new Set(cleanQuery
       .replace(/[^a-z0-9@.\-£$]+/gi, ' ')
       .split(/\s+/)
       .map(token => token.trim())
-      .filter(token => token.length > 2 && !['tell', 'about', 'what', 'when', 'that', 'this', 'from', 'have', 'need', 'know', 'please'].includes(token))));
+      .filter(token => token.length > 2 && !genericTokens.has(token))));
+    const nameTokens = tokens.filter(token => /^[a-z][a-z.'-]{2,}$/i.test(token) && !token.includes('@') && !/\d/.test(token));
+    const looksLikePersonLookup = nameTokens.length > 0 && /(last|latest|email|emails|mail|message|messages|said|say|from|reply|replied|she|he|they)/i.test(cleanQuery);
     const scored = new Map<string, { email: IndexedEmail, score: number }>();
     if (!cleanQuery && tokens.length === 0) return [];
     
@@ -112,16 +119,24 @@ export class EmailIndexService {
             const body = String(e.bodyPreview || '').toLowerCase();
             const category = String(e.categoryLabel || '').toLowerCase();
             const haystack = `${subject} ${sender} ${body} ${category}`;
+            const identityHaystack = `${sender} ${subject}`;
+            if (looksLikePersonLookup && nameTokens.length > 0) {
+              const allNameTokensMatch = nameTokens.every(token => identityHaystack.includes(token));
+              const mostNameTokensMatch = nameTokens.length > 1 && nameTokens.filter(token => identityHaystack.includes(token)).length >= Math.min(2, nameTokens.length);
+              if (!allNameTokensMatch && !mostNameTokensMatch) continue;
+            }
             if (/\bcar\b|\bvehicle\b|\bmotor\b/i.test(query) && /insurance|renew|renewal|policy|premium/i.test(query)) {
               if (!/(car|vehicle|motor)/i.test(haystack) || !/(insurance|renew|renewal|policy|premium)/i.test(haystack)) continue;
             }
             let score = cleanQuery && haystack.includes(cleanQuery) ? 100 : 0;
             for (const token of tokens) {
-              if (subject.includes(token)) score += 8;
-              if (sender.includes(token)) score += 6;
+              if (sender.includes(token)) score += looksLikePersonLookup ? 40 : 10;
+              if (subject.includes(token)) score += looksLikePersonLookup ? 18 : 8;
               if (category.includes(token)) score += 5;
               if (body.includes(token)) score += 2;
             }
+            if (looksLikePersonLookup && nameTokens.every(token => sender.includes(token))) score += 120;
+            if (looksLikePersonLookup && nameTokens.some(token => sender.includes(token))) score += 50;
             if (/(renew|renewal|expires?|due|mot|insurance|premium|policy|vehicle|car)/i.test(query)) {
               if (/(renew|renewal|expires?|due|mot|insurance|premium|policy|vehicle|car)/i.test(`${e.subject || ''} ${e.sender || ''} ${e.bodyPreview || ''} ${e.categoryLabel || ''}`)) score += 10;
             }

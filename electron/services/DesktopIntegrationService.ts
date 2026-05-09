@@ -599,9 +599,50 @@ $speaker.Speak('${escaped}')
     return true;
   }
 
-  async speakWithVoiceStack(text: string, options: any = {}) {
+  private splitSpeechText(text: string, maxChars = 900) {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (clean.length <= maxChars) return clean ? [clean] : [];
+    const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [clean];
+    const chunks: string[] = [];
+    let current = '';
+    for (const sentence of sentences) {
+      const next = `${current} ${sentence}`.trim();
+      if (next.length <= maxChars) {
+        current = next;
+        continue;
+      }
+      if (current) chunks.push(current);
+      if (sentence.length <= maxChars) {
+        current = sentence.trim();
+      } else {
+        for (let i = 0; i < sentence.length; i += maxChars) chunks.push(sentence.slice(i, i + maxChars).trim());
+        current = '';
+      }
+    }
+    if (current) chunks.push(current);
+    return chunks.filter(Boolean);
+  }
+
+  async speakWithVoiceStack(text: string, options: any = {}): Promise<any> {
     const cleanText = String(text || '').trim();
     if (!cleanText) return { ok: false, error: 'No text to speak.' };
+
+    const chunks = this.splitSpeechText(cleanText);
+    if (!options.__singleChunk && chunks.length > 1) {
+      const results: any[] = [];
+      for (const chunk of chunks) {
+        const result: any = await this.speakWithVoiceStack(chunk, { ...options, __singleChunk: true });
+        results.push(result);
+        if (!result?.ok) return result;
+      }
+      return {
+        ok: true,
+        mode: 'silva-voice-stack-complete-sequenced',
+        chunks: chunks.length,
+        voice: options.voice || 'en-gb-default',
+        language: options.language || 'en'
+      };
+    }
 
     const voice = options.voice || 'en-gb-default';
     const language = options.language || 'en';
@@ -634,7 +675,7 @@ $speaker.Speak('${escaped}')
     for (const endpoint of endpoints) {
       try {
         const response = await axios.post(`${VOICE_STACK_URL}${endpoint}`, payload, {
-          timeout: 60000,
+          timeout: 180000,
           responseType: 'arraybuffer',
           validateStatus: status => status >= 200 && status < 300
         });
@@ -650,9 +691,10 @@ $speaker.Speak('${escaped}')
           }
           
           fs.writeFileSync(audioPath, buffer);
-          // Use direct powershell playback for more reliability without opening a player window
+          // Wait for playback to finish so long replies do not get cut off.
           const psPlay = `$p = New-Object System.Media.SoundPlayer("${audioPath.replace(/\\/g, '\\\\')}"); $p.PlaySync()`;
-          this.runPowerShellText(psPlay).catch(e => console.error('Direct audio playback failed:', e));
+          const playbackTimeout = Math.max(180000, Math.ceil(buffer.length / 16000) * 1000);
+          await this.runPowerShellText(psPlay, playbackTimeout);
           
           return { ok: true, mode: 'silva-premium-audio-file', endpoint, voice, language, path: audioPath, size: buffer.length };
         }
@@ -665,7 +707,8 @@ $speaker.Speak('${escaped}')
         return { ok: true, mode: fallback ? 'windows-sapi-from-voice-stack' : 'silva-premium-voice-stack', endpoint, voice, language, response: parsed };
       } catch (error: any) {
         if (error?.code === 'ECONNABORTED') {
-          return { ok: true, mode: 'silva-voice-stack-queued', endpoint, voice, language };
+          lastError = `Voice endpoint timed out while speaking this chunk: ${endpoint}`;
+          continue;
         }
         lastError = error?.response?.data
           ? Buffer.from(error.response.data).toString('utf8').slice(0, 300)
