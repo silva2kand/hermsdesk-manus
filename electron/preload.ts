@@ -155,6 +155,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getSilvaMemory: () => ipcRenderer.invoke('workspace:get-silva-memory'),
   saveSilvaMemory: (memory: string) => ipcRenderer.invoke('workspace:save-silva-memory', memory),
   getEmailIntelligence: () => ipcRenderer.invoke('workspace:get-email-intelligence'),
+  updateMailMemoryItem: (itemId: string, patch: any) => ipcRenderer.invoke('workspace:update-mail-memory-item', { itemId, patch }),
   runTinyFishAgent: (options: any) => ipcRenderer.invoke('tinyfish:run-agent', options),
   setTinyFishApiKey: (key: string) => ipcRenderer.invoke('tinyfish:set-api-key', key),
   getTinyFishApiStatus: () => ipcRenderer.invoke('tinyfish:api-status'),

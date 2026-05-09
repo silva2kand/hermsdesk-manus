@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Mail, Plus, Copy, Check, Shield, User, Globe, 
-  Trash2, AlertCircle, ChevronRight, Bell, Tags, WifiOff, RefreshCw, Database, LockKeyhole
+  Trash2, AlertCircle, ChevronRight, Bell, Tags, WifiOff, RefreshCw, Database, LockKeyhole, Star, StarOff, MessageSquare, Send
 } from 'lucide-react';
 import { mailCategories } from '../data/hermesAgents';
 
@@ -27,6 +27,21 @@ export const MailMEView = () => {
   const totalIndexed = Math.max(Number(mailSyncState?.totalIndexed || 0), Number(mailSyncState?.globalTotalIndexed || 0), Number(mailMemory?.totalIndexed || 0));
   const totalAccounts = Math.max(Number(mailSyncState?.totalAccounts || 0), Number(classicOutlookStatus?.accounts?.length || 0));
   const totalAvailable = Math.max(Number(mailSyncState?.totalAvailable || 0), Number(classicOutlookStatus?.itemCount || 0));
+  const upcomingItems = React.useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      ...(mailMemory?.upcomingImportant || []),
+      ...(mailMemory?.insuranceRenewals || []),
+      ...(mailMemory?.billsToPay || []),
+      ...(mailMemory?.deadlines || []),
+      ...(mailMemory?.staffInvoices || []),
+      ...(mailMemory?.supplierUpdates || [])
+    ].filter((item: any) => {
+      if (!item?.id || seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    }).sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))).slice(0, 12);
+  }, [mailMemory]);
 
   React.useEffect(() => {
     const loadSettings = async () => {
@@ -222,6 +237,41 @@ export const MailMEView = () => {
     else await (window.ipcRenderer as any)?.resetClassicOutlookSyncState?.();
     await refreshMailSyncState();
     showNotice('Mailbox index checkpoint reset. Next run starts from newest mail again.');
+  };
+
+  const updateMemoryItem = async (item: any, patch: any) => {
+    const result = await window.ipcRenderer?.updateMailMemoryItem?.(item.id, patch);
+    const nextMemory = result?.mailboxMemory || result?.memory;
+    if (nextMemory) setMailMemory(nextMemory);
+    showNotice(patch.importanceStatus === 'important' ? 'Marked important and kept in memory.' : patch.importanceStatus === 'not-important' ? 'Marked not important; ME will reduce its priority.' : 'Mail memory updated.');
+  };
+
+  const draftCustomResponse = async (item: any) => {
+    const base = `Regarding: ${item.subject || '(No subject)'}\n\n`;
+    const message = window.prompt('Custom response to draft/send after your approval', base);
+    if (!message) return;
+    await window.ipcRenderer?.createAgentTask?.(
+      `Prepare an approval-first reply for this indexed email. Do not send automatically.\n\nEmail evidence:\nFrom: ${item.sender || ''}\nSubject: ${item.subject || ''}\nReceived: ${item.receivedAt || ''}\nFolder: ${item.folderName || ''}\nPreview: ${item.preview || ''}\n\nUser's intended message:\n${message}\n\nReturn a polished reply plus any risk/next-step notes.`,
+      item.assignedAgent || 'general-agent'
+    );
+    await updateMemoryItem(item, { followUpStatus: 'draft-requested', userNote: message });
+    showNotice('Reply drafting task queued to the right agent. It will not send without approval.');
+  };
+
+  const notifyWhatsApp = async (item: any) => {
+    const defaultMessage = `ME reminder: ${item.subject || 'important mail'}\nFrom: ${item.sender || 'mailbox'}\n${item.preview || ''}`.slice(0, 950);
+    const message = window.prompt('WhatsApp notification text', defaultMessage);
+    if (!message) return;
+    await window.ipcRenderer?.saveWhatsAppDraft?.({
+      title: item.subject || 'Mail reminder',
+      message,
+      route: item.assignedAgent || 'general-agent',
+      source: 'mail-memory',
+      sourceId: item.id
+    });
+    await updateMemoryItem(item, { followUpStatus: 'whatsapp-drafted' });
+    const openNow = window.confirm('Open WhatsApp composer now?');
+    if (openNow) await window.ipcRenderer?.composeWhatsApp?.(message);
   };
 
   const copyEmail = () => {
@@ -515,6 +565,61 @@ export const MailMEView = () => {
             <IndexStat label="Unread" value={(mailMemory.unreadCount || 0).toLocaleString()} />
             <IndexStat label="Bills/Payments" value={(mailMemory.billsToPay?.length || 0).toLocaleString()} />
             <IndexStat label="Deadlines" value={(mailMemory.deadlines?.length || 0).toLocaleString()} />
+          </div>
+        )}
+
+        {mailMemory && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <IndexStat label="Insurance renewals" value={(mailMemory.insuranceRenewals?.length || 0).toLocaleString()} />
+            <IndexStat label="Upcoming important" value={(mailMemory.upcomingImportant?.length || 0).toLocaleString()} />
+            <IndexStat label="Supplier updates" value={(mailMemory.supplierUpdates?.length || 0).toLocaleString()} />
+            <IndexStat label="Staff invoices" value={(mailMemory.staffInvoices?.length || 0).toLocaleString()} />
+          </div>
+        )}
+
+        {upcomingItems.length > 0 && (
+          <div className="p-4 bg-white border border-gray-100 rounded-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Upcoming payments, renewals & important mail</p>
+                <p className="text-[10px] text-gray-500 mt-1">Review, train priority, draft replies, or prepare WhatsApp notifications. Nothing sends without your approval.</p>
+              </div>
+              <span className="text-[9px] font-black text-gray-500 uppercase">{upcomingItems.length} live memory items</span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {upcomingItems.map((item: any) => (
+                <div key={item.id} className="p-3 border border-gray-100 rounded-2xl bg-gray-50/50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[9px] font-black text-blue-700 uppercase">{item.type || item.categoryLabel || 'mail'}</span>
+                        <span className={`text-[9px] font-black uppercase ${item.importanceStatus === 'important' ? 'text-amber-700' : item.importanceStatus === 'not-important' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {item.importanceStatus || 'unreviewed'}
+                        </span>
+                        {item.assignedAgent && <span className="text-[9px] font-bold text-purple-700 uppercase">{item.assignedAgent}</span>}
+                      </div>
+                      <p className="text-xs font-black text-gray-900 truncate mt-1">{item.subject || '(No subject)'}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{item.sender} · {item.receivedAt ? new Date(item.receivedAt).toLocaleString() : ''}</p>
+                      {item.preview && <p className="text-[10px] text-gray-600 mt-2 line-clamp-2">{item.preview}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button title="Mark important" onClick={() => updateMemoryItem(item, { importanceStatus: 'important' })} className="p-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100">
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+                      <button title="Mark not important" onClick={() => updateMemoryItem(item, { importanceStatus: 'not-important' })} className="p-2 rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200">
+                        <StarOff className="w-3.5 h-3.5" />
+                      </button>
+                      <button title="Draft a custom reply" onClick={() => draftCustomResponse(item)} className="p-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100">
+                        <MessageSquare className="w-3.5 h-3.5" />
+                      </button>
+                      <button title="Prepare WhatsApp notification" onClick={() => notifyWhatsApp(item)} className="p-2 rounded-xl bg-green-50 text-green-700 hover:bg-green-100">
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

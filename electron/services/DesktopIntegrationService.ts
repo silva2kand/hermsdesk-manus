@@ -790,12 +790,8 @@ $messages = @()
 $folders = New-Object System.Collections.ArrayList
 function Add-Folders($folder) {
   try {
-    // ONLY scan folders named 'Inbox' for the automatic/quick pass
-    if ($folder.Name -ne 'Inbox') { 
-       foreach ($child in $folder.Folders) { Add-Folders $child }
-       return 
-    }
     if ($folder.DefaultItemType -eq 0) { [void]$folders.Add($folder) }
+    foreach ($child in $folder.Folders) { Add-Folders $child }
   } catch {}
 }
 foreach ($root in $ns.Folders) { Add-Folders $root }

@@ -241,7 +241,50 @@ function createWindow() {
     const moneyPattern = /(?:£|\$|eur|gbp|usd)\s?\d[\d,]*(?:\.\d{2})?|\b\d[\d,]*(?:\.\d{2})?\s?(?:gbp|usd|eur)\b/i
     const billPattern = /(bill|invoice|payment due|pay now|statement|arrears|overdue|council tax|utility|renewal|premium|direct debit|balance due)/i
     const deadlinePattern = /(due|deadline|by|before|expires|renewal|hearing|appointment|court|payment date|final notice)/i
+    const renewalPattern = /(renewal|renew|expires|expiry|policy|premium|quote|cover|mot|road tax|vehicle tax|annual|subscription)/i
+    const insurancePattern = /(insurance|policy|premium|renewal|cover|quote|claim|no claims|underwriter|aviva|admiral|direct line|tesco bank|petplan|simply business|compare.?the.?market|go.?compare|money.?super.?market)/i
+    const supplierPattern = /(supplier|wholesale|stock|order|purchase order|invoice|statement|delivery|parcel|sales rep|representative|catalogue|promotion|case price|unit price)/i
+    const staffInvoicePattern = /(staff|employee|wage|payroll|timesheet|receipt|invoice|bill|expense|whatsapp|uploaded|attachment|photo)/i
+    const officialPattern = /(hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|insurance|mot)/i
+    const itemState = store.get('mailMemoryItemState', {}) as Record<string, any>
     const sorted = [...messages].sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+    const messageText = (message: any) => `${message.subject || ''} ${message.sender || ''} ${message.senderEmail || ''} ${message.bodyPreview || ''} ${message.categoryLabel || ''}`.toLowerCase()
+    const detectInsuranceType = (text: string) => {
+      if (/(car|vehicle|motor|van|driver|mot|road tax)/i.test(text)) return 'car-insurance'
+      if (/(shop|business|commercial|retail|public liability|employer.?s liability|stock|premises)/i.test(text)) return 'shop-business-insurance'
+      if (/(pet|dog|cat|vet|petplan)/i.test(text)) return 'pet-insurance'
+      if (/(property|home|house|building|contents|landlord|tenant|rent|mortgage)/i.test(text)) return 'property-insurance'
+      if (/(life|critical illness|income protection|funeral)/i.test(text)) return 'life-insurance'
+      return 'insurance'
+    }
+    const routeAgent = (message: any, text: string) => {
+      if (/(solicitor|conveyancer|land registry|court|tribunal|legal|law|freeholder|leasehold)/i.test(text)) return 'solicitor-agent'
+      if (/(hmrc|vat|tax|accountant|payroll|invoice|receipt|statement|bill|payment|direct debit)/i.test(text)) return 'accountant-agent'
+      if (/(insurance|renewal|policy|mot|quote|supplier|wholesale|stock|order)/i.test(text)) return 'purchase-guardian'
+      return message.agentId || 'general-agent'
+    }
+    const memoryItem = (message: any, type: string, extra: any = {}) => {
+      const saved = itemState[message.id] || {}
+      const text = messageText(message)
+      return {
+        id: message.id,
+        type,
+        subject: message.subject,
+        sender: message.sender || message.senderEmail,
+        senderEmail: message.senderEmail,
+        receivedAt: message.receivedAt,
+        folderName: message.folderName,
+        categoryLabel: message.categoryLabel,
+        unread: Boolean(message.unread),
+        preview: message.bodyPreview,
+        assignedAgent: routeAgent(message, text),
+        importanceStatus: saved.importanceStatus || 'unreviewed',
+        followUpStatus: saved.followUpStatus || 'open',
+        userNote: saved.userNote || '',
+        lastReviewedAt: saved.lastReviewedAt || null,
+        ...extra
+      }
+    }
     const categories = sorted.reduce((acc: Record<string, number>, message: any) => {
       const key = message.categoryId || 'general'; acc[key] = (acc[key] || 0) + 1; return acc;
     }, {})
@@ -258,18 +301,35 @@ function createWindow() {
     const billsToPay = sorted.filter((message: any) => {
       const text = `${message.subject || ''} ${message.bodyPreview || ''} ${message.categoryLabel || ''}`
       return billPattern.test(text) || moneyPattern.test(text) || ['council-bills', 'tax-vat-mot', 'insurance'].includes(message.categoryId)
-    }).slice(0, 80).map((message: any) => ({
-      id: message.id, subject: message.subject, sender: message.sender || message.senderEmail, receivedAt: message.receivedAt, folderName: message.folderName, categoryLabel: message.categoryLabel, unread: Boolean(message.unread), preview: message.bodyPreview
-    }))
+    }).slice(0, 80).map((message: any) => memoryItem(message, 'bill-payment'))
     const deadlines = sorted.filter((message: any) => deadlinePattern.test(`${message.subject || ''} ${message.bodyPreview || ''}`))
-      .slice(0, 80).map((message: any) => ({
-        id: message.id, subject: message.subject, sender: message.sender || message.senderEmail, receivedAt: message.receivedAt, categoryLabel: message.categoryLabel, preview: message.bodyPreview
-      }))
+      .slice(0, 80).map((message: any) => memoryItem(message, 'deadline'))
+    const insuranceRenewals = sorted.filter((message: any) => {
+      const text = messageText(message)
+      return insurancePattern.test(text) || (renewalPattern.test(text) && /(car|vehicle|shop|business|pet|property|home|life|insurance|policy)/i.test(text))
+    }).slice(0, 80).map((message: any) => {
+      const text = messageText(message)
+      return memoryItem(message, detectInsuranceType(text), { renewal: renewalPattern.test(text), needsQuoteResearch: true })
+    })
+    const supplierUpdates = sorted.filter((message: any) => supplierPattern.test(messageText(message)))
+      .slice(0, 80).map((message: any) => memoryItem(message, 'supplier-update'))
+    const staffInvoices = sorted.filter((message: any) => staffInvoicePattern.test(messageText(message)) && /(invoice|receipt|bill|expense|attachment|photo|whatsapp|staff|employee)/i.test(messageText(message)))
+      .slice(0, 80).map((message: any) => memoryItem(message, 'staff-invoice'))
+    const upcomingImportant = sorted.filter((message: any) => {
+      const text = messageText(message)
+      return message.unread || message.importance === 'high' || message.flagStatus === 'flagged' ||
+        billPattern.test(text) || deadlinePattern.test(text) || renewalPattern.test(text) ||
+        insurancePattern.test(text) || officialPattern.test(text)
+    }).slice(0, 120).map((message: any) => {
+      const text = messageText(message)
+      const type = insurancePattern.test(text) ? detectInsuranceType(text) : billPattern.test(text) ? 'bill-payment' : deadlinePattern.test(text) ? 'deadline' : officialPattern.test(text) ? 'official-important' : 'important-mail'
+      return memoryItem(message, type, { renewal: renewalPattern.test(text), moneyMentioned: moneyPattern.test(text) })
+    })
     const urgent = sorted.filter((message: any) => message.unread || message.importance === 'high' || message.flagStatus === 'flagged')
-      .slice(0, 80).map((message: any) => ({
-        id: message.id, subject: message.subject, sender: message.sender || message.senderEmail, receivedAt: message.receivedAt, reason: message.importance === 'high' ? 'high importance' : message.flagStatus === 'flagged' ? 'flagged' : 'unread', categoryLabel: message.categoryLabel
+      .slice(0, 80).map((message: any) => memoryItem(message, 'urgent', {
+        reason: message.importance === 'high' ? 'high importance' : message.flagStatus === 'flagged' ? 'flagged' : 'unread'
       }))
-    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, urgent }
+    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, upcomingImportant, urgent }
   }
 
   const processEmailIntelligence = async (data: any, source = 'mailbox', options: { taskLimit?: number } = {}) => {
@@ -303,13 +363,24 @@ function createWindow() {
     ].filter((item: any, index: number, all: any[]) => item?.id && all.findIndex(other => other.id === item.id) === index)
       .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
       .slice(0, 80);
+    const mergeMemoryList = (key: string, limit = 80) => [
+      ...(((memory as any)[key]) || []),
+      ...(previousMemory[key] || [])
+    ].filter((item: any, index: number, all: any[]) => item?.id && all.findIndex(other => other.id === item.id) === index)
+      .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+      .slice(0, limit);
     const compactMemory = {
       ...previousMemory,
       ...memory,
       totalIndexed: Math.max(Number(stats.totalIndexed || 0), Number(previousMemory.totalIndexed || 0), Number(memory.totalIndexed || 0)),
       unreadCount: Math.max(Number(previousMemory.unreadCount || 0), Number(memory.unreadCount || 0)),
       billsToPay: latestPossibleBills,
-      deadlines: latestDeadlines
+      deadlines: latestDeadlines,
+      insuranceRenewals: mergeMemoryList('insuranceRenewals'),
+      supplierUpdates: mergeMemoryList('supplierUpdates'),
+      staffInvoices: mergeMemoryList('staffInvoices'),
+      upcomingImportant: mergeMemoryList('upcomingImportant', 120),
+      urgent: mergeMemoryList('urgent')
     };
     const merged = { ...data, folders: Array.from(foldersByKey.values()).slice(0, 250), messages, summary: compactMemory.categories, memory: compactMemory, mailboxMemory: compactMemory }
     workspaceService.saveEmailIntelligence(merged)
@@ -367,7 +438,8 @@ function createWindow() {
           }
         }
 
-        const messages = await integrationService.listClassicOutlookMessages(2000)
+        const latestSeen = store.get('classicMailQuickScanAt', (workspaceService.getEmailIntelligence?.()?.mailboxMemory || workspaceService.getEmailIntelligence?.()?.memory || {})?.latestReceivedAt || undefined) as string | undefined
+        const messages = await integrationService.listClassicOutlookMessages(1200, latestSeen)
         if (Array.isArray(messages) && messages.length > 0) {
           appLog('info', `Mail ME Classic Outlook: found ${messages.length} messages.`);
           const accountsInBatch = new Set(messages.map((m: any) => m.accountId));
@@ -385,6 +457,8 @@ function createWindow() {
             folders: Array.from(accountsInBatch).map(id => ({ id, displayName: id, syncedCount: messages.filter((m: any) => m.accountId === id).length })),
             messages
           }, 'Classic Outlook', { taskLimit: 20 });
+          const newest = messages.map((m: any) => m.receivedAt).filter(Boolean).sort().pop()
+          if (newest) store.set('classicMailQuickScanAt', newest)
         } else {
            appLog('info', `Mail ME Classic Outlook: no messages found in recent scan.`);
         }
@@ -883,6 +957,7 @@ function createWindow() {
   ipcMain.handle('workspace:save-silva-memory', (_, m) => workspaceService.saveSilvaMemory(m))
   ipcMain.handle('workspace:get-email-intelligence', () => workspaceService.getEmailIntelligenceSummary())
   ipcMain.handle('workspace:approve-email-route', (_, { messageId, status }) => workspaceService.approveEmailRoute(messageId, status))
+  ipcMain.handle('workspace:update-mail-memory-item', (_, { itemId, patch }) => workspaceService.updateMailMemoryItem(itemId, patch))
   ipcMain.handle('workspace:get-projects', () => workspaceService.getProjects())
   ipcMain.handle('workspace:save-project', (_, p) => workspaceService.saveProject(p))
   ipcMain.handle('workspace:delete-project', (_, id) => workspaceService.deleteProject(id))

@@ -211,6 +211,32 @@ export class WorkspaceService {
     return current;
   }
 
+  updateMailMemoryItem(itemId: string, patch: any = {}) {
+    const current = this.getEmailIntelligence();
+    const safePatch = {
+      importanceStatus: patch.importanceStatus,
+      followUpStatus: patch.followUpStatus,
+      userNote: patch.userNote,
+      lastReviewedAt: new Date().toISOString()
+    };
+    const cleanPatch = Object.fromEntries(Object.entries(safePatch).filter(([, value]) => value !== undefined));
+    const itemState = this.store.get('mailMemoryItemState', {}) as Record<string, any>;
+    itemState[itemId] = { ...(itemState[itemId] || {}), ...cleanPatch };
+    this.store.set('mailMemoryItemState', itemState);
+
+    const updateArray = (items: any[] = []) => items.map((item: any) =>
+      item?.id === itemId ? { ...item, ...cleanPatch } : item
+    );
+    const memoryKeys = ['billsToPay', 'deadlines', 'urgent', 'insuranceRenewals', 'supplierUpdates', 'staffInvoices', 'upcomingImportant'];
+    const memory = { ...(current.mailboxMemory || current.memory || {}) };
+    for (const key of memoryKeys) memory[key] = updateArray(memory[key] || []);
+    current.messages = updateArray(current.messages || []);
+    current.mailboxMemory = memory;
+    current.memory = memory;
+    this.store.set('emailIntelligence', current);
+    return this.getEmailIntelligenceSummary();
+  }
+
   getProjects(): WorkspaceProject[] {
     return this.store.get('projects', []) as WorkspaceProject[];
   }

@@ -78,6 +78,7 @@ interface Window {
     getSilvaMemory: () => Promise<string>;
     saveSilvaMemory: (memory: string) => Promise<boolean>;
     getEmailIntelligence: () => Promise<any>;
+    updateMailMemoryItem?: (itemId: string, patch: any) => Promise<any>;
     runTinyFishAgent: (options: any) => Promise<any>;
     setTinyFishApiKey: (key: string) => Promise<any>;
     getTinyFishApiStatus: () => Promise<any>;
