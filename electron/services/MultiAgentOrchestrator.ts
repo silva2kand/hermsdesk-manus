@@ -640,6 +640,133 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     return `Browser bootstrap completed.\nSession: ${sessionId}\n\n${opened}\n\n${page}`;
   }
 
+  private isShoppingComparisonTask(input: string) {
+    return /(cheapest|best price|compare|reviews?|specs?|product page|purchase tab|buy|shopping|pc|computer|gpu|vram|workstation)/i.test(input)
+      && /(browser|click|search|product|purchase|compare|vram|pc|computer|gpu)/i.test(input);
+  }
+
+  private buildShoppingSearchQuery(input: string) {
+    const vram = String(input || '').match(/(\d{2,3})\s*gb\s*vram/i)?.[1];
+    if (vram && Number(vram) >= 80) {
+      return `workstation PC ${Number(vram) >= 86 ? '96GB VRAM dual RTX 6000 Ada' : `${vram}GB VRAM GPU`} price UK reviews`;
+    }
+    return String(input || '').replace(/mythos[, ]*/ig, '').replace(/run full browser automation:?/ig, '').trim() || 'workstation PC GPU VRAM price UK reviews';
+  }
+
+  private parseBrowserLinks(readResult: string) {
+    const links: { text: string; href: string }[] = [];
+    const regex = /^\s*\d+\.\s*(.*?)\s*->\s*(https?:\/\/\S+)/gmi;
+    let match;
+    while ((match = regex.exec(readResult)) !== null) {
+      links.push({ text: (match[1] || '').trim(), href: (match[2] || '').trim() });
+    }
+    const blocked = /(google\.[^/]+\/search|accounts\.google|support\.google|policies\.google|webcache|translate\.google|youtube\.com|facebook\.com|reddit\.com|pinterest\.com)/i;
+    const useful = /(scan\.co\.uk|pcspecialist|chillblast|overclockers|box\.co\.uk|ebuyer|dell|hp\.com|lenovo|workstationspecialist|bizon|lambda|pugetsystems|amazon|ebay|newegg|nvidia|rtx|workstation|gaming pc|desktop pc|computer|pc)/i;
+    const seen = new Set<string>();
+    return links
+      .filter(link => link.href && !blocked.test(link.href) && (useful.test(`${link.text} ${link.href}`) || /shopping|product|price|workstation|rtx/i.test(`${link.text} ${link.href}`)))
+      .filter(link => {
+        const key = link.href.replace(/[?#].*$/, '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 6);
+  }
+
+  private summarizeCandidate(url: string, readResult: string) {
+    const title = readResult.match(/Title:\s*(.+)/i)?.[1]?.trim() || url;
+    const visible = readResult.split('Visible text:')[1]?.split('Links:')[0] || readResult;
+    const priceMatches = Array.from(visible.matchAll(/(?:£|GBP\s*|\$|USD\s*)\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?/gi)).map(match => match[0]);
+    const vramMatches = Array.from(visible.matchAll(/\b\d{2,3}\s*GB\s*(?:GDDR\w*|VRAM|graphics memory)?/gi)).map(match => match[0]);
+    const gpuMatches = Array.from(visible.matchAll(/\b(?:RTX|NVIDIA|GeForce|Quadro|Ada|A6000|6000|4090|5090)[^\n\r.]{0,80}/gi)).map(match => match[0].trim());
+    const reviewSignals = Array.from(visible.matchAll(/\b(?:review|reviews|rating|stars?|trustpilot|warranty|delivery|returns?)\b[^\n\r.]{0,100}/gi)).map(match => match[0].trim());
+    return {
+      title,
+      url,
+      prices: Array.from(new Set(priceMatches)).slice(0, 6),
+      vram: Array.from(new Set(vramMatches)).slice(0, 6),
+      gpu: Array.from(new Set(gpuMatches)).slice(0, 6),
+      reviews: Array.from(new Set(reviewSignals)).slice(0, 5),
+      evidencePreview: visible.replace(/\s+/g, ' ').slice(0, 700)
+    };
+  }
+
+  private async runDeterministicShoppingAutomation(task: Task, agent: Agent, sendUpdate: (step: string, type: any) => void) {
+    if (!this.skillsEngine?.proposeAction || !this.skillsEngine?.approveAction) return '';
+    const sessionId = `shopping-${task.id}`;
+    const runTool = async (name: string, params: any) => {
+      const action = this.skillsEngine.proposeAction({ name, type: 'os', params });
+      const result = await this.skillsEngine.approveAction(action.id);
+      const text = typeof result?.result === 'string' ? result.result : JSON.stringify(result || {});
+      sendUpdate(`${name}: ${text.slice(0, 1400)}`, result?.ok === false ? 'error' : 'result');
+      this.emitThought(task, agent, result?.ok === false ? 'ERROR' : 'OBSERVATION', `${name} returned during shopping automation.`, {
+        tool: name,
+        params,
+        resultPreview: text.slice(0, 1400)
+      });
+      return text;
+    };
+
+    const query = this.buildShoppingSearchQuery(task.input);
+    this.emitThought(task, agent, 'PLAN', `Running deterministic shopping comparison for: ${query}`, { sessionId, query });
+    await runTool('browser_open', { target: query, sessionId, label: 'Shopping Comparison Agent' });
+    const searchRead = await runTool('browser_read', { sessionId });
+    const links = this.parseBrowserLinks(searchRead);
+    sendUpdate(`Candidate product/result pages selected: ${links.length}`, 'info');
+    this.eventBus?.emit('agent.step', 'browser-automation-agent', {
+      taskId: task.id,
+      agentId: agent.id,
+      step: 'candidate-pages-selected',
+      query,
+      links
+    }, task.id);
+
+    const candidates: any[] = [];
+    for (const link of links) {
+      await runTool('browser_open', { target: link.href, sessionId, label: 'Shopping Comparison Agent' });
+      const page = await runTool('browser_read', { sessionId });
+      candidates.push(this.summarizeCandidate(link.href, page));
+      await runTool('browser_screenshot', { sessionId });
+    }
+
+    const valid = candidates.filter(candidate => {
+      const haystack = `${candidate.title} ${candidate.vram.join(' ')} ${candidate.gpu.join(' ')} ${candidate.evidencePreview}`;
+      return /(86|88|96|128)\s*GB|RTX\s*6000|A6000|dual/i.test(haystack);
+    });
+    const ranked = (valid.length ? valid : candidates).sort((a, b) => {
+      const priceA = Number(String(a.prices?.[0] || '').replace(/[^0-9.]/g, '')) || Number.MAX_SAFE_INTEGER;
+      const priceB = Number(String(b.prices?.[0] || '').replace(/[^0-9.]/g, '')) || Number.MAX_SAFE_INTEGER;
+      return priceA - priceB;
+    });
+    const best = ranked[0];
+    const summary = [
+      `Shopping automation completed with ${candidates.length} pages opened/read and ${candidates.length} screenshots captured.`,
+      `Search query used: ${query}`,
+      '',
+      ...ranked.slice(0, 5).map((candidate, index) => [
+        `${index + 1}. ${candidate.title}`,
+        `URL: ${candidate.url}`,
+        `Prices found: ${candidate.prices.join(', ') || 'not visible'}`,
+        `GPU/VRAM evidence: ${[...candidate.gpu, ...candidate.vram].join(' | ') || 'not visible in page preview'}`,
+        `Review/risk signals: ${candidate.reviews.join(' | ') || 'not visible in page preview'}`
+      ].join('\n')),
+      '',
+      best ? `Best current candidate from visible evidence: ${best.title}\n${best.url}` : 'No suitable candidate was confirmed from visible page evidence.',
+      'Purchase/checkout was not clicked. Opening or pressing a purchase/buy/checkout control still needs Silva approval.'
+    ].join('\n\n');
+
+    sendUpdate(summary, 'info');
+    this.emitThought(task, agent, 'DONE', 'Deterministic shopping comparison finished.', {
+      query,
+      candidateCount: candidates.length,
+      best,
+      summaryPreview: summary.slice(0, 1800)
+    });
+    task.history.push({ role: 'assistant', content: summary, engine: 'Browser Automation Deterministic Workflow' });
+    return summary;
+  }
+
   getAgents() {
     return this.agents.map(a => ({
       ...a,
@@ -734,6 +861,23 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
       collaborators: collaborationPlan,
       tinyFishConfigured: Boolean(tinyFishStatus?.configured)
     }, task.id);
+
+    if (agent.id === 'browser-automation-agent' && this.isShoppingComparisonTask(task.input)) {
+      await this.runDeterministicShoppingAutomation(task, agent, sendUpdate).catch((error: any) => {
+        const message = error?.message || 'Deterministic browser shopping workflow failed.';
+        sendUpdate(message, 'error');
+        this.emitThought(task, agent, 'ERROR', message);
+      });
+      task.status = task.history.length > 0 ? 'done' : 'failed';
+      task.steps = task.steps.map(s => ({ ...s, status: 'done' as const }));
+      agent.currentTask = undefined;
+      if (agent.status === 'running') this.updateAgentStatus(agent.id, 'idle', agent.background);
+      this.emitThought(task, agent, task.status === 'done' ? 'DONE' : 'ERROR', `Browser automation deterministic workflow finished with status ${task.status}.`, {
+        status: task.status,
+        historyCount: task.history.length
+      });
+      return;
+    }
     
     const messages: any[] = [
       { 

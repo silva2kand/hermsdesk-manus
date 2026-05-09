@@ -776,10 +776,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     ]);
 
     try {
-      const sessionId = `browser-chat-${Date.now()}`;
-      const [browser, task] = await Promise.all([
-        window.ipcRenderer?.openBrowserOperator?.(outgoing, sessionId, 'Browser Automation').catch((error: any) => ({ ok: false, error: error?.message })),
-        window.ipcRenderer?.createAgentTask?.(
+      const task = await window.ipcRenderer?.createAgentTask?.(
           `Browser automation task from chat.
 
 User request:
@@ -795,15 +792,14 @@ Required first loop:
 
 Use the controlled browser session if available. Keep every step visible in EventBus/Live Operations.`,
           'browser-automation-agent'
-        ).catch((error: any) => ({ ok: false, error: error?.message }))
-      ]);
+      ).catch((error: any) => ({ ok: false, error: error?.message }));
 
       setMessages(prev => [...prev, {
         role: 'assistant',
         engine: 'Browser Automation Agent',
-        content: browser?.ok || task?.id
-          ? `Browser Automation Agent started.\n\nI opened the controlled browser and queued the real automation agent. Watch Live Operations for browser_open, browser_read, click/type/extract, screenshots, and verification steps.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
-          : `Browser Automation could not start.\n\nBrowser: ${browser?.error || 'not opened'}\nAgent: ${task?.error || 'not queued'}`
+        content: task?.id
+          ? `Browser Automation Agent started as task ${task.id}.\n\nIt will open one controlled browser computer, read result pages, extract evidence, compare candidates, and stream each step to Live Operations.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
+          : `Browser Automation could not start.\n\nAgent: ${task?.error || 'not queued'}`
       }]);
     } finally {
       setIsTyping(false);

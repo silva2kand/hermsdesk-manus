@@ -60,7 +60,7 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     const onAgentLog = (_: any, data: any) => push({ type: 'agent', title: agentNames[data?.agentId] || data?.agentId || 'Agent', message: data?.content || data?.status || 'Agent update' });
     const onAutomation = (_: any, event: any) => push({ type: 'automation', title: event?.title || event?.name || 'Automation', message: event?.detail || event?.message || event?.url || 'Automation step ran' });
     const onBrowser = (_: any, event: any) => {
-      push({ type: 'browser', title: event?.title || event?.action || 'Browser Operator', message: event?.text || event?.url || event?.message || 'Browser event' });
+      push({ type: 'browser', title: event?.title || event?.action || 'Browser Operator', message: event?.detail || event?.text || event?.url || event?.message || 'Browser event' });
       window.ipcRenderer?.getBrowserOperatorState?.().then(state => setComputerSessions(state?.sessions || [])).catch(() => {});
     };
     const onWideResearch = (_: any, event: any) => push({ type: 'research', title: event?.title || 'Wide Research', message: event?.brief || event?.status || event?.message || 'Research lane updated' });
