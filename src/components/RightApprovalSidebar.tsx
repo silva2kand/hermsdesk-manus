@@ -116,11 +116,14 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const syncMail = async () => {
     setSyncing(true);
     try {
-      const data = await window.ipcRenderer?.syncEmailBatch?.({ batchSize: 1000 });
+      const graphStatus = await window.ipcRenderer?.getMicrosoftGraphStatus?.().catch(() => null);
+      const data = graphStatus?.mailboxConnected
+        ? await window.ipcRenderer?.syncEmailBatch?.({ batchSize: 1000 })
+        : await window.ipcRenderer?.syncClassicOutlookBatch?.({ batchSize: 1000 });
       if (data) setEmailIntel(data);
-      setNotice(`Indexed ${data?.batchCount || data?.messages?.length || 0} Graph mail items. Total indexed: ${data?.state?.totalIndexed || data?.messages?.length || 0}.`);
+      setNotice(`Indexed ${data?.batchCount || data?.messages?.length || 0} ${data?.source || (graphStatus?.mailboxConnected ? 'Graph' : 'Classic Outlook')} mail items. Total indexed: ${data?.state?.totalIndexed || data?.messages?.length || 0}.`);
     } catch (error: any) {
-      setNotice(error?.message || 'Connect Microsoft Graph before syncing mail.');
+      setNotice(error?.message || 'Could not sync mail from Graph or Classic Outlook.');
     } finally {
       setSyncing(false);
       window.setTimeout(() => setNotice(''), 4000);

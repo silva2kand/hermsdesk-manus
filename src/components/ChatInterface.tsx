@@ -1062,13 +1062,26 @@ Use the controlled browser session if available. Keep every step visible in Even
       const timeoutId = setTimeout(() => controller.abort(), 120000); // 90s UI timeout
 
       if (window.ipcRenderer) {
-        window.ipcRenderer.createAgentTask?.(
+        const launchedAgentTask = window.ipcRenderer.createAgentTask?.(
           `User task from chat:\n${outgoing}\n\nAct as a real HermesDesk ME local agent. Think, plan, use approved local/web/tool routes where available, recover from errors, and report progress through agent updates. Do not pretend unavailable private access is connected; use drafts and approval gates for external actions.`,
           assignedAgentId
         ).catch((error: any) => {
           console.error('Agent task launch failed:', error);
           addNotice(`Agent launch failed: ${error?.message || 'unknown error'}`);
+          return null;
         });
+
+        if (assignedAgentId === 'browser-automation-agent') {
+          const task = await launchedAgentTask;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            engine: 'Browser Automation Agent',
+            content: task?.id
+              ? `Browser Automation Agent is running as task ${task.id}.\n\nI have routed this away from raw chat, so Jan will not answer with generic browsing text. Watch Live Operations for browser_open, browser_read, click/read/extract, screenshots, and verification events.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
+              : 'Browser Automation Agent could not be launched. Check Live Operations or the Event Bus for the launch error.'
+          }]);
+          return;
+        }
 
         let response;
         const normalizedProvider = provider.toLowerCase().replace(/\s+/g, '');

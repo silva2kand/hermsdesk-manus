@@ -89,6 +89,17 @@ export class EmailIndexService {
     return merged.length;
   }
 
+  getKnownEmailIds(accountId: string): Set<string> {
+    const indexPath = this.getIndexPath(accountId);
+    if (!fs.existsSync(indexPath)) return new Set();
+    try {
+      const emails = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as IndexedEmail[];
+      return new Set((Array.isArray(emails) ? emails : []).map(email => email.id).filter(Boolean));
+    } catch {
+      return new Set();
+    }
+  }
+
   async searchEmails(query: string, accountId?: string): Promise<IndexedEmail[]> {
     const cleanQuery = String(query || '').toLowerCase().trim();
     const genericTokens = new Set([

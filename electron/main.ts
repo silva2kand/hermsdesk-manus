@@ -433,17 +433,21 @@ function createWindow() {
     if (isSyncingMail) return;
     isSyncingMail = true;
     try {
-      const accounts = emailIndexService.getAllAccounts()
-      for (const account of accounts) {
-        try {
-          const data = await microsoftGraph.syncEmailIntelligenceBatch(account.accountId, { batchSize: 500 })
-          await processEmailIntelligence(data, `Microsoft Graph (${account.email})`)
-        } catch (error: any) {
-          console.error(`Mail sync failed for ${account.email}:`, error)
+      try {
+        const graphStatus = await microsoftGraph.getAccountStatus().catch(() => ({ connected: false, mailboxConnected: false }))
+        if (graphStatus?.connected && graphStatus?.mailboxConnected) {
+          const accounts = emailIndexService.getAllAccounts().filter((account: any) => !String(account.accountId || '').startsWith('classic-'))
+          for (const account of accounts) {
+            try {
+              const data = await microsoftGraph.syncEmailIntelligenceBatch(account.accountId, { batchSize: 500 })
+              await processEmailIntelligence(data, `Microsoft Graph (${account.email})`)
+            } catch (error: any) {
+              console.error(`Mail sync failed for ${account.email}:`, error)
+            }
+          }
         }
-      }
-    } catch (error: any) { appLog('error', `Mail ME Graph auto-sync failed: ${error?.message || error}`) }
-    try {
+      } catch (error: any) { appLog('error', `Mail ME Graph auto-sync failed: ${error?.message || error}`) }
+
       const status = await integrationService.getClassicOutlookStatus().catch(() => null)
       if (status?.ok && Array.isArray(status.accounts)) {
         appLog('info', `Mail ME Classic Outlook: detected ${status.accounts.length} accounts.`);
@@ -459,13 +463,21 @@ function createWindow() {
           }
         }
 
-        const latestSeen = store.get('classicMailQuickScanAt', (workspaceService.getEmailIntelligence?.()?.mailboxMemory || workspaceService.getEmailIntelligence?.()?.memory || {})?.latestReceivedAt || undefined) as string | undefined
-        const messages = await integrationService.listClassicOutlookMessages(1200, latestSeen)
-        if (Array.isArray(messages) && messages.length > 0) {
-          appLog('info', `Mail ME Classic Outlook: found ${messages.length} messages.`);
-          const accountsInBatch = new Set(messages.map((m: any) => m.accountId));
+        // Fast incremental scan: always read the newest local Outlook items and de-dupe
+        // against the persisted index. This avoids stale ReceivedTime filters after a full crawl.
+        const latestMessages = await integrationService.listClassicOutlookMessages(2000)
+        const seenByAccount = new Map<string, Set<string>>();
+        const messages = (Array.isArray(latestMessages) ? latestMessages : []).filter((message: any) => {
+          const accId = message.accountId || 'classic-outlook';
+          if (!message.id) return false;
+          if (!seenByAccount.has(accId)) seenByAccount.set(accId, emailIndexService.getKnownEmailIds(accId));
+          return !seenByAccount.get(accId)?.has(message.id);
+        });
+        if (messages.length > 0) {
+          appLog('info', `Mail ME Classic Outlook: found ${messages.length} new messages in latest scan.`);
+          const accountsInBatch = new Set(messages.map((m: any) => m.accountId || 'classic-outlook'));
           for (const accId of accountsInBatch) {
-            const accMessages = messages.filter((m: any) => m.accountId === accId);
+            const accMessages = messages.filter((m: any) => (m.accountId || 'classic-outlook') === accId);
             await emailIndexService.saveEmails(accId, accMessages.map((m: any) => ({
               ...m,
               categoryId: 'classic',
@@ -481,15 +493,16 @@ function createWindow() {
           const newest = messages.map((m: any) => m.receivedAt).filter(Boolean).sort().pop()
           if (newest) store.set('classicMailQuickScanAt', newest)
         } else {
-           appLog('info', `Mail ME Classic Outlook: no messages found in recent scan.`);
+           appLog('info', `Mail ME Classic Outlook: no new messages found in latest scan.`);
         }
       }
-    } catch (error: any) { appLog('error', `Mail ME Classic Outlook auto-sync failed: ${error?.message || error}`) }
-
-    const stats = emailIndexService.getGlobalStats();
-    appLog('info', `Intelligence Hub Status: ${stats.totalIndexed} emails read and organized across ${stats.totalAccounts} accounts.`);
-    win?.webContents.send('mail:intelligence-summary', stats);
-    isSyncingMail = false;
+      const stats = emailIndexService.getGlobalStats();
+      appLog('info', `Intelligence Hub Status: ${stats.totalIndexed} emails read and organized across ${stats.totalAccounts} accounts.`);
+      win?.webContents.send('mail:intelligence-summary', stats);
+    } catch (error: any) { appLog('error', `Mail ME auto-sync failed: ${error?.message || error}`) }
+    finally {
+      isSyncingMail = false;
+    }
   }
 
   schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); selfImprovementService?.setWindow(win); selfImprovementService?.start?.(); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
