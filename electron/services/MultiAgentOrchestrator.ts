@@ -612,6 +612,34 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     return result;
   }
 
+  private async runBrowserBootstrap(task: Task, agent: Agent, sendUpdate: (step: string, type: any) => void) {
+    if (!this.skillsEngine?.proposeAction || !this.skillsEngine?.approveAction) return '';
+    const sessionId = `agent-${task.id}`;
+    const runTool = async (name: string, params: any) => {
+      const action = this.skillsEngine.proposeAction({ name, type: 'os', params });
+      const result = await this.skillsEngine.approveAction(action.id);
+      const text = typeof result?.result === 'string' ? result.result : JSON.stringify(result || {});
+      sendUpdate(`${name}: ${text.slice(0, 1000)}`, result?.ok === false ? 'error' : 'result');
+      this.emitThought(task, agent, result?.ok === false ? 'ERROR' : 'OBSERVATION', `${name} bootstrap returned.`, {
+        tool: name,
+        params,
+        resultPreview: text.slice(0, 1200)
+      });
+      return text;
+    };
+
+    this.emitThought(task, agent, 'TOOL_CALL', 'Browser Automation Agent bootstrapping real browser_open and browser_read before model planning.', {
+      sessionId
+    });
+    const opened = await runTool('browser_open', {
+      target: task.input,
+      sessionId,
+      label: 'Browser Automation Agent'
+    });
+    const page = await runTool('browser_read', { sessionId });
+    return `Browser bootstrap completed.\nSession: ${sessionId}\n\n${opened}\n\n${page}`;
+  }
+
   getAgents() {
     return this.agents.map(a => ({
       ...a,
@@ -754,6 +782,21 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
       { role: 'user', content: task.input }
     ];
 
+    if (agent.id === 'browser-automation-agent') {
+      const bootstrap = await this.runBrowserBootstrap(task, agent, sendUpdate).catch((error: any) => {
+        const message = error?.message || 'Browser bootstrap failed.';
+        this.emitThought(task, agent, 'ERROR', message);
+        sendUpdate(message, 'error');
+        return '';
+      });
+      if (bootstrap) {
+        messages.push({
+          role: 'user',
+          content: `Real browser automation bootstrap evidence is below. Continue from this evidence using browser_read, browser_click_text, browser_click, browser_type, browser_screenshot, and browser_inspect. Do not say you cannot browse.\n\n${bootstrap.slice(0, 7000)}`
+        });
+      }
+    }
+
     let iterations = 0;
     const maxIterations = 8;
     let recoveryAttempts = 0;
@@ -889,6 +932,14 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
           }
         } else {
           // No tool calls — this is the agent's final response
+          if (agent.id === 'browser-automation-agent' && /cannot browse|can't browse|do not have the ability to browse|not able to browse|as an ai language model/i.test(content) && iterations < maxIterations) {
+            const correction = 'Browser Automation Agent correction: you do have real browser tools. Continue by calling [TOOL: browser_read()] or [TOOL: browser_inspect()], then choose result/product links with browser_click_text or browser_click. Do not provide a generic inability answer.';
+            sendUpdate(correction, 'error');
+            this.emitThought(task, agent, 'REVISE', correction, { outputPreview: content.slice(0, 600) });
+            messages.push({ role: 'assistant', content });
+            messages.push({ role: 'user', content: correction });
+            continue;
+          }
           const peerReview = await this.peerVerifyFinal(agent, task, content, engine);
           const finalContent = peerReview ? `${content}\n\nPeer verification:\n${peerReview}` : content;
           sendUpdate(finalContent, 'info');

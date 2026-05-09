@@ -759,6 +759,59 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     return true;
   };
 
+  const isBrowserAutomationPrompt = (text: string) =>
+    /(browser automation|run full browser|click through|click|type|scroll|navigate|open .*product|product page|search results|compare specs|extract|purchase tab|web automation|tinyfish)/i.test(text);
+
+  const handleBrowserAutomationIntent = async (outgoing: string) => {
+    if (!isBrowserAutomationPrompt(outgoing)) return false;
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps([
+      'Starting Browser Automation Agent',
+      'Opening controlled browser computer',
+      'Reading live page text and links',
+      'Streaming click/read/extract steps to Live Operations'
+    ]);
+
+    try {
+      const sessionId = `browser-chat-${Date.now()}`;
+      const [browser, task] = await Promise.all([
+        window.ipcRenderer?.openBrowserOperator?.(outgoing, sessionId, 'Browser Automation').catch((error: any) => ({ ok: false, error: error?.message })),
+        window.ipcRenderer?.createAgentTask?.(
+          `Browser automation task from chat.
+
+User request:
+${outgoing}
+
+Do not answer as a generic language model. Use real browser tools.
+Required first loop:
+1. Use browser_read/browser_inspect on the opened browser.
+2. Open relevant result/product pages.
+3. Extract visible prices/specs/reviews/risks.
+4. Compare evidence.
+5. Stop before pay/buy/checkout/order/submit and ask Silva for approval.
+
+Use the controlled browser session if available. Keep every step visible in EventBus/Live Operations.`,
+          'browser-automation-agent'
+        ).catch((error: any) => ({ ok: false, error: error?.message }))
+      ]);
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        engine: 'Browser Automation Agent',
+        content: browser?.ok || task?.id
+          ? `Browser Automation Agent started.\n\nI opened the controlled browser and queued the real automation agent. Watch Live Operations for browser_open, browser_read, click/type/extract, screenshots, and verification steps.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
+          : `Browser Automation could not start.\n\nBrowser: ${browser?.error || 'not opened'}\nAgent: ${task?.error || 'not queued'}`
+      }]);
+    } finally {
+      setIsTyping(false);
+      window.setTimeout(() => setResearchSteps([]), 6000);
+    }
+    return true;
+  };
+
   const openVideoCall = async () => {
     await window.ipcRenderer?.openApp?.('video call');
     addNotice('Opened video call room in your browser.');
@@ -888,6 +941,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     if (!outgoing || isTyping) return;
 
     if (await handleWhatsAppIntent(outgoing)) return;
+    if (await handleBrowserAutomationIntent(outgoing)) return;
 
     if (/(build|repair|fix|install|setup|self[-\s]?build).*(voice|tts|speech|silva voice)|voice.*(build|repair|fix|install|setup|self[-\s]?build)/i.test(outgoing)) {
       const userMessage = { role: 'user', content: outgoing };
