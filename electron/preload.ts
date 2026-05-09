@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   updateAgentStatus: (id: string, status: string, background: boolean) => ipcRenderer.invoke('agents:update-status', { id, status, background }),
   createAgentTask: (input: any, agentId: any) => ipcRenderer.invoke('agents:create-task', { input, agentId }),
   getAgentTasks: () => ipcRenderer.invoke('agents:get-tasks'),
+  stopOperatorMode: (reason?: string) => ipcRenderer.invoke('operator:stop-all', reason),
+  injectOperatorInstruction: (agentId: string, instruction: string) => ipcRenderer.invoke('operator:inject', { agentId, instruction }),
 
   // Workspace
   getMailSettings: () => ipcRenderer.invoke('workspace:get-mail'),
@@ -123,6 +125,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   openBrowserAutomation: (target: any) => ipcRenderer.invoke('automation:open-browser', target),
   researchWebAutomation: (query: string) => ipcRenderer.invoke('automation:research-web', query),
   getBrowserOperatorState: () => ipcRenderer.invoke('browser-operator:get-state'),
+  stopBrowserOperator: (reason?: string) => ipcRenderer.invoke('browser-operator:stop-all', reason),
+  resumeBrowserOperator: () => ipcRenderer.invoke('browser-operator:resume'),
   openBrowserOperator: (target: any, sessionId: any, label: any) => ipcRenderer.invoke('browser-operator:open', { target, sessionId, label }),
   navigateBrowserOperator: (target: string, sessionId: any) => ipcRenderer.invoke('browser-operator:navigate', { target, sessionId }),
   readBrowserOperator: (sessionId: any) => ipcRenderer.invoke('browser-operator:read', sessionId),

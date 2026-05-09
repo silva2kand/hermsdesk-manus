@@ -10,7 +10,7 @@ interface AgentWindowProps {
     id: string;
     name: string;
     version: string;
-    type: 'coding' | 'research' | 'creative' | 'security' | 'legal' | 'accounting';
+    type: 'coding' | 'research' | 'creative' | 'security' | 'legal' | 'accounting' | 'automation';
     icon: any;
     color: string;
   };
@@ -86,9 +86,12 @@ export const AgentWindow: React.FC<AgentWindowProps> = ({
     }]);
 
     try {
-      await window.ipcRenderer.createAgentTask(userMessage, agent.id);
+      await window.ipcRenderer.injectOperatorInstruction?.(agent.id, userMessage);
     } catch (e) {
       console.error('Failed to create agent task:', e);
+      try {
+        await window.ipcRenderer.createAgentTask(userMessage, agent.id);
+      } catch {}
       setIsProcessing(false);
     }
   };
@@ -248,6 +251,16 @@ export const AgentWindow: React.FC<AgentWindowProps> = ({
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
           <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Active System Connection</span>
         </div>
+        <button 
+          onClick={() => {
+            window.ipcRenderer?.updateAgentStatus?.(agent.id, 'stopped', false);
+            window.ipcRenderer?.stopBrowserOperator?.(`Stopped from ${agent.name} window`).catch(() => {});
+            onClose();
+          }}
+          className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-700 transition-all"
+        >
+          Stop
+        </button>
         <button 
           onClick={onMinimize}
           className="px-3 py-1.5 bg-gray-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-gray-800 transition-all"

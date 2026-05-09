@@ -31,6 +31,8 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [silvaEvents, setSilvaEvents] = useState<any[]>([]);
   const [computerSessions, setComputerSessions] = useState<any[]>([]);
+  const [operatorText, setOperatorText] = useState('');
+  const [operatorAgent, setOperatorAgent] = useState('browser-automation-agent');
 
   const refresh = async () => {
     const [skills, intel, browserState] = await Promise.all([
@@ -144,6 +146,25 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     window.setTimeout(() => setNotice(''), 5000);
   };
 
+  const stopOperator = async () => {
+    const reason = operatorText.trim() || 'Stop now from Live Operations';
+    const result = await window.ipcRenderer?.stopOperatorMode?.(reason).catch((error: any) => ({ ok: false, error: error?.message }));
+    setNotice(result?.ok ? `STOP NOW sent: ${reason}` : `Stop failed: ${result?.error || 'unknown error'}`);
+    setOperatorText('');
+    refresh();
+  };
+
+  const sendOperatorInstruction = async () => {
+    const instruction = operatorText.trim();
+    if (!instruction) {
+      setNotice('Type an instruction first, for example: click second result, scroll more, stop wrong page.');
+      return;
+    }
+    const result = await window.ipcRenderer?.injectOperatorInstruction?.(operatorAgent, instruction).catch((error: any) => ({ ok: false, error: error?.message }));
+    setNotice(result?.ok ? `Instruction sent to ${agentNames[operatorAgent] || operatorAgent}` : `Instruction failed: ${result?.error || 'unknown error'}`);
+    setOperatorText('');
+  };
+
   const approveSkill = async (id: string) => {
     await window.ipcRenderer?.approveSkill?.(id);
     refresh();
@@ -249,6 +270,40 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
               <ShieldCheck className="w-3.5 h-3.5" />
             </button>
           </div>
+        </section>
+
+        <section className="rounded-2xl bg-red-50 border border-red-100 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-red-700">Operator Mode</p>
+              <h3 className="text-xs font-black text-red-950">Stop / Guide Live Agent</h3>
+            </div>
+            <button
+              onClick={stopOperator}
+              className="px-3 py-2 rounded-xl bg-red-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-700"
+            >
+              Stop Now
+            </button>
+          </div>
+          <select
+            value={operatorAgent}
+            onChange={event => setOperatorAgent(event.target.value)}
+            className="w-full rounded-xl border border-red-100 bg-white px-2 py-2 text-[10px] font-bold text-gray-800"
+          >
+            {agents.map(agent => <option key={agent.id} value={agent.id}>{agentNames[agent.id] || agent.name || agent.id}</option>)}
+          </select>
+          <textarea
+            value={operatorText}
+            onChange={event => setOperatorText(event.target.value)}
+            placeholder="Live correction: click second result, scroll more, stop wrong page..."
+            className="w-full min-h-[62px] rounded-xl border border-red-100 bg-white px-2 py-2 text-[10px] font-bold text-gray-800 outline-none focus:border-red-300"
+          />
+          <button
+            onClick={sendOperatorInstruction}
+            className="w-full px-3 py-2 rounded-xl bg-white border border-red-100 text-red-700 text-[10px] font-black uppercase tracking-widest hover:bg-red-100"
+          >
+            Send Live Instruction
+          </button>
         </section>
 
         <section className="space-y-2">

@@ -30,6 +30,7 @@ const MAX_EVENTS = 100;
 export class BrowserOperatorService {
   private operatorWindow: BrowserWindowType | null = null;
   private operatorWindows: Map<string, BrowserWindowType> = new Map();
+  private stopRequested = false;
   private appWindow: BrowserWindowType | null = null;
   private screenshotDir: string;
   private eventBus: any = null;
@@ -112,6 +113,33 @@ export class BrowserOperatorService {
     return next;
   }
 
+  private assertNotStopped(sessionId?: string) {
+    if (this.stopRequested) {
+      this.push({ type: 'error', status: 'error', detail: 'Browser Operator stopped by user.', sessionId });
+      throw new Error('Browser Operator stopped by user.');
+    }
+  }
+
+  stopAll(reason = 'Stopped by user') {
+    this.stopRequested = true;
+    for (const [id, win] of this.operatorWindows.entries()) {
+      try {
+        if (!win.isDestroyed()) win.close();
+      } catch {}
+      this.saveSession(id, id, '', false);
+    }
+    this.operatorWindows.clear();
+    this.operatorWindow = null;
+    const event = this.push({ type: 'error', status: 'done', detail: `STOP NOW: ${reason}` });
+    return { ok: true, stopped: true, reason, event };
+  }
+
+  resume() {
+    this.stopRequested = false;
+    const event = this.push({ type: 'open', status: 'done', detail: 'Browser Operator resume enabled.' });
+    return { ok: true, event };
+  }
+
   private normalizeTarget(target?: string) {
     const raw = (target || '').trim();
     if (!raw) return 'https://www.google.com/';
@@ -162,6 +190,7 @@ export class BrowserOperatorService {
   }
 
   async open(target?: string, sessionId = 'main', label = 'Main Computer') {
+    this.stopRequested = false;
     const url = this.normalizeTarget(target);
     try {
       const win = this.ensureWindow(sessionId, label);
@@ -189,6 +218,7 @@ export class BrowserOperatorService {
   }
 
   async readPage(sessionId = 'main') {
+    this.assertNotStopped(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
@@ -211,6 +241,7 @@ export class BrowserOperatorService {
   }
 
   async click(selector: string, sessionId = 'main') {
+    this.assertNotStopped(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
@@ -230,6 +261,7 @@ export class BrowserOperatorService {
   }
 
   async clickText(text: string, sessionId = 'main') {
+    this.assertNotStopped(sessionId);
     const win = this.ensureWindow(sessionId);
     const needle = String(text || '').trim().toLowerCase();
     if (!needle) return { ok: false, error: 'No visible text provided' };
@@ -261,6 +293,7 @@ export class BrowserOperatorService {
   }
 
   async type(selector: string, text: string, sessionId = 'main') {
+    this.assertNotStopped(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
@@ -286,6 +319,7 @@ export class BrowserOperatorService {
   }
 
   async screenshot(sessionId = 'main') {
+    this.assertNotStopped(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       const image = await win.webContents.capturePage();
@@ -304,6 +338,7 @@ export class BrowserOperatorService {
   }
 
   async inspectScreen(sessionId = 'main') {
+    this.assertNotStopped(sessionId);
     const shot = await this.screenshot(sessionId);
     if (!shot.ok) return shot;
     const page = await this.readPage(sessionId).catch((error: any) => ({ ok: false, error: error?.message }));

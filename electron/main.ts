@@ -691,6 +691,8 @@ function createWindow() {
     return { ...opened, trace };
   })
   ipcMain.handle('browser-operator:get-state', () => browserOperator.getState())
+  ipcMain.handle('browser-operator:stop-all', (_, reason) => browserOperator.stopAll(reason || 'Stopped by user'))
+  ipcMain.handle('browser-operator:resume', () => browserOperator.resume())
   ipcMain.handle('browser-operator:open', (_, t) => { const p = typeof t === 'object' ? t : { target: t }; return browserOperator.open(p.target, p.sessionId, p.label) })
   ipcMain.handle('browser-operator:navigate', (_, t) => { const p = typeof t === 'object' ? t : { target: t }; return browserOperator.navigate(p.target, p.sessionId) })
   ipcMain.handle('browser-operator:read', (_, s) => browserOperator.readPage(s))
@@ -974,6 +976,12 @@ function createWindow() {
   ipcMain.handle('agents:update-status', (_, { id, status, background }) => orchestrator.updateAgentStatus(id, status, background))
   ipcMain.handle('agents:create-task', async (_, { input, agentId }) => orchestrator.createTask(input, agentId, win))
   ipcMain.handle('agents:get-tasks', () => orchestrator.getTasks())
+  ipcMain.handle('operator:stop-all', (_, reason) => {
+    const agents = orchestrator.stopAll(reason || 'Stopped by user');
+    const browser = browserOperator.stopAll(reason || 'Stopped by user');
+    return { ok: true, agents, browser };
+  })
+  ipcMain.handle('operator:inject', (_, { agentId, instruction }) => orchestrator.injectInstruction(agentId || 'browser-automation-agent', instruction))
   ipcMain.handle('workspace:get-mail', () => workspaceService.getMailSettings())
   ipcMain.handle('workspace:save-mail', (_, s) => workspaceService.saveMailSettings(s))
   ipcMain.handle('workspace:get-whatsapp-drafts', () => workspaceService.getWhatsAppDrafts())

@@ -288,6 +288,7 @@ export class MultiAgentOrchestrator {
   private eventBus: any = null;
   private tinyFishService: any = null;
   private cancelFlags: Map<string, boolean> = new Map();
+  private taskOverrides: Map<string, string[]> = new Map();
 
   private agents: Agent[] = [
     {
@@ -671,6 +672,13 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     if (!this.skillsEngine?.proposeAction || !this.skillsEngine?.approveAction) return '';
     const sessionId = `agent-${task.id}`;
     const runTool = async (name: string, params: any) => {
+      if (this.cancelFlags.get(agent.id)) throw new Error('Agent stopped by user.');
+      const override = this.consumeInstruction(agent.id);
+      if (override) {
+        sendUpdate(`Operator override: ${override}`, 'info');
+        this.emitThought(task, agent, 'REVISE', `Operator override received: ${override}`, { override });
+        if (/stop|pause|halt|wrong/i.test(override)) throw new Error(`Operator stopped/corrected workflow: ${override}`);
+      }
       const action = this.skillsEngine.proposeAction({ name, type: 'os', params });
       const result = await this.skillsEngine.approveAction(action.id);
       const text = typeof result?.result === 'string' ? result.result : JSON.stringify(result || {});
@@ -845,6 +853,38 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
       }
     }
     return this.getAgents();
+  }
+
+  stopAll(reason = 'Stopped by user') {
+    for (const agent of this.agents) {
+      this.cancelFlags.set(agent.id, true);
+      agent.status = 'stopped';
+      agent.currentTask = undefined;
+    }
+    this.store.set('agents_status', Object.fromEntries(this.agents.map(agent => [agent.id, { status: agent.status, background: false }])));
+    this.eventBus?.emit('operator.stop', 'mythos-manager', { reason, stoppedAt: new Date().toISOString() });
+    return { ok: true, reason, agents: this.getAgents() };
+  }
+
+  injectInstruction(agentId: string, instruction: string) {
+    const text = String(instruction || '').trim();
+    if (!text) return { ok: false, error: 'Instruction is empty.' };
+    const queue = this.taskOverrides.get(agentId) || [];
+    queue.push(text);
+    this.taskOverrides.set(agentId, queue.slice(-10));
+    this.eventBus?.emit('operator.override', 'mythos-manager', {
+      agentId,
+      instruction: text,
+      createdAt: new Date().toISOString()
+    });
+    return { ok: true, agentId, instruction: text };
+  }
+
+  private consumeInstruction(agentId: string) {
+    const queue = this.taskOverrides.get(agentId) || [];
+    const next = queue.shift();
+    this.taskOverrides.set(agentId, queue);
+    return next;
   }
 
   async createTask(input: string, agentId?: string, win?: any) {
@@ -1027,6 +1067,16 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
         sendUpdate('Agent stopped by user.', 'info');
         task.status = 'cancelled';
         break;
+      }
+
+      const override = this.consumeInstruction(agent.id);
+      if (override) {
+        sendUpdate(`Operator override: ${override}`, 'info');
+        this.emitThought(task, agent, 'REVISE', `Operator override received: ${override}`, { override });
+        messages.push({
+          role: 'user',
+          content: `LIVE OPERATOR OVERRIDE FROM SILVA:\n${override}\n\nObey this immediately. If it says stop, pause and report. If it corrects direction, continue from the current tool state.`
+        });
       }
 
       iterations++;

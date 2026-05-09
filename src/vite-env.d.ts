@@ -140,6 +140,10 @@ interface Window {
     updateAgentStatus: (id: string, status: string, background: boolean) => Promise<boolean>;
     createAgentTask: (input: string, agentId?: string) => Promise<any>;
     getAgentTasks: () => Promise<any[]>;
+    stopOperatorMode?: (reason?: string) => Promise<any>;
+    injectOperatorInstruction?: (agentId: string, instruction: string) => Promise<any>;
+    stopBrowserOperator?: (reason?: string) => Promise<any>;
+    resumeBrowserOperator?: () => Promise<any>;
     invoke: (channel: string, ...args: any[]) => Promise<any>;
     removeAllListeners: (channel: string) => void;
     getResourceUsage: () => Promise<{ cpu: number, ram: number, gpu: number, gpuModel: string, engine?: string }>;
