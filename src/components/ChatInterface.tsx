@@ -3,7 +3,7 @@ import {
   Plus, Smile, Monitor, Mic, ArrowUp, Search, ChevronDown, Info, ExternalLink, ChevronRight, File, Folder, Globe,
   MessageSquare as MsgIcon, Mail, Briefcase, Cpu, Zap, Github, Layout, Calculator, Palette, HardDrive, Wrench, Brain,
   RefreshCw, Copy, Volume2, Edit3, StepForward, RotateCcw, X, Rocket, LayoutGrid, FileText, MessageSquare, Video,
-  Scale, CreditCard, Radio, Code as CodeIcon
+  Scale, CreditCard, Radio, Code as CodeIcon, History, Trash2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -33,6 +33,16 @@ const connectorId = (name: string) => name.toLowerCase().replace(/\s+/g, '-');
 const engineKey = (name: string) => name === 'Jan' ? 'Jan + TurboQuant' : name === 'Auto' ? 'Auto' : name;
 const preferJanModel = (models: string[]) => models.find(m => /qwen/i.test(m)) || models.find(m => /phi/i.test(m)) || models[0] || 'Auto local model';
 const providerLabel = (name: string) => name === 'Auto' ? 'Auto Mix (local first + free cloud)' : name === 'Jan' ? 'Jan + TurboQuant + DFLASH (built-in)' : name;
+const CHAT_HISTORY_KEY = 'hermsdesk.chat.sessions.v1';
+const WHATSAPP_NUMBER_KEY = 'hermsdesk.user.whatsappNumber';
+
+type ChatSession = {
+  id: string;
+  title: string;
+  messages: any[];
+  createdAt: string;
+  updatedAt: string;
+};
 
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
@@ -83,6 +93,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [input, setInput] = useState('');
   const [notice, setNotice] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeChatId, setActiveChatId] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [whatsAppNumber, setWhatsAppNumber] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [researchSteps, setResearchSteps] = useState<string[]>([]);
   const [liveTrace, setLiveTrace] = useState<any[]>([]);
@@ -110,6 +125,50 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       window.ipcRenderer?.off?.('silva:event', onSilvaEvent);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(CHAT_HISTORY_KEY) || '[]') as ChatSession[];
+      const clean = Array.isArray(saved) ? saved.filter(item => item?.id).slice(0, 50) : [];
+      const lastId = window.localStorage.getItem('hermsdesk.chat.activeId') || clean[0]?.id || `chat-${Date.now()}`;
+      const active = clean.find(item => item.id === lastId) || clean[0];
+      if (active) {
+        setChatSessions(clean);
+        setActiveChatId(active.id);
+        setMessages(active.messages || []);
+      } else {
+        const now = new Date().toISOString();
+        const fresh = { id: lastId, title: 'New chat', messages: [], createdAt: now, updatedAt: now };
+        setChatSessions([fresh]);
+        setActiveChatId(fresh.id);
+      }
+      setWhatsAppNumber(window.localStorage.getItem(WHATSAPP_NUMBER_KEY) || '');
+    } catch {
+      const now = new Date().toISOString();
+      const fresh = { id: `chat-${Date.now()}`, title: 'New chat', messages: [], createdAt: now, updatedAt: now };
+      setChatSessions([fresh]);
+      setActiveChatId(fresh.id);
+    } finally {
+      setHistoryLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!historyLoaded || !activeChatId) return;
+    const now = new Date().toISOString();
+    const firstUser = messages.find(message => message.role === 'user')?.content || '';
+    const title = firstUser ? String(firstUser).replace(/\s+/g, ' ').slice(0, 48) : 'New chat';
+    setChatSessions(prev => {
+      const exists = prev.some(item => item.id === activeChatId);
+      const next = (exists ? prev : [{ id: activeChatId, title, messages: [], createdAt: now, updatedAt: now }, ...prev])
+        .map(item => item.id === activeChatId ? { ...item, title, messages, updatedAt: now } : item)
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+        .slice(0, 50);
+      window.localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(next));
+      window.localStorage.setItem('hermsdesk.chat.activeId', activeChatId);
+      return next;
+    });
+  }, [messages, activeChatId, historyLoaded]);
 
   // Update when initialModel changes
   React.useEffect(() => {
@@ -260,6 +319,41 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     window.setTimeout(() => setNotice(''), 3500);
   };
 
+  const startNewChat = () => {
+    const now = new Date().toISOString();
+    const id = `chat-${Date.now()}`;
+    const fresh = { id, title: 'New chat', messages: [], createdAt: now, updatedAt: now };
+    setChatSessions(prev => [fresh, ...prev].slice(0, 50));
+    setActiveChatId(id);
+    setMessages([]);
+    setInput('');
+    setShowHistory(false);
+    addNotice('Started a new chat. Previous chat is saved in history.');
+  };
+
+  const openChatSession = (session: ChatSession) => {
+    setActiveChatId(session.id);
+    setMessages(session.messages || []);
+    setShowHistory(false);
+    addNotice(`Opened chat: ${session.title || 'Untitled'}`);
+  };
+
+  const deleteChatSession = (id: string) => {
+    const next = chatSessions.filter(item => item.id !== id);
+    setChatSessions(next);
+    window.localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(next));
+    if (id === activeChatId) {
+      const fallback = next[0];
+      if (fallback) {
+        setActiveChatId(fallback.id);
+        setMessages(fallback.messages || []);
+      } else {
+        startNewChat();
+      }
+    }
+    addNotice('Chat deleted from local history.');
+  };
+
   const getLastUserPrompt = (beforeIndex = messages.length) => {
     for (let i = Math.min(beforeIndex - 1, messages.length - 1); i >= 0; i -= 1) {
       if (messages[i].role === 'user') return messages[i].content;
@@ -280,13 +374,39 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const buildMailboxEvidenceAnswer = (prompt: string, mailboxMemory: any, matches: any[]) => {
     const lower = prompt.toLowerCase();
-    const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium)/i.test(prompt);
+    const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking)/i.test(prompt);
     if (!isMailQuestion) return '';
 
     const total = mailboxMemory?.totalIndexed?.toLocaleString?.() || mailboxMemory?.totalIndexed || 'indexed';
     const updated = mailboxMemory?.generatedAt ? new Date(mailboxMemory.generatedAt).toLocaleString() : 'recently';
-    const evidence = matches.slice(0, 8);
-    const title = /car|vehicle|mot|insurance|renewal|policy|premium/i.test(lower)
+    const wantsUrgents = /urgent|important|need looking|look at|priority|top\s*3|3 urgents/i.test(lower);
+    const wantsVehicleInsurance = /car|vehicle|motor|mot|insurance|renewal|policy|premium/i.test(lower);
+    const curated = wantsUrgents
+      ? [
+          ...(mailboxMemory?.upcomingImportant || []),
+          ...(mailboxMemory?.insuranceRenewals || []),
+          ...(mailboxMemory?.billsToPay || []),
+          ...(mailboxMemory?.deadlines || []),
+          ...(mailboxMemory?.urgent || [])
+        ]
+      : wantsVehicleInsurance
+        ? [
+            ...(mailboxMemory?.insuranceRenewals || []),
+            ...matches.filter((email: any) => /car|vehicle|motor|mot|insurance|renewal|policy|premium|go\.?compare|comparethemarket/i.test(`${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.bodyPreview || ''}`))
+          ]
+        : matches;
+    const seen = new Set<string>();
+    const evidence = curated.filter((email: any) => {
+      if (!email?.id || seen.has(email.id)) return false;
+      seen.add(email.id);
+      if (wantsVehicleInsurance) {
+        return /car|vehicle|motor|mot|insurance|renewal|policy|premium|go\.?compare|comparethemarket/i.test(`${email.type || ''} ${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''}`);
+      }
+      return true;
+    }).slice(0, wantsUrgents ? 3 : 8);
+    const title = wantsUrgents
+      ? 'Here are the top 3 urgent or important items I found in your indexed mailbox memory'
+      : wantsVehicleInsurance
       ? 'Here is the strongest vehicle/insurance evidence I found in your indexed mailbox memory'
       : /bill|payment|pay|invoice|deadline|due/i.test(lower)
         ? 'Here are the strongest bill/payment/deadline items I found in your indexed mailbox memory'
@@ -312,10 +432,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       `Mailbox memory checked: ${total} emails, updated ${updated}.`,
       '',
       ...evidence.map((email: any, index: number) => (
-        `${index + 1}. ${email.subject || '(no subject)'}\nFrom: ${email.sender || email.senderEmail || 'unknown'}\nReceived: ${email.receivedAt ? new Date(email.receivedAt).toLocaleString() : 'unknown'}\nAccount/folder: ${email.accountId || 'unknown'} / ${email.folderName || 'unknown'}\nCategory: ${email.categoryLabel || 'unknown'}\n${email.bodyPreview ? `Preview: ${String(email.bodyPreview).slice(0, 260)}` : ''}`
+        `${index + 1}. ${email.subject || '(no subject)'}\nFrom: ${email.sender || email.senderEmail || 'unknown'}\nReceived: ${email.receivedAt ? new Date(email.receivedAt).toLocaleString() : 'unknown'}\nAccount/folder: ${email.accountId || 'local memory'} / ${email.folderName || 'unknown'}\nCategory/type: ${email.categoryLabel || email.type || 'unknown'}${email.assignedAgent ? `\nAssigned agent: ${email.assignedAgent}` : ''}\n${email.bodyPreview || email.preview ? `Preview: ${String(email.bodyPreview || email.preview).slice(0, 260)}` : ''}`
       )),
       '',
-      /car|vehicle|mot|insurance|renewal|policy|premium/i.test(lower)
+      wantsUrgents
+        ? 'Current read: these are priority candidates from local memory. I can mark any as important/not important, draft a reply, or prepare a WhatsApp notification, but external actions need your approval.'
+        : wantsVehicleInsurance
         ? 'Current read: I found renewal/insurance evidence, but I do not see a confirmed future due date in the indexed preview text. The safest next step is to open the matching insurer/comparison email or policy attachment before relying on the date.'
         : 'Current read: these are evidence matches from the local index. I can draft replies, reminders, or folder actions, but approval is required before anything external changes.',
       'I will not move, delete, send, unsubscribe, pay, or contact anyone without your approval.'
@@ -565,6 +687,77 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     addNotice(result?.ok ? 'Opened WhatsApp composer. Review and press Send manually.' : 'Could not open WhatsApp.');
   };
 
+  const extractWhatsAppNumber = (text: string) => {
+    const match = text.match(/(?:\+?\d[\d\s().-]{8,}\d)/);
+    return match ? match[0].replace(/[^\d+]/g, '').replace(/^00/, '+') : '';
+  };
+
+  const extractWhatsAppMessage = (text: string) => {
+    const clean = text.trim();
+    const quoted = clean.match(/["']([^"']{1,500})["']/);
+    if (quoted?.[1]) return quoted[1].trim();
+    const hiMatch = clean.match(/\bsend\s+(?:me\s+)?(.{1,160}?)\s+(?:message\s+)?(?:on|to|via)\s+(?:my\s+)?whatsapp/i);
+    if (hiMatch?.[1]) return hiMatch[1].trim();
+    if (/send.*\bhi\b.*whatsapp/i.test(clean)) return 'hi';
+    return clean.replace(/(?:my\s+)?whatsapp\s+number\s+is\s*(?:this)?/ig, '').replace(extractWhatsAppNumber(clean), '').trim() || 'hi';
+  };
+
+  const handleWhatsAppIntent = async (outgoing: string) => {
+    const foundNumber = extractWhatsAppNumber(outgoing);
+    const isNumberSave = /whatsapp.*number|number.*whatsapp/i.test(outgoing) && foundNumber;
+    const wantsSend = /\b(send|message|notify|whatsapp)\b/i.test(outgoing) && /whatsapp/i.test(outgoing);
+
+    if (foundNumber) {
+      setWhatsAppNumber(foundNumber);
+      window.localStorage.setItem(WHATSAPP_NUMBER_KEY, foundNumber);
+    }
+
+    if (!isNumberSave && !wantsSend) return false;
+
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+
+    if (isNumberSave && !/\bsend|message|notify\b/i.test(outgoing)) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        engine: 'WhatsApp ME',
+        content: `Saved your WhatsApp number locally: ${foundNumber}.\n\nI will use it for approval-first urgent notifications and manual WhatsApp composer drafts. I still will not silently send messages without your final WhatsApp Send press.`
+      }]);
+      return true;
+    }
+
+    const phone = foundNumber || whatsAppNumber || window.localStorage.getItem(WHATSAPP_NUMBER_KEY) || '';
+    const message = extractWhatsAppMessage(outgoing);
+    if (!phone) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        engine: 'WhatsApp ME',
+        content: 'I can prepare the WhatsApp composer, but I do not have your WhatsApp number saved yet. Tell me the number once, then I can reuse it for urgent notification drafts.'
+      }]);
+      return true;
+    }
+
+    const draft = await window.ipcRenderer?.saveWhatsAppDraft?.({
+      label: 'Chat WhatsApp request',
+      message,
+      phone,
+      status: 'drafted',
+      source: 'chat'
+    }).catch(() => null);
+    const result = await window.ipcRenderer?.composeWhatsApp?.(message, phone).catch((error: any) => ({ ok: false, error: error?.message }));
+    if (result?.ok && draft?.id) await window.ipcRenderer?.markWhatsAppOpened?.(draft.id).catch(() => null);
+
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      engine: 'WhatsApp ME',
+      content: result?.ok
+        ? `Opened the real WhatsApp composer to ${phone} with this draft:\n\n${message}\n\nPlease review and press Send manually.`
+        : `I saved the WhatsApp draft, but could not open the composer: ${(result as any)?.error || 'unknown error'}`
+    }]);
+    return true;
+  };
+
   const openVideoCall = async () => {
     await window.ipcRenderer?.openApp?.('video call');
     addNotice('Opened video call room in your browser.');
@@ -693,6 +886,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
 
+    if (await handleWhatsAppIntent(outgoing)) return;
+
     if (/(build|repair|fix|install|setup|self[-\s]?build).*(voice|tts|speech|silva voice)|voice.*(build|repair|fix|install|setup|self[-\s]?build)/i.test(outgoing)) {
       const userMessage = { role: 'user', content: outgoing };
       setMessages(prev => [...prev, userMessage]);
@@ -730,7 +925,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     }
 
     const userMessage = { role: 'user', content: outgoing };
-    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium)/i.test(outgoing);
+    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking)/i.test(outgoing);
     const wantsLiveWeb = !needsMailMemory && /(research|web|internet|latest|current|today|news|official|source|cite|verify online|search online|browser)/i.test(outgoing);
     let memoryContext: any = null;
     let matchingEmails: any[] = [];
@@ -761,6 +956,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           categories: memoryContext.categories,
           billsToPay: (memoryContext.billsToPay || []).slice(0, 20),
           deadlines: (memoryContext.deadlines || []).slice(0, 20),
+          insuranceRenewals: (memoryContext.insuranceRenewals || []).slice(0, 20),
+          upcomingImportant: (memoryContext.upcomingImportant || []).slice(0, 20),
+          supplierUpdates: (memoryContext.supplierUpdates || []).slice(0, 12),
+          staffInvoices: (memoryContext.staffInvoices || []).slice(0, 12),
           urgent: (memoryContext.urgent || []).slice(0, 20),
           exactSearchMatchesForThisQuestion: matchingEmails.slice(0, 12).map((email: any) => ({
             subject: email.subject,
@@ -857,7 +1056,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           let content = response.content || response.message?.content || (response.choices && response.choices[0]?.message?.content) || "No response content received.";
           const engine = response.engine || provider;
           const mailboxEvidenceAnswer = needsMailMemory ? buildMailboxEvidenceAnswer(outgoing, memoryContext, matchingEmails) : '';
-          if (mailboxEvidenceAnswer && (/no local ai engine is available|no response content|please tell me more|what information you'd like/i.test(content) || matchingEmails.length > 0)) {
+          if (mailboxEvidenceAnswer && (/no local ai engine is available|no response content|please tell me more|what information you'd like|no immediate urgent|no immediate/i.test(content) || matchingEmails.length > 0 || /urgent|important|need looking|car|vehicle|insurance|renewal/i.test(outgoing))) {
             content = mailboxEvidenceAnswer;
           }
           const engineText = String(engine || '').toLowerCase();
@@ -912,6 +1111,42 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   return (
     <div className="flex flex-col h-full bg-white relative overflow-hidden">
+      <div className="px-5 py-2 border-b border-gray-100 bg-white/95 backdrop-blur flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={startNewChat} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-black">
+            <Plus className="w-3.5 h-3.5" />
+            New chat
+          </button>
+          <button onClick={() => setShowHistory(prev => !prev)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-50 text-gray-700 text-[10px] font-black uppercase tracking-widest border border-gray-100 hover:bg-gray-100">
+            <History className="w-3.5 h-3.5" />
+            History
+          </button>
+          <span className="text-[10px] text-gray-400 truncate">{chatSessions.find(item => item.id === activeChatId)?.title || 'New chat'}</span>
+        </div>
+        {whatsAppNumber && <span className="text-[9px] font-black text-green-700 uppercase tracking-widest">WhatsApp notify: {whatsAppNumber}</span>}
+      </div>
+
+      {showHistory && (
+        <div className="absolute top-12 left-5 z-50 w-80 max-h-[70vh] overflow-y-auto bg-white border border-gray-100 rounded-2xl shadow-2xl p-2">
+          <div className="flex items-center justify-between px-2 py-2">
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Local chat history</p>
+            <button onClick={() => setShowHistory(false)} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-3.5 h-3.5" /></button>
+          </div>
+          {chatSessions.length === 0 && <p className="p-3 text-xs text-gray-400">No saved chats yet.</p>}
+          {chatSessions.map(session => (
+            <div key={session.id} className="flex items-center gap-1 p-1 rounded-xl hover:bg-gray-50">
+              <button onClick={() => openChatSession(session)} className="flex-1 min-w-0 text-left px-2 py-2 rounded-lg">
+                <p className="text-xs font-black text-gray-900 truncate">{session.title || 'Untitled chat'}</p>
+                <p className="text-[10px] text-gray-400 truncate">{new Date(session.updatedAt).toLocaleString()} · {(session.messages || []).length} messages</p>
+              </button>
+              <button onClick={() => deleteChatSession(session.id)} className="p-2 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Delete chat">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div 
         ref={scrollRef}
         className="flex-1 overflow-y-auto scroll-smooth scrollbar-hide px-4 pt-4 pb-32"
