@@ -195,7 +195,11 @@ export class BrowserOperatorService {
         (() => ({
           title: document.title,
           url: location.href,
-          text: document.body ? document.body.innerText.slice(0, 12000) : ''
+          text: document.body ? document.body.innerText.slice(0, 12000) : '',
+          links: Array.from(document.querySelectorAll('a[href]')).slice(0, 80).map((a) => ({
+            text: (a.innerText || a.getAttribute('aria-label') || a.getAttribute('title') || '').trim().slice(0, 180),
+            href: a.href
+          })).filter((item) => item.text || item.href)
         }))()
       `);
       this.saveSession(sessionId, sessionId, result.url, true);
@@ -222,6 +226,37 @@ export class BrowserOperatorService {
       return result;
     } catch (error: any) {
       return { ok: false, error: error?.message || 'Click failed' };
+    }
+  }
+
+  async clickText(text: string, sessionId = 'main') {
+    const win = this.ensureWindow(sessionId);
+    const needle = String(text || '').trim().toLowerCase();
+    if (!needle) return { ok: false, error: 'No visible text provided' };
+    try {
+      const result = await win.webContents.executeJavaScript(`
+        (() => {
+          const needle = ${JSON.stringify(needle)};
+          const candidates = Array.from(document.querySelectorAll('a,button,[role="button"],input[type="button"],input[type="submit"]'));
+          const score = (el) => {
+            const text = ((el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || '') + '').trim().toLowerCase();
+            if (!text) return 0;
+            if (text === needle) return 100;
+            if (text.includes(needle)) return 70;
+            if (needle.includes(text) && text.length > 2) return 45;
+            return 0;
+          };
+          const el = candidates.map(el => ({ el, score: score(el) })).sort((a, b) => b.score - a.score)[0];
+          if (!el || el.score <= 0) return { ok: false, error: 'Visible text not found', url: location.href };
+          el.el.scrollIntoView({ block: 'center', inline: 'center' });
+          el.el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          return { ok: true, matchedText: (el.el.innerText || el.el.value || el.el.getAttribute('aria-label') || '').trim().slice(0, 200), url: location.href };
+        })()
+      `);
+      this.push({ type: result.ok ? 'click' : 'error', status: result.ok ? 'done' : 'error', detail: result.ok ? `Clicked visible text "${text}"` : `${text}: ${result.error}`, url: result.url, sessionId });
+      return result;
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'Click by text failed' };
     }
   }
 

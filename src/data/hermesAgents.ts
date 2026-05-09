@@ -1,7 +1,7 @@
 import {
   Scale, Calculator, Home, Mail, Monitor, Code, Search, Shield,
   Paperclip, Rocket, Brain, FileText, Wrench, Building2, Receipt,
-  Car, Landmark, Bell, CreditCard, Workflow
+  Car, Landmark, Bell, CreditCard, Workflow, Globe
 } from 'lucide-react';
 
 export type HermesAgentStatus = 'ready' | 'needs-connector' | 'needs-approval';
@@ -91,6 +91,18 @@ export const hermesAgents: HermesAgent[] = [
     status: 'ready',
     icon: Receipt,
     color: 'bg-emerald-950'
+  },
+  {
+    id: 'browser-automation-agent',
+    name: 'Browser Automation Agent',
+    group: 'Hermes',
+    role: 'Real Browser Click, Type, Extract & Verify',
+    capability: 'Controls the ME browser computer with real open/read/click/type/screenshot/inspect steps, extracts links/text, compares pages, and stops before risky purchase/submit actions.',
+    connector: 'Browser Operator, TinyFish, Web Research',
+    approval: 'Approval required before pay, buy, checkout, submit, sign, book, password, bank, legal, or account-changing actions.',
+    status: 'ready',
+    icon: Globe,
+    color: 'bg-indigo-700'
   },
   {
     id: 'accountant-agent',

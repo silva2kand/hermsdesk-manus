@@ -22,6 +22,7 @@ export const MailMEView = () => {
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [mailSyncState, setMailSyncState] = useState<any>(null);
   const [mailMemory, setMailMemory] = useState<any>(null);
+  const [newArrivals, setNewArrivals] = useState<any[]>([]);
   const [tinyFishStatus, setTinyFishStatus] = useState<any>(null);
   const [batchIndexing, setBatchIndexing] = useState(false);
   const totalIndexed = Math.max(Number(mailSyncState?.totalIndexed || 0), Number(mailSyncState?.globalTotalIndexed || 0), Number(mailMemory?.totalIndexed || 0));
@@ -58,6 +59,28 @@ export const MailMEView = () => {
       }
     };
     loadSettings();
+  }, []);
+
+  React.useEffect(() => {
+    const onMailUpdated = (_: any, event: any) => {
+      const arrivals = Array.isArray(event?.newArrivals) ? event.newArrivals : [];
+      if (arrivals.length) {
+        setNewArrivals(prev => {
+          const seen = new Set<string>();
+          return [...arrivals, ...prev].filter((item: any) => {
+            if (!item?.id || seen.has(item.id)) return false;
+            seen.add(item.id);
+            return true;
+          }).slice(0, 30);
+        });
+        showNotice(`${arrivals.length} new email${arrivals.length === 1 ? '' : 's'} arrived and were added to Mail ME memory.`);
+      }
+      refreshMailSyncState();
+    };
+    window.ipcRenderer?.on?.('mail:intelligence-updated', onMailUpdated);
+    return () => {
+      window.ipcRenderer?.off?.('mail:intelligence-updated', onMailUpdated);
+    };
   }, []);
 
   const saveSettings = async (updates: any) => {
@@ -558,6 +581,33 @@ export const MailMEView = () => {
           <IndexStat label="Accounts" value={totalAccounts.toString()} />
           <IndexStat label="Status" value={mailSyncState?.complete || (totalAvailable > 0 && totalIndexed >= totalAvailable) ? 'Complete' : graphStatus?.mailboxConnected || classicOutlookStatus?.ok ? `${totalAvailable ? `${totalIndexed.toLocaleString()} / ${totalAvailable.toLocaleString()}` : 'Ready / Crawling'}` : 'Sync Pending'} />
         </div>
+
+        {newArrivals.length > 0 && (
+          <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-amber-700" />
+                <div>
+                  <p className="text-[10px] font-black text-amber-900 uppercase tracking-widest">New email arrivals</p>
+                  <p className="text-[10px] text-amber-700">Live notifications from background Mail ME sync.</p>
+                </div>
+              </div>
+              <button onClick={() => setNewArrivals([])} className="text-[9px] font-black text-amber-700 uppercase hover:underline">Clear</button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {newArrivals.slice(0, 6).map((item: any) => (
+                <div key={item.id} className="p-3 rounded-xl bg-white/70 border border-amber-100">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-black text-gray-900 truncate">{item.subject || '(No subject)'}</p>
+                    <span className="text-[8px] font-black text-amber-700 uppercase shrink-0">{item.categoryLabel || 'Mail'}</span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 truncate mt-1">{item.sender || 'unknown'} · {item.receivedAt ? new Date(item.receivedAt).toLocaleString() : ''}</p>
+                  {item.preview && <p className="text-[10px] text-gray-600 mt-1 line-clamp-2">{item.preview}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {mailMemory && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

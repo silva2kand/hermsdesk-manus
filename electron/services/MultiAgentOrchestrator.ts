@@ -22,7 +22,7 @@ export interface Agent {
   tools: string[];
   status: 'running' | 'idle' | 'stopped';
   version: string;
-  type: 'coding' | 'research' | 'creative' | 'security' | 'legal' | 'accounting';
+  type: 'coding' | 'research' | 'creative' | 'security' | 'legal' | 'accounting' | 'automation';
   background: boolean;
   currentTask?: string;
 }
@@ -246,6 +246,28 @@ Available tools:
 - [TOOL: write_file(path="purchase_protection_note.txt", content="drafted content")]
 - [TOOL: list_dir(path="folder/path")]
 - [TOOL: open_app(app="URL or app name")]`
+,
+
+  'browser-automation-agent': `You are Browser Automation Agent for HermesDesk ME.
+
+Your purpose is to operate the real controlled browser computer: open pages, read DOM text, list links, click selectors or visible text, type into forms, capture screenshots, and verify each step.
+
+Rules:
+- Use real browser tools, not instructions, when the user asks you to browse, click, type, compare, extract, navigate, or open product/result pages.
+- After every action, verify with browser_read or browser_inspect.
+- Never click pay, buy, submit, checkout, order, confirm, sign, book, or purchase controls without explicit Silva approval.
+- Never enter passwords, payment details, bank details, or legal/accounting submissions without approval.
+- For shopping/research, open result pages, extract prices/specs/risks/reviews, compare evidence, and stop before purchase/checkout.
+
+Available tools:
+- [TOOL: browser_open(target="search query or URL")]
+- [TOOL: browser_read()]
+- [TOOL: browser_click(selector="CSS selector")]
+- [TOOL: browser_click_text(text="visible link or button text")]
+- [TOOL: browser_type(selector="CSS selector", text="text to enter")]
+- [TOOL: browser_screenshot()]
+- [TOOL: browser_inspect()]
+- [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")]`
 };
 
 export class MultiAgentOrchestrator {
@@ -364,6 +386,18 @@ export class MultiAgentOrchestrator {
       version: '1.8.0',
       type: 'research',
       background: false
+    },
+    {
+      id: 'browser-automation-agent',
+      name: 'Browser Automation Agent',
+      role: 'Real Browser Click, Type, Extract & Verify',
+      description: 'Operates the controlled browser computer with real open/read/click/type/screenshot/inspect steps and approval gates for risky actions.',
+      personality: PERSONALITIES['browser-automation-agent'],
+      tools: ['browser-operator', 'tinyfish', 'google-search'],
+      status: 'idle',
+      version: '1.8.0',
+      type: 'automation',
+      background: false
     }
   ];
 
@@ -447,6 +481,9 @@ export class MultiAgentOrchestrator {
     const collaborators = new Set<string>();
 
     if (agent.id !== 'paperclip-full') collaborators.add('paperclip-full');
+    if (/browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish/.test(text)) {
+      collaborators.add('browser-automation-agent');
+    }
     if (/legal|court|appeal|justice|solicitor|council|lancaster|landlord|tenant|hmrc|evidence|complaint|land registry|conveyancer|freeholder|leasehold/.test(text)) {
       collaborators.add('justice-case-agent');
       collaborators.add('solicitor-agent');
@@ -485,6 +522,7 @@ export class MultiAgentOrchestrator {
 
   private routeTaskToAgent(input: string) {
     const text = String(input || '').toLowerCase();
+    if (/browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish/.test(text)) return 'browser-automation-agent';
     if (/code|build|fix|bug|repo|git|typescript|electron|jan|turboquant|dfalsh|model hub|voice|runtime|crash|freeze|test|terminal/.test(text)) return 'hermes-full';
     if (/legal|solicitor|court|appeal|justice|land registry|conveyancer|freeholder|leasehold|council dispute|complaint|evidence|hmcts/.test(text)) return 'general-agent';
     if (/invoice|receipt|vat|hmrc|tax|accountant|payroll|bookkeeping|bill|payment|direct debit|statement|staff invoice|supplier invoice/.test(text)) return 'general-agent';
@@ -697,6 +735,7 @@ ${JSON.stringify({
 - **APPROVAL FIRST**: Destructive actions, money transfers, or external communication require explicit user approval.
 - **COLLABORATION**: Treat this as a shared HermesDesk task. Lead agent: ${agent.name}. Peer agents available for clarification/verification: ${collaborationPlan.length ? collaborationPlan.map(peer => `${peer.name} (${peer.role})`).join('; ') : 'none selected'}.
 - **TINYFISH WEB AGENT**: ${tinyFishStatus?.configured ? 'Available for real web automation on specific URLs. Use [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")] when a task needs live page inspection.' : 'Not available until a TinyFish API key is saved.'}
+- **BROWSER OPERATOR**: Available as a real controlled browser. Use [TOOL: browser_open(target="query or URL")], [TOOL: browser_read()], [TOOL: browser_click(selector="CSS selector")], [TOOL: browser_click_text(text="visible text")], [TOOL: browser_type(selector="CSS selector", text="text")], [TOOL: browser_screenshot()], and [TOOL: browser_inspect()] for browser automation. Verify after each action. Do not click purchase/pay/submit/order/checkout without approval.
 
 ### TASTE ENGINE - REQUIRED BEHAVIOUR
 - **THOUGHTFULNESS**: infer the real goal, audience, context, risk, opportunity, and missing facts before acting.

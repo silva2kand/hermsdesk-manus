@@ -46,6 +46,7 @@ type ChatSession = {
 
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
+  if (/(browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish)/.test(text)) return 'browser-automation-agent';
   if (/(court|tribunal|appeal|judg|justice|legal|solicitor|law|claim|evidence|ombudsman|complaint|hmcts|uk)/.test(text)) return 'justice-case-agent';
   if (/(buy|seller|refund|chargeback|section 75|scam|product|purchase|return|ebay|amazon|shop|payment)/.test(text)) return 'purchase-guardian-agent';
   if (/(tax|vat|hmrc|invoice|account|ledger|payroll|self assessment|receipt)/.test(text)) return 'accountant-agent';

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Store from 'electron-store'
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage } = electron
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage, Notification } = electron
 type BrowserWindowType = InstanceType<typeof BrowserWindow>
 type TrayType = InstanceType<typeof Tray>
 
@@ -401,8 +401,29 @@ function createWindow() {
       )
     }
     store.set('mailProcessedTaskIds', Array.from(processed).slice(-100000))
-    win?.webContents.send('mail:intelligence-updated', { source, messageCount: merged.messages.length, newTasks: taskCandidates.length, syncedAt: merged.syncedAt })
-    eventBus?.emit('mail.index.batch', 'mail-me', { source, incomingCount: incomingMessages.length, indexedCount: merged.messages.length, newTasks: taskCandidates.length, syncedAt: merged.syncedAt, complete: data.complete, state: data.state })
+    const newArrivals = incomingMessages
+      .filter((message: any) => message?.id && !statusById.has(message.id))
+      .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+      .slice(0, 12)
+      .map((message: any) => ({
+        id: message.id,
+        subject: message.subject || '(No subject)',
+        sender: message.sender || message.senderEmail || 'unknown',
+        receivedAt: message.receivedAt,
+        folderName: message.folderName,
+        categoryLabel: message.categoryLabel || 'Mail',
+        unread: Boolean(message.unread),
+        preview: message.bodyPreview || ''
+      }));
+    const mailEvent = { source, incomingCount: incomingMessages.length, newArrivals, messageCount: merged.messages.length, newTasks: taskCandidates.length, syncedAt: merged.syncedAt };
+    win?.webContents.send('mail:intelligence-updated', mailEvent)
+    if (newArrivals.length && Notification?.isSupported?.()) {
+      new Notification({
+        title: `HermesDesk Mail ME: ${newArrivals.length} new email${newArrivals.length === 1 ? '' : 's'}`,
+        body: `${newArrivals[0].sender}: ${newArrivals[0].subject}`.slice(0, 180)
+      }).show();
+    }
+    eventBus?.emit('mail.index.batch', 'mail-me', { ...mailEvent, indexedCount: merged.messages.length, complete: data.complete, state: data.state })
     appLog('info', `Mail ME auto-analyzed ${merged.messages.length} emails from ${source}; ${taskCandidates.length} new agent tasks queued.`)
     return merged
   }

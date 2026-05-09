@@ -10,7 +10,8 @@ const agentNames: Record<string, string> = {
   'space-agent-full': 'Space',
   'openclaw-full': 'OpenClaw',
   'justice-case-agent': 'Justice',
-  'purchase-guardian-agent': 'Purchase Guard'
+  'purchase-guardian-agent': 'Purchase Guard',
+  'browser-automation-agent': 'Browser Automation'
 };
 
 const notificationIcons: Record<string, any> = {
@@ -65,7 +66,8 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
     const onWideResearch = (_: any, event: any) => push({ type: 'research', title: event?.title || 'Wide Research', message: event?.brief || event?.status || event?.message || 'Research lane updated' });
     const onScheduler = (_: any, event: any) => push({ type: 'scheduler', title: event?.title || 'Scheduled Task', message: event?.task || event?.message || 'Scheduled task updated' });
     const onMailUpdated = (_: any, event: any) => {
-      push({ type: 'automation', title: `Mail ME ${event?.source || ''}`, message: `${event?.messageCount || 0} emails analyzed, ${event?.newTasks || 0} new agent tasks queued.` });
+      const arrivals = event?.newArrivals?.length || event?.incomingCount || 0;
+      push({ type: 'automation', title: arrivals ? `New mail: ${arrivals}` : `Mail ME ${event?.source || ''}`, message: `${event?.messageCount || 0} emails analyzed, ${event?.newTasks || 0} new agent tasks queued.${event?.newArrivals?.[0]?.subject ? ` Latest: ${event.newArrivals[0].subject}` : ''}` });
       refresh();
     };
     const onSilvaEvent = (_: any, event: any) => {

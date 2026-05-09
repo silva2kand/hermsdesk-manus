@@ -106,6 +106,7 @@ const iconMap: Record<string, any> = {
   'solicitor-agent': Scale,
   'justice-case-agent': Landmark,
   'purchase-guardian-agent': Receipt,
+  'browser-automation-agent': Globe,
   'accountant-agent': Calculator,
   'space-agent-full': Globe,
   'openclaw-full': Shield
