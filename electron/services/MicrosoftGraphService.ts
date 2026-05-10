@@ -325,8 +325,22 @@ export class MicrosoftGraphService {
 
   private categorizeMessage(message: any, folderName: string) {
     const text = `${message.subject || ''} ${message.sender || ''} ${message.senderEmail || ''} ${message.bodyPreview || ''} ${folderName || ''}`.toLowerCase();
+    const sender = `${message.sender || ''} ${message.senderEmail || ''}`.toLowerCase();
     const isMarketing = /(newsletter|digest|unsubscribe|voucher|win £|sale|discount|clearance|promotion|promo|marketing|property alerts|rightmove news|national lottery|cash converters|campaign|petition|substack)/i.test(text);
     const isUserPropertyLegal = /(steamer street|6f|howlish view|langdale place|land registry|hm land|certificate of compliance|requisition|ground rent|service charge|deposit dispute|tenancy dispute|leasehold|freehold|rc\.legal|grangeford|solicitor|conveyancer|fraud report|nfrc|planning|licensing|licence|enforcement|fine|penalty)/i.test(text);
+    const knownSenders: { id: string; label: string; agentId: string; pattern: RegExp }[] = [
+      { id: 'accountant', label: 'Accountant', agentId: 'accountant-agent', pattern: /(mytaccounts\.co\.uk|notification\.intuit\.com)/i },
+      { id: 'tax-vat-mot', label: 'Tax / VAT / MOT', agentId: 'accountant-agent', pattern: /(tax\.service\.gov\.uk|advice\.hmrc\.gov\.uk|donotreply\.evl@dvla\.gov\.uk|autoenrol\.tpr\.gov\.uk)/i },
+      { id: 'companies', label: 'My Companies', agentId: 'accountant-agent', pattern: /(companies\.house@notifications\.service\.gov\.uk)/i },
+      { id: 'solicitors', label: 'Solicitors', agentId: 'solicitor-agent', pattern: /(rc\.legal|holdenslaw\.com|williamharrissolicitors@gmail\.com|eppcs\.co\.uk)/i },
+      { id: 'council-bills', label: 'Council / Bills', agentId: 'accountant-agent', pattern: /(lancaster\.gov\.uk|paypoint\.co\.uk|telecom-service\.co\.uk|mails\.three\.co\.uk|contact\.sky|inform\.bt\.com)/i },
+      { id: 'business', label: 'Business', agentId: 'paperclip-full', pattern: /(elavon\.com|elavonsecuritymanager\.com|fiserv\.com|clover\.com|vivawallet\.com|paymentsave\.co\.uk|paypal\.co\.uk|visualbusinessretail\.co\.uk|jti360\.co\.uk|jti\.com|parcelly\.com|sysco\.com|deliveroo\.co\.uk|loyalty\.snackdisplay\.co\.uk)/i },
+      { id: 'insurance', label: 'Insurance', agentId: 'purchase-guardian', pattern: /(simplybusiness\.co\.uk|darwin-insurance\.com|igo4\.com|vavista\.com|insurancefactory\.co\.uk)/i },
+      { id: 'business', label: 'Business Funding / Banking', agentId: 'accountant-agent', pattern: /(mail\.tide\.co|info\.tide\.co|anna\.money|nationwide\.co\.uk|nationwidefinance\.co\.uk|loqbox\.com|iwoca\.co\.uk|fundingcircle\.com|capitalone\.co\.uk|notification\.capitalone\.co\.uk)/i },
+      { id: 'solicitors', label: 'Official / Fraud', agentId: 'solicitor-agent', pattern: /(actionfraud\.police\.uk|westmidlands\.police\.uk|docusign\.net)/i },
+      { id: 'land-registry', label: 'Property Evidence', agentId: 'solicitor-agent', pattern: /(amcsurveyors\.co\.uk|bpauctions\.co\.uk|auctioneers\.co\.uk)/i }
+    ];
+    const knownHit = knownSenders.find(rule => rule.pattern.test(sender));
     const rules: { id: string; label: string; agentId: string; keywords: string[] }[] = [
       { id: 'land-registry', label: 'Land Registry', agentId: 'solicitor-agent', keywords: ['land registry', 'hm land', 'title register', 'property register'] },
       { id: 'council-bills', label: 'Council / Bills', agentId: 'accountant-agent', keywords: ['council tax', 'lancaster city council', 'utility', 'water bill', 'electric bill', 'gas bill', 'energy bill', 'balance due', 'direct debit', 'fine', 'penalty', 'enforcement'] },
@@ -344,6 +358,7 @@ export class MicrosoftGraphService {
       { id: 'flagged', label: 'Flagged / Important', agentId: 'paperclip-full', keywords: ['flagged', 'important', 'urgent', 'action required'] }
     ];
     if (isUserPropertyLegal) return { id: 'solicitors', label: 'Solicitors', agentId: 'solicitor-agent', keywords: [] };
+    if (knownHit) return { id: knownHit.id, label: knownHit.label, agentId: knownHit.agentId, keywords: [] };
     if (isMarketing) return { id: 'general', label: 'General', agentId: 'paperclip-full', keywords: [] };
     const hit = rules.find(rule => rule.keywords.some(keyword => text.includes(keyword)));
     if (hit) return hit;

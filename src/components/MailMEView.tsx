@@ -635,10 +635,11 @@ export const MailMEView = () => {
         )}
 
         {mailMemory && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <IndexStat label="Z-report evidence" value={(mailMemory.zReports?.length || 0).toLocaleString()} />
             <IndexStat label="Accounting/tax evidence" value={(mailMemory.accountingEvidence?.length || 0).toLocaleString()} />
             <IndexStat label="Legal/property evidence" value={(mailMemory.legalEvidence?.length || 0).toLocaleString()} />
+            <IndexStat label="Known provider evidence" value={(mailMemory.knownProviderEvidence?.length || 0).toLocaleString()} />
           </div>
         )}
 

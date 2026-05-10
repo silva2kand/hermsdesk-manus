@@ -1046,7 +1046,8 @@ ${JSON.stringify({
   staffInvoices: (mailboxMemory.staffInvoices || []).slice(0, 8),
   zReports: (mailboxMemory.zReports || []).slice(0, 8),
   accountingEvidence: (mailboxMemory.accountingEvidence || []).slice(0, 8),
-  legalEvidence: (mailboxMemory.legalEvidence || []).slice(0, 8)
+  legalEvidence: (mailboxMemory.legalEvidence || []).slice(0, 8),
+  knownProviderEvidence: (mailboxMemory.knownProviderEvidence || []).slice(0, 8)
 }, null, 2)}
 
 ### CRITICAL CONSTRAINTS
