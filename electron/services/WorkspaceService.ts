@@ -25,7 +25,8 @@ Memory | Skills | Knowledges - Complete, additive, always updated.
 - Property/legal priority: 6F Steamer Street, Ground Rent, service charges, Land Registry, RC Legal, Grangeford, Howlish View, and fraud/report evidence are high priority even if an older analysis called them "ignore".
 - Business/accounting priority: gather invoices, bank statements, credit cards, Parfetts/E-Invoice supplier paperwork, VAT/HMRC, PAYE, receipts, direct debits, and shop bills for funding/funder analysis.
 - Property opportunity preference: prioritise Lancaster, Morecambe, Heysham, LA1-LA4, closed shop, corner-shop, commercial/retail/newsagent premises. Birmingham, West Midlands, Manchester, Liverpool and distant marketing are background unless Silva asks.
-- Z-reports/EPOS notifications from the shop are FYI/store operations unless abnormal: void/refund/cash variance/missing/failed/error.
+- Z-reports/EPOS notifications from the shop are low-priority FYI/store operations unless abnormal: void/refund/cash variance/missing/failed/error. Still keep them in memory as sales/accounting/VAT/funding evidence.
+- Separate "review now" from "keep as evidence": retain zReports, accountingEvidence, and legalEvidence memory even when those items are not urgent.
 - Marketing, newsletters, campaigns, junk, discounts, fashion, vouchers, and generic property alerts are background unless Silva marks them important.
 - Money, payments, legal submissions, external messages, installs, and destructive actions require approval.
 
@@ -246,7 +247,7 @@ export class WorkspaceService {
     const updateArray = (items: any[] = []) => items.map((item: any) =>
       item?.id === itemId ? { ...item, ...cleanPatch } : item
     );
-    const memoryKeys = ['billsToPay', 'deadlines', 'urgent', 'insuranceRenewals', 'supplierUpdates', 'staffInvoices', 'upcomingImportant'];
+    const memoryKeys = ['billsToPay', 'deadlines', 'urgent', 'insuranceRenewals', 'supplierUpdates', 'staffInvoices', 'zReports', 'accountingEvidence', 'legalEvidence', 'upcomingImportant'];
     const memory = { ...(current.mailboxMemory || current.memory || {}) };
     for (const key of memoryKeys) memory[key] = updateArray(memory[key] || []);
     current.messages = updateArray(current.messages || []);

@@ -246,9 +246,11 @@ function createWindow() {
     const supplierPattern = /(supplier|wholesale|stock|order|purchase order|invoice|statement|delivery|parcel|sales rep|representative|catalogue|promotion|case price|unit price)/i
     const staffInvoicePattern = /(staff|employee|wage|payroll|timesheet|receipt|invoice|bill|expense|whatsapp|uploaded|attachment|photo)/i
     const officialPattern = /(hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|insurance|mot)/i
+    const zReportPattern = /(z[-\s]?report|epos|end of day|daily sales|till report|staff id|pos id)/i
     const legalPropertyPattern = /(land registry|hm land|certificate of compliance|requisition|ground rent|service charge|service charges|leasehold|freehold|steamer street|howlish view|langdale place|arrears|solicitor|conveyancer|rc\.legal|grangeford|fraud report|nfrc)/i
     const businessBillPattern = /(silva retail|newton newsagent|newton store|parfetts|wholesaler|supplier|e-invoice|customer 105105|z-report|epos|card payment|terminal|merchant|takepayments|invoice|statement|receipt|vat|paye|payroll|bank statement|credit card)/i
     const homeBillPattern = /(council tax|water|united utilities|electric|gas|energy|broadband|mobile|mortgage|rent|ground rent|service charge|building insurance|contents insurance|home insurance|direct debit|halifax|credit card)/i
+    const accountingEvidencePattern = /(hmrc|vat|tax return|making tax digital|mtd|self assessment|companies house|accountant|myt accounts|invoice|receipt|statement|bank statement|credit card|paye|payroll|direct debit|parfetts|e-invoice|silva retail|newton newsagent|newton store)/i
     const localPropertyPattern = /(lancaster|morecambe|heysham|la1|la2|la3|la4|la5|la6|closed shop|corner.?shop|commercial premises|retail premises|newsagent|shop premises|off.?market|auction|daltons business)/i
     const distantPropertyNoisePattern = /(birmingham|west midlands|manchester|liverpool|york|north east|carlisle|penrith|cumbria|lake district)/i
     const marketingNoisePattern = /(newsletter|digest|substack|voucher|win £|win\s?\d|fashion|festival|sale|discount|clearance|promotion|promo|marketing|campaign|petition|organise\.network|national lottery|cash converters|rightmove news|home worth|valuation update|most-viewed homes|unsubscribe|black friday|christmas offer)/i
@@ -272,7 +274,7 @@ function createWindow() {
       if (insurancePattern.test(text)) score += 28
       if (supplierPattern.test(text) && (message.hasAttachments || billPattern.test(text) || moneyPattern.test(text))) score += 24
       if (localPropertyPattern.test(text)) score += 22
-      if (/z-report|epos/i.test(text)) score += /void|refund|short|over|missing|failed|error|cash difference|variance/i.test(text) ? 50 : 8
+      if (zReportPattern.test(text)) score += /void|refund|short|over|missing|failed|error|cash difference|variance/i.test(text) ? 50 : 8
       if (distantPropertyNoisePattern.test(text) && !legalPropertyPattern.test(text)) score -= 35
       if (marketingNoisePattern.test(text) && !legalPropertyPattern.test(text) && !(message.hasAttachments && billPattern.test(text))) score -= 55
       if (autoReplyNoisePattern.test(text)) score -= 45
@@ -347,6 +349,28 @@ function createWindow() {
       .sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'supplier-update', { priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) }))
     const staffInvoices = sorted.filter((message: any) => staffInvoicePattern.test(messageText(message)) && /(invoice|receipt|bill|expense|attachment|photo|whatsapp|staff|employee)/i.test(messageText(message)))
       .filter((message: any) => isPriorityMail(message, 20)).sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'staff-invoice', { priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) }))
+    const zReports = sorted.filter((message: any) => zReportPattern.test(messageText(message)))
+      .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+      .slice(0, 240).map((message: any) => {
+        const text = messageText(message)
+        return memoryItem(message, /void|refund|short|over|missing|failed|error|cash difference|variance|mismatch/i.test(text) ? 'z-report-abnormal' : 'z-report-fyi', {
+          priorityScore: mailPriorityScore(message),
+          hasAttachments: Boolean(message.hasAttachments),
+          evidenceUse: 'shop accounting, sales history, VAT/tax, funding pack'
+        })
+      })
+    const accountingEvidence = sorted.filter((message: any) => accountingEvidencePattern.test(messageText(message)) || (message.hasAttachments && (billPattern.test(messageText(message)) || moneyPattern.test(messageText(message)))))
+      .sort(byPriorityThenDate).slice(0, 240).map((message: any) => memoryItem(message, 'accounting-evidence', {
+        priorityScore: mailPriorityScore(message),
+        hasAttachments: Boolean(message.hasAttachments),
+        evidenceUse: 'accountant, tax, VAT, bookkeeping, funding/funder pack'
+      }))
+    const legalEvidence = sorted.filter((message: any) => legalPropertyPattern.test(messageText(message)))
+      .sort(byPriorityThenDate).slice(0, 160).map((message: any) => memoryItem(message, 'legal-evidence', {
+        priorityScore: mailPriorityScore(message),
+        hasAttachments: Boolean(message.hasAttachments),
+        evidenceUse: 'legal/property case review and solicitor pack'
+      }))
     const upcomingImportant = sorted.filter((message: any) => {
       const text = messageText(message)
       return isPriorityMail(message, 30) && (
@@ -364,7 +388,7 @@ function createWindow() {
       .sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'urgent', {
         reason: message.importance === 'high' ? 'high importance' : message.flagStatus === 'flagged' ? 'flagged' : 'unread'
       }))
-    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, upcomingImportant, urgent }
+    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, zReports, accountingEvidence, legalEvidence, upcomingImportant, urgent }
   }
 
   const processEmailIntelligence = async (data: any, source = 'mailbox', options: { taskLimit?: number } = {}) => {
@@ -414,6 +438,9 @@ function createWindow() {
       insuranceRenewals: mergeMemoryList('insuranceRenewals'),
       supplierUpdates: mergeMemoryList('supplierUpdates'),
       staffInvoices: mergeMemoryList('staffInvoices'),
+      zReports: mergeMemoryList('zReports', 240),
+      accountingEvidence: mergeMemoryList('accountingEvidence', 240),
+      legalEvidence: mergeMemoryList('legalEvidence', 160),
       upcomingImportant: mergeMemoryList('upcomingImportant', 120),
       urgent: mergeMemoryList('urgent')
     };

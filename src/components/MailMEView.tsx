@@ -634,6 +634,14 @@ export const MailMEView = () => {
           </div>
         )}
 
+        {mailMemory && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <IndexStat label="Z-report evidence" value={(mailMemory.zReports?.length || 0).toLocaleString()} />
+            <IndexStat label="Accounting/tax evidence" value={(mailMemory.accountingEvidence?.length || 0).toLocaleString()} />
+            <IndexStat label="Legal/property evidence" value={(mailMemory.legalEvidence?.length || 0).toLocaleString()} />
+          </div>
+        )}
+
         {upcomingItems.length > 0 && (
           <div className="p-4 bg-white border border-gray-100 rounded-2xl">
             <div className="flex items-center justify-between gap-3">

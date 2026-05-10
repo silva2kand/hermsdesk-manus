@@ -1043,7 +1043,10 @@ ${JSON.stringify({
   insuranceRenewals: (mailboxMemory.insuranceRenewals || []).slice(0, 10),
   upcomingImportant: (mailboxMemory.upcomingImportant || []).slice(0, 10),
   supplierUpdates: (mailboxMemory.supplierUpdates || []).slice(0, 8),
-  staffInvoices: (mailboxMemory.staffInvoices || []).slice(0, 8)
+  staffInvoices: (mailboxMemory.staffInvoices || []).slice(0, 8),
+  zReports: (mailboxMemory.zReports || []).slice(0, 8),
+  accountingEvidence: (mailboxMemory.accountingEvidence || []).slice(0, 8),
+  legalEvidence: (mailboxMemory.legalEvidence || []).slice(0, 8)
 }, null, 2)}
 
 ### CRITICAL CONSTRAINTS
