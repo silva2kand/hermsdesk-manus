@@ -536,9 +536,16 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const voiceOptions: Record<string, any> = {
     'tamil-jaffna': { voice: 'tamil-jaffna', profile_id: 'silva-premium', accent_id: 'ta-jaffna-premium', language: 'ta-LK', accent: 'jaffna', style: 'professional', strict_language: true, allow_windows_fallback: false },
-    'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-jaffna-premium', language: 'ta-IN', accent: 'india', style: 'professional', strict_language: true, allow_windows_fallback: false },
-    'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional', strict_language: true, allow_windows_fallback: false },
-    'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional', strict_language: true, allow_windows_fallback: false }
+    'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-us-sapi', language: 'en-GB', accent: 'uk', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-sapi', language: 'en-US', accent: 'us', style: 'professional', strict_language: true, allow_windows_fallback: false }
+  };
+
+  const recognitionLanguageByVoice: Record<string, string> = {
+    'tamil-jaffna': 'ta-LK',
+    'tamil-india': 'ta-IN',
+    'english-uk': 'en-GB',
+    'english-us': 'en-US'
   };
 
   const extractLineValue = (text: string, pattern: RegExp) => text.match(pattern)?.[1]?.trim() || '';
@@ -581,6 +588,17 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     return content;
   };
 
+  const buildGeneralSpeechText = (content: string) => {
+    const compact = content
+      .replace(/Thinking and research[\s\S]*$/i, '')
+      .replace(/REAL EVENTBUS TRACE[\s\S]*$/i, '')
+      .replace(/\bCHANNEL\.STATUS\b[\s\S]*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const short = compact.length > 850 ? `${compact.slice(0, 850).trim()}...` : compact;
+    return `ME says. ${short}`;
+  };
+
   const speakMessage = async (content: string) => {
     const spoken = content
       .replace(/```[\s\S]*?```/g, 'code block omitted')
@@ -590,7 +608,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       .trim();
 
     const selectedVoice = voiceOptions[voicePreset] || voiceOptions['english-uk'];
-    const speechText = voicePreset.startsWith('tamil') ? buildTamilSpeechText(spoken) : `ME says. ${spoken}`;
+    const speechText = voicePreset.startsWith('tamil') ? buildTamilSpeechText(spoken) : buildGeneralSpeechText(spoken);
     const voiceResult = await window.ipcRenderer?.speakVoiceStack?.(speechText, selectedVoice).catch((error: any) => ({ ok: false, error: error?.message }));
     if (voiceResult?.ok) {
       addNotice(`Silva Voice Stack speaking: ${(voiceResult as any).voice || voicePreset}`);
@@ -665,11 +683,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        recognition.maxAlternatives = 3;
+        recognition.lang = recognitionLanguageByVoice[voicePreset] || 'en-GB';
 
         recognition.onstart = () => {
           setIsRecording(true);
-          addNotice('Meeting Assistant: System hardware active (Listening...)');
+          addNotice(`Microphone listening in ${recognition.lang}`);
         };
 
         recognition.onresult = (event: any) => {

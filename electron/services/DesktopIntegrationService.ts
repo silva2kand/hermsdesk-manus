@@ -946,10 +946,10 @@ $speaker.Speak('${escaped}')
     const accentMap: Record<string, string> = {
       'tamil-jaffna': 'ta-jaffna-premium', 'ta-jaffna': 'ta-jaffna-premium',
       'ta-m1': 'ta-default', 'tamil': 'ta-jaffna-premium', 'ta': 'ta-jaffna-premium',
-      'english-uk': 'en-gb-default', 'en-gb': 'en-gb-default',
-      'en-gb-m1': 'en-gb-default', 'en-gb-f1': 'en-gb-default',
-      'english-us': 'en-us-default', 'en-us': 'en-us-default',
-      'en-us-m1': 'en-us-default', 'en-us-f1': 'en-us-default',
+      'english-uk': 'en-us-sapi', 'en-gb': 'en-us-sapi',
+      'en-gb-m1': 'en-us-sapi', 'en-gb-f1': 'en-us-sapi',
+      'english-us': 'en-us-sapi', 'en-us': 'en-us-sapi',
+      'en-us-m1': 'en-us-sapi', 'en-us-f1': 'en-us-sapi',
       'english-india': 'en-in-default', 'en-in': 'en-in-default',
       'en-in-m1': 'en-in-default', 'en-in-f1': 'en-in-default',
       'english-us-sapi': 'en-us-sapi',
@@ -970,7 +970,9 @@ $speaker.Speak('${escaped}')
       style: options.style || 'professional'
     };
 
-    const endpoints = ['/tts/synthesize', '/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
+    const endpoints = strictLanguage
+      ? ['/tts/synthesize']
+      : ['/tts/synthesize', '/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
     let lastError = '';
 
     const started = await this.startVoiceStackServer().catch(() => null);
@@ -1026,9 +1028,23 @@ $speaker.Speak('${escaped}')
           lastError = `Voice endpoint timed out while speaking this chunk: ${endpoint}`;
           continue;
         }
-        lastError = error?.response?.data
-          ? Buffer.from(error.response.data).toString('utf8').slice(0, 300)
+        const status = Number(error?.response?.status || 0);
+        const rawError = error?.response?.data
+          ? Buffer.from(error.response.data).toString('utf8').slice(0, 500)
           : error?.message || String(error);
+        let parsedError: any = null;
+        try { parsedError = JSON.parse(rawError); } catch {}
+        lastError = parsedError?.detail || parsedError?.error || rawError;
+        if (strictLanguage && [400, 404, 409, 422, 424, 500, 503].includes(status)) {
+          return {
+            ok: false,
+            url: `${baseUrl}/`,
+            endpoint,
+            voice,
+            language,
+            error: lastError || `Voice endpoint failed with HTTP ${status}.`
+          };
+        }
       }
     }
 
