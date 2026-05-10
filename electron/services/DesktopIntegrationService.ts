@@ -759,6 +759,7 @@ class SpeakRequest(BaseModel):
     language: str | None = None
     accent: str | None = None
     rate: float | None = 1
+    allow_windows_fallback: bool | None = True
 
 @app.get("/")
 def home():
@@ -778,6 +779,7 @@ def profiles():
 async def speak(payload: SpeakRequest):
     text = payload.text
     voice = payload.voice or "tamil-jaffna"
+    allow_windows_fallback = getattr(payload, "allow_windows_fallback", True)
     
     # Try Piper for Tamil if model exists
     piper_exe = os.path.join(os.getcwd(), "venv_311", "Scripts", "piper.exe")
@@ -796,6 +798,9 @@ async def speak(payload: SpeakRequest):
                 return FileResponse(output_file, media_type="audio/wav")
         except Exception as e:
             print(f"Piper failed: {e}")
+
+    if allow_windows_fallback is False:
+        return JSONResponse({"ok": False, "mode": "premium-model-missing", "voice": voice, "language": payload.language, "error": "Premium/Tamil model is missing or failed. Windows SAPI fallback is blocked."}, status_code=503)
 
     # Fallback to pyttsx3 (SAPI5)
     try:
@@ -939,7 +944,8 @@ $speaker.Speak('${escaped}')
     const voice = options.voice || 'en-gb-default';
     // Map user-friendly voice names to valid accent_id values the server recognizes
     const accentMap: Record<string, string> = {
-      'tamil-jaffna': 'ta-default', 'ta-m1': 'ta-default', 'tamil': 'ta-default', 'ta': 'ta-default',
+      'tamil-jaffna': 'ta-jaffna-premium', 'ta-jaffna': 'ta-jaffna-premium',
+      'ta-m1': 'ta-default', 'tamil': 'ta-jaffna-premium', 'ta': 'ta-jaffna-premium',
       'english-uk': 'en-gb-default', 'en-gb': 'en-gb-default',
       'en-gb-m1': 'en-gb-default', 'en-gb-f1': 'en-gb-default',
       'english-us': 'en-us-default', 'en-us': 'en-us-default',

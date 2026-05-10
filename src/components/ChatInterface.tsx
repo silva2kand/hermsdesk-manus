@@ -535,10 +535,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   };
 
   const voiceOptions: Record<string, any> = {
-    'tamil-jaffna': { voice: 'tamil-jaffna', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-LK', accent: 'jaffna', style: 'professional', strict_language: true, allow_windows_fallback: false },
-    'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional', strict_language: true, allow_windows_fallback: false },
-    'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional', allow_windows_fallback: true },
-    'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional', allow_windows_fallback: true }
+    'tamil-jaffna': { voice: 'tamil-jaffna', profile_id: 'silva-premium', accent_id: 'ta-jaffna-premium', language: 'ta-LK', accent: 'jaffna', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-jaffna-premium', language: 'ta-IN', accent: 'india', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional', strict_language: true, allow_windows_fallback: false }
   };
 
   const extractLineValue = (text: string, pattern: RegExp) => text.match(pattern)?.[1]?.trim() || '';
