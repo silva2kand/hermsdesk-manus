@@ -36,6 +36,9 @@ const providerLabel = (name: string) => name === 'Auto' ? 'Auto Mix (local first
 const CHAT_HISTORY_KEY = 'hermsdesk.chat.sessions.v1';
 const WHATSAPP_NUMBER_KEY = 'hermsdesk.user.whatsappNumber';
 
+const isStatusOrUpdatesPrompt = (text: string) =>
+  /(how are|how'?s it going|system status|status|any updates|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always)/i.test(text);
+
 type ChatSession = {
   id: string;
   title: string;
@@ -808,6 +811,56 @@ Use the controlled browser session if available. Keep every step visible in Even
     return true;
   };
 
+  const handleFrontDoorStatusIntent = async (outgoing: string) => {
+    if (!isStatusOrUpdatesPrompt(outgoing)) return false;
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps(['Checking local mailbox memory', 'Checking system/engine state', 'Checking live operations', 'Preparing Mythos status summary']);
+
+    try {
+      const [intel, engine, browserState, classicState] = await Promise.all([
+        window.ipcRenderer?.getEmailIntelligence?.().catch(() => null),
+        window.ipcRenderer?.engineStatus?.().catch(() => null),
+        window.ipcRenderer?.getBrowserOperatorState?.().catch(() => null),
+        window.ipcRenderer?.getClassicOutlookSyncState?.().catch(() => null)
+      ]);
+      const memory = intel?.mailboxMemory || intel?.memory || {};
+      const updated = memory?.generatedAt ? new Date(memory.generatedAt).toLocaleString() : classicState?.updatedAt ? new Date(classicState.updatedAt).toLocaleString() : 'not known';
+      const priorityItems = [
+        ...(memory?.upcomingImportant || []),
+        ...(memory?.insuranceRenewals || []),
+        ...(memory?.billsToPay || []),
+        ...(memory?.deadlines || []),
+        ...(memory?.urgent || [])
+      ].filter((item: any, index: number, arr: any[]) => item?.id && arr.findIndex(other => other.id === item.id) === index)
+        .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+        .slice(0, 3);
+      const lines = priorityItems.length
+        ? priorityItems.map((item: any, index: number) => `${index + 1}. ${item.subject || '(no subject)'}\nFrom: ${item.sender || item.senderEmail || 'unknown'}\nReceived: ${item.receivedAt ? new Date(item.receivedAt).toLocaleString() : 'unknown'}\nType: ${item.type || item.categoryLabel || 'mail'}${item.assignedAgent ? `\nAgent: ${item.assignedAgent}` : ''}\nPreview: ${String(item.preview || item.bodyPreview || '').slice(0, 180)}`)
+        : ['No high-priority mailbox items are currently surfaced in local memory.'];
+      const content = [
+        `I am ready. Mythos checked local memory and live system state, not raw model memory.`,
+        '',
+        `Mailbox memory: ${(memory?.totalIndexed || 0).toLocaleString()} emails indexed, updated ${updated}.`,
+        `Unread: ${(memory?.unreadCount || 0).toLocaleString()} | Bills/payments: ${(memory?.billsToPay?.length || 0).toLocaleString()} | Deadlines: ${(memory?.deadlines?.length || 0).toLocaleString()} | Insurance renewals: ${(memory?.insuranceRenewals?.length || 0).toLocaleString()}`,
+        `AI route: ${engine?.primary?.name || 'Jan + TurboQuant + DFLASH'} ${engine?.primary?.online ? 'online' : 'checking/offline'}${engine?.primary?.activeModel ? ` (${engine.primary.activeModel})` : ''}.`,
+        `Browser operator: ${browserState?.online ? 'ready with live sessions' : 'idle/ready'}.`,
+        '',
+        `Top 3 items to review now:`,
+        ...lines,
+        '',
+        'I can mark any item important/not important, draft a reply, prepare a WhatsApp notification, or route it to Solicitor/Accountant/Purchase Guardian. I will not send, pay, file, move, or delete without approval.'
+      ].join('\n');
+      setMessages(prev => [...prev, { role: 'assistant', engine: 'Mythos Front Door', content }]);
+      return true;
+    } finally {
+      setIsTyping(false);
+      setResearchSteps([]);
+    }
+  };
+
   const openVideoCall = async () => {
     await window.ipcRenderer?.openApp?.('video call');
     addNotice('Opened video call room in your browser.');
@@ -938,6 +991,7 @@ Use the controlled browser session if available. Keep every step visible in Even
 
     if (await handleWhatsAppIntent(outgoing)) return;
     if (await handleBrowserAutomationIntent(outgoing)) return;
+    if (await handleFrontDoorStatusIntent(outgoing)) return;
 
     if (/(build|repair|fix|install|setup|self[-\s]?build).*(voice|tts|speech|silva voice)|voice.*(build|repair|fix|install|setup|self[-\s]?build)/i.test(outgoing)) {
       const userMessage = { role: 'user', content: outgoing };
@@ -976,7 +1030,7 @@ Use the controlled browser session if available. Keep every step visible in Even
     }
 
     const userMessage = { role: 'user', content: outgoing };
-    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking)/i.test(outgoing);
+    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|importon|iporton|updates?|need looking|what needs)/i.test(outgoing);
     const wantsLiveWeb = !needsMailMemory && /(research|web|internet|latest|current|today|news|official|source|cite|verify online|search online|browser)/i.test(outgoing);
     let memoryContext: any = null;
     let matchingEmails: any[] = [];
