@@ -22,6 +22,11 @@ Memory | Skills | Knowledges - Complete, additive, always updated.
 - Keep memory updated from approved email, document, finance, property, business, and task events.
 - For greetings and daily check-ins, use Mythos/Baba first: check mailbox memory, urgent/important buckets, engine status, browser/operator state, and then answer.
 - Priority ranking favours bills, payments, renewals, insurance, HMRC/VAT/tax, council, land registry, solicitor/legal, suppliers, staff invoices, property, and system errors.
+- Master email taxonomy: Tier 1 critical always extracts legal/government/property, HMRC/VAT/tax/PAYE/Companies House, banking/funding/payment failures/fraud/chargebacks, supplier invoices/statements, wholesaler orders, delivery notes, refunds/returns, staff payroll/invoices, POS/Z-reports/till/card-machine reports, and business insurance.
+- Tier 2 important extracts Lancaster/Morecambe/Heysham property, closed shop/corner-shop/mixed-use/commercial premises, auctions, estate agents, mortgage brokers, surveyors/EPC, vehicles/MOT/road tax/service/breakdown, sales reps, supplier offers, retail equipment, CCTV/POS/payment processor updates.
+- Tier 3 documentation always extracts accountant/bookkeeping/receipts/statements/cashflow/P&L/balance sheets/year-end/VAT submissions/HMRC/insurance documents/utility bills.
+- Tier 4 store management tracks POS alerts, staff activity, refunds, voids, till open/close, stock orders, delivery confirmations, supplier shortages, price changes, tobacco/lottery compliance.
+- Tier 5 personal but relevant tracks NHS/GP, DVLA, personal bank, personal insurance, and important family/legal documents.
 - Property/legal priority: 6F Steamer Street, Ground Rent, service charges, Land Registry, RC Legal, Grangeford, Howlish View, and fraud/report evidence are high priority even if an older analysis called them "ignore".
 - Business/accounting priority: gather invoices, bank statements, credit cards, Parfetts/E-Invoice supplier paperwork, VAT/HMRC, PAYE, receipts, direct debits, and shop bills for funding/funder analysis.
 - Property opportunity preference: prioritise Lancaster, Morecambe, Heysham, LA1-LA4, closed shop, corner-shop, commercial/retail/newsagent premises. Birmingham, West Midlands, Manchester, Liverpool and distant marketing are background unless Silva asks.

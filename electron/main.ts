@@ -239,19 +239,21 @@ function createWindow() {
 
   const buildEmailMemory = (messages: any[]) => {
     const moneyPattern = /(?:£|\$|eur|gbp|usd)\s?\d[\d,]*(?:\.\d{2})?|\b\d[\d,]*(?:\.\d{2})?\s?(?:gbp|usd|eur)\b/i
-    const billPattern = /(bill|invoice|payment due|pay now|statement|arrears|overdue|council tax|utility|renewal|premium|direct debit|balance due)/i
-    const deadlinePattern = /(due|deadline|by|before|expires|renewal|hearing|appointment|court|payment date|final notice)/i
+    const billPattern = /(bill|invoice|payment due|pay now|statement|arrears|overdue|council tax|utility|renewal|premium|direct debit|balance due|missed payment|failed payment|payment failed|chargeback|refund|return)/i
+    const deadlinePattern = /(due|deadline|by|before|expires|renewal|hearing|appointment|court|payment date|final notice|enforcement|fine|penalty|licensing|licence|planning)/i
     const renewalPattern = /(renewal|renew|expires|expiry|policy|premium|quote|cover|mot|road tax|vehicle tax|annual|subscription)/i
     const insurancePattern = /(insurance|policy|premium|renewal|cover|quote|claim|no claims|underwriter|aviva|admiral|direct line|tesco bank|petplan|simply business|compare.?the.?market|go.?compare|money.?super.?market)/i
-    const supplierPattern = /(supplier|wholesale|stock|order|purchase order|invoice|statement|delivery|parcel|sales rep|representative|catalogue|promotion|case price|unit price)/i
+    const supplierPattern = /(supplier|wholesale|wholesaler|stock|stock order|shortage|order|purchase order|invoice|statement|delivery|delivery note|parcel|sales rep|representative|catalogue|promotion|case price|unit price|price change)/i
     const staffInvoicePattern = /(staff|employee|wage|payroll|timesheet|receipt|invoice|bill|expense|whatsapp|uploaded|attachment|photo)/i
-    const officialPattern = /(hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|insurance|mot)/i
+    const officialPattern = /(hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|insurance|mot|dvla|nhs|gp|companies house|planning|licensing|licence|enforcement|fine|penalty)/i
     const zReportPattern = /(z[-\s]?report|epos|end of day|daily sales|till report|staff id|pos id)/i
-    const legalPropertyPattern = /(land registry|hm land|certificate of compliance|requisition|ground rent|service charge|service charges|leasehold|freehold|steamer street|howlish view|langdale place|arrears|solicitor|conveyancer|rc\.legal|grangeford|fraud report|nfrc)/i
-    const businessBillPattern = /(silva retail|newton newsagent|newton store|parfetts|wholesaler|supplier|e-invoice|customer 105105|z-report|epos|card payment|terminal|merchant|takepayments|invoice|statement|receipt|vat|paye|payroll|bank statement|credit card)/i
+    const legalPropertyPattern = /(land registry|hm land|certificate of compliance|requisition|ground rent|service charge|service charges|deposit dispute|tenancy dispute|leasehold|freehold|steamer street|howlish view|langdale place|arrears|solicitor|conveyancer|rc\.legal|grangeford|fraud report|nfrc|court|tribunal|planning|licensing|licence|enforcement|fine|penalty)/i
+    const businessBillPattern = /(silva retail|newton newsagent|newton store|parfetts|wholesaler|supplier|e-invoice|customer 105105|z-report|epos|pos alert|card machine|card payment|payment processor|terminal|merchant|takepayments|chargeback|invoice|statement|receipt|vat|paye|payroll|bank statement|credit card|loan statement|overdraft|lender decision|funding offer|delivery note|refund|return|till discrepancy|void)/i
     const homeBillPattern = /(council tax|water|united utilities|electric|gas|energy|broadband|mobile|mortgage|rent|ground rent|service charge|building insurance|contents insurance|home insurance|direct debit|halifax|credit card)/i
-    const accountingEvidencePattern = /(hmrc|vat|tax return|making tax digital|mtd|self assessment|companies house|accountant|myt accounts|invoice|receipt|statement|bank statement|credit card|paye|payroll|direct debit|parfetts|e-invoice|silva retail|newton newsagent|newton store)/i
-    const localPropertyPattern = /(lancaster|morecambe|heysham|la1|la2|la3|la4|la5|la6|closed shop|corner.?shop|commercial premises|retail premises|newsagent|shop premises|off.?market|auction|daltons business)/i
+    const accountingEvidencePattern = /(hmrc|vat|vat submission|tax return|making tax digital|mtd|self assessment|companies house|accountant|bookkeeping|cashflow|cash flow|p&l|profit and loss|balance sheet|year.?end|myt accounts|invoice|receipt|statement|bank statement|credit card|loan statement|overdraft|paye|payroll|direct debit|parfetts|e-invoice|silva retail|newton newsagent|newton store|utility bill|gas bill|electric bill|water bill|broadband bill|insurance document)/i
+    const localPropertyPattern = /(lancaster|morecambe|heysham|la1|la2|la3|la4|la5|la6|closed shop|corner.?shop|mixed.?use|commercial premises|retail premises|newsagent|shop premises|off.?market|auction|estate agent|mortgage broker|surveyor|epc|daltons business)/i
+    const operationalPattern = /(pos alert|staff activity|till open|till close|open\/close|refund|void|stock order|delivery confirmation|supplier shortage|shortage|price change|tobacco|lottery compliance|card machine|payment processor|cctv|pos system update)/i
+    const personalAdminPattern = /(nhs|gp|dvla|personal bank|personal insurance|family legal|family document)/i
     const distantPropertyNoisePattern = /(birmingham|west midlands|manchester|liverpool|york|north east|carlisle|penrith|cumbria|lake district)/i
     const marketingNoisePattern = /(newsletter|digest|substack|voucher|win £|win\s?\d|fashion|festival|sale|discount|clearance|promotion|promo|marketing|campaign|petition|organise\.network|national lottery|cash converters|rightmove news|home worth|valuation update|most-viewed homes|unsubscribe|black friday|christmas offer)/i
     const autoReplyNoisePattern = /(automatic reply|undeliverable|out of office|delivery status notification)/i
@@ -274,6 +276,8 @@ function createWindow() {
       if (insurancePattern.test(text)) score += 28
       if (supplierPattern.test(text) && (message.hasAttachments || billPattern.test(text) || moneyPattern.test(text))) score += 24
       if (localPropertyPattern.test(text)) score += 22
+      if (operationalPattern.test(text)) score += 18
+      if (personalAdminPattern.test(text)) score += 16
       if (zReportPattern.test(text)) score += /void|refund|short|over|missing|failed|error|cash difference|variance/i.test(text) ? 50 : 8
       if (distantPropertyNoisePattern.test(text) && !legalPropertyPattern.test(text)) score -= 35
       if (marketingNoisePattern.test(text) && !legalPropertyPattern.test(text) && !(message.hasAttachments && billPattern.test(text))) score -= 55
