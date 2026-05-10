@@ -525,6 +525,46 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional', allow_windows_fallback: true }
   };
 
+  const extractLineValue = (text: string, pattern: RegExp) => text.match(pattern)?.[1]?.trim() || '';
+
+  const tamilPeriodGreeting = (text: string) => {
+    if (/good morning/i.test(text)) return 'காலை வணக்கம் சயன்.';
+    if (/good afternoon/i.test(text)) return 'மதிய வணக்கம் சயன்.';
+    if (/good evening/i.test(text)) return 'மாலை வணக்கம் சயன்.';
+    return 'வணக்கம் சயன்.';
+  };
+
+  const buildTamilSpeechText = (content: string) => {
+    const mailbox = extractLineValue(content, /Mailbox memory:\s*([\d,]+)\s*emails indexed/i);
+    const unread = extractLineValue(content, /Unread:\s*([\d,]+)/i);
+    const bills = extractLineValue(content, /Bills\/payments:\s*([\d,]+)/i);
+    const deadlines = extractLineValue(content, /Deadlines:\s*([\d,]+)/i);
+    const renewals = extractLineValue(content, /Insurance renewals:\s*([\d,]+)/i);
+    const evidence = extractLineValue(content, /Evidence kept for later:\s*([^\n]+)/i);
+    const route = extractLineValue(content, /AI route:\s*([^\n]+)/i);
+    const browser = extractLineValue(content, /Browser operator:\s*([^\n]+)/i);
+    const topItems = Array.from(content.matchAll(/^\d+\.\s+(.+)$/gm)).slice(0, 3).map(match => match[1].trim());
+
+    if (/MYTHOS FRONT DOOR/i.test(content) || mailbox || topItems.length) {
+      const lines = [
+        tamilPeriodGreeting(content),
+        'பாபா மைதோஸ் நினைவு மற்றும் கணினி நிலையை பார்த்தது.',
+        mailbox ? `மெயில் நினைவில் ${mailbox} மின்னஞ்சல்கள் உள்ளன.` : '',
+        unread || bills || deadlines || renewals
+          ? `படிக்காதவை ${unread || '0'}, பில்கள் மற்றும் கட்டணங்கள் ${bills || '0'}, கடைசி தேதிகள் ${deadlines || '0'}, காப்பீட்டு புதுப்பிப்புகள் ${renewals || '0'}.`
+          : '',
+        evidence ? `பின்னர் பார்க்க வைத்த ஆதாரம்: ${evidence}.` : '',
+        route ? `ஏ ஐ பாதை: ${route}.` : '',
+        browser ? `பிரௌசர் ஆபரேட்டர்: ${browser}.` : '',
+        topItems.length ? `இப்போது பார்க்க வேண்டிய முதல் விஷயங்கள்: ${topItems.join('. ')}.` : '',
+        'உங்கள் அனுமதி இல்லாமல் நான் அனுப்ப, கட்டணம் செலுத்த, நகர்த்த, அழிக்க, அல்லது யாரையும் தொடர்பு கொள்ள மாட்டேன்.'
+      ];
+      return lines.filter(Boolean).join(' ');
+    }
+
+    return content;
+  };
+
   const speakMessage = async (content: string) => {
     const spoken = content
       .replace(/```[\s\S]*?```/g, 'code block omitted')
@@ -534,7 +574,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       .trim();
 
     const selectedVoice = voiceOptions[voicePreset] || voiceOptions['english-uk'];
-    const speechText = voicePreset.startsWith('tamil') ? spoken : `ME says. ${spoken}`;
+    const speechText = voicePreset.startsWith('tamil') ? buildTamilSpeechText(spoken) : `ME says. ${spoken}`;
     const voiceResult = await window.ipcRenderer?.speakVoiceStack?.(speechText, selectedVoice).catch((error: any) => ({ ok: false, error: error?.message }));
     if (voiceResult?.ok) {
       addNotice(`Silva Voice Stack speaking: ${(voiceResult as any).voice || voicePreset}`);
