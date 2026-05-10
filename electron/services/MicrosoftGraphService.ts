@@ -325,14 +325,16 @@ export class MicrosoftGraphService {
 
   private categorizeMessage(message: any, folderName: string) {
     const text = `${message.subject || ''} ${message.sender || ''} ${message.senderEmail || ''} ${message.bodyPreview || ''} ${folderName || ''}`.toLowerCase();
+    const isMarketing = /(newsletter|digest|unsubscribe|voucher|win £|sale|discount|clearance|promotion|promo|marketing|property alerts|rightmove news|national lottery|cash converters|campaign|petition|substack)/i.test(text);
+    const isUserPropertyLegal = /(steamer street|6f|howlish view|langdale place|land registry|hm land|certificate of compliance|requisition|ground rent|service charge|leasehold|freehold|rc\.legal|grangeford|solicitor|conveyancer|fraud report|nfrc)/i.test(text);
     const rules: { id: string; label: string; agentId: string; keywords: string[] }[] = [
       { id: 'land-registry', label: 'Land Registry', agentId: 'solicitor-agent', keywords: ['land registry', 'hm land', 'title register', 'property register'] },
-      { id: 'council-bills', label: 'Council / Bills', agentId: 'accountant-agent', keywords: ['council', 'council tax', 'lancaster city council', 'bill', 'utility', 'water', 'electric', 'gas'] },
+      { id: 'council-bills', label: 'Council / Bills', agentId: 'accountant-agent', keywords: ['council tax', 'lancaster city council', 'utility', 'water bill', 'electric bill', 'gas bill', 'energy bill', 'balance due', 'direct debit'] },
       { id: 'insurance', label: 'Insurance', agentId: 'paperclip-full', keywords: ['insurance', 'policy', 'premium', 'claim', 'renewal'] },
       { id: 'tax-vat-mot', label: 'Tax / VAT / MOT', agentId: 'accountant-agent', keywords: ['hmrc', 'vat', 'tax', 'mtd', 'self assessment', 'mot', 'vehicle tax'] },
       { id: 'visa-sponsors', label: 'Visa / Sponsors', agentId: 'solicitor-agent', keywords: ['visa', 'sponsor', 'sponsorship', 'home office', 'ukvi', 'right to work'] },
       { id: 'accountant', label: 'Accountant', agentId: 'accountant-agent', keywords: ['accountant', 'bookkeeping', 'payroll', 'ledger', 'receipt', 'invoice', 'xero'] },
-      { id: 'solicitors', label: 'Solicitors', agentId: 'solicitor-agent', keywords: ['solicitor', 'legal', 'law', 'court', 'claim', 'tenancy', 'landlord', 'notice'] },
+      { id: 'solicitors', label: 'Solicitors', agentId: 'solicitor-agent', keywords: ['solicitor', 'conveyancer', 'legal', 'court', 'tribunal', 'leasehold', 'freehold', 'notice', 'service charge', 'ground rent'] },
       { id: 'suppliers', label: 'Suppliers / Sales Reps', agentId: 'paperclip-full', keywords: ['supplier', 'wholesale', 'sales rep', 'rep', 'order', 'stock', 'delivery'] },
       { id: 'sales', label: 'Sales', agentId: 'paperclip-full', keywords: ['sale', 'lead', 'customer', 'quote', 'proposal'] },
       { id: 'parcel-services', label: 'Parcel Services', agentId: 'paperclip-full', keywords: ['royal mail', 'parcel', 'evri', 'dpd', 'dhl', 'tracking', 'shipment'] },
@@ -340,6 +342,8 @@ export class MicrosoftGraphService {
       { id: 'business', label: 'Business', agentId: 'paperclip-full', keywords: ['business', 'shop', 'retail', 'newton newsagent', 'card payment', 'terminal'] },
       { id: 'flagged', label: 'Flagged / Important', agentId: 'paperclip-full', keywords: ['flagged', 'important', 'urgent', 'action required'] }
     ];
+    if (isUserPropertyLegal) return { id: 'solicitors', label: 'Solicitors', agentId: 'solicitor-agent', keywords: [] };
+    if (isMarketing) return { id: 'general', label: 'General', agentId: 'paperclip-full', keywords: [] };
     const hit = rules.find(rule => rule.keywords.some(keyword => text.includes(keyword)));
     if (hit) return hit;
     return { id: 'general', label: 'General', agentId: 'paperclip-full', keywords: [] };

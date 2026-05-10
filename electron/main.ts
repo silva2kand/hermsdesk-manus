@@ -246,9 +246,40 @@ function createWindow() {
     const supplierPattern = /(supplier|wholesale|stock|order|purchase order|invoice|statement|delivery|parcel|sales rep|representative|catalogue|promotion|case price|unit price)/i
     const staffInvoicePattern = /(staff|employee|wage|payroll|timesheet|receipt|invoice|bill|expense|whatsapp|uploaded|attachment|photo)/i
     const officialPattern = /(hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|insurance|mot)/i
+    const legalPropertyPattern = /(land registry|hm land|certificate of compliance|requisition|ground rent|service charge|service charges|leasehold|freehold|steamer street|howlish view|langdale place|arrears|solicitor|conveyancer|rc\.legal|grangeford|fraud report|nfrc)/i
+    const businessBillPattern = /(silva retail|newton newsagent|newton store|parfetts|wholesaler|supplier|e-invoice|customer 105105|z-report|epos|card payment|terminal|merchant|takepayments|invoice|statement|receipt|vat|paye|payroll|bank statement|credit card)/i
+    const homeBillPattern = /(council tax|water|united utilities|electric|gas|energy|broadband|mobile|mortgage|rent|ground rent|service charge|building insurance|contents insurance|home insurance|direct debit|halifax|credit card)/i
+    const localPropertyPattern = /(lancaster|morecambe|heysham|la1|la2|la3|la4|la5|la6|closed shop|corner.?shop|commercial premises|retail premises|newsagent|shop premises|off.?market|auction|daltons business)/i
+    const distantPropertyNoisePattern = /(birmingham|west midlands|manchester|liverpool|york|north east|carlisle|penrith|cumbria|lake district)/i
+    const marketingNoisePattern = /(newsletter|digest|substack|voucher|win £|win\s?\d|fashion|festival|sale|discount|clearance|promotion|promo|marketing|campaign|petition|organise\.network|national lottery|cash converters|rightmove news|home worth|valuation update|most-viewed homes|unsubscribe|black friday|christmas offer)/i
+    const autoReplyNoisePattern = /(automatic reply|undeliverable|out of office|delivery status notification)/i
     const itemState = store.get('mailMemoryItemState', {}) as Record<string, any>
     const sorted = [...messages].sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
     const messageText = (message: any) => `${message.subject || ''} ${message.sender || ''} ${message.senderEmail || ''} ${message.bodyPreview || ''} ${message.categoryLabel || ''}`.toLowerCase()
+    const mailPriorityScore = (message: any) => {
+      const text = messageText(message)
+      let score = 0
+      if (message.importance === 'high') score += 35
+      if (message.flagStatus === 'flagged') score += 30
+      if (message.unread) score += 4
+      if (message.hasAttachments) score += 12
+      if (legalPropertyPattern.test(text)) score += 85
+      if (/(hmrc|vat|tax return|making tax digital|self assessment|companies house|accountant|myt accounts)/i.test(text)) score += 75
+      if (businessBillPattern.test(text) && (billPattern.test(text) || moneyPattern.test(text) || message.hasAttachments)) score += 70
+      if (homeBillPattern.test(text) && (billPattern.test(text) || moneyPattern.test(text))) score += 60
+      if (billPattern.test(text) || moneyPattern.test(text)) score += 45
+      if (deadlinePattern.test(text) || renewalPattern.test(text)) score += 35
+      if (insurancePattern.test(text)) score += 28
+      if (supplierPattern.test(text) && (message.hasAttachments || billPattern.test(text) || moneyPattern.test(text))) score += 24
+      if (localPropertyPattern.test(text)) score += 22
+      if (/z-report|epos/i.test(text)) score += /void|refund|short|over|missing|failed|error|cash difference|variance/i.test(text) ? 50 : 8
+      if (distantPropertyNoisePattern.test(text) && !legalPropertyPattern.test(text)) score -= 35
+      if (marketingNoisePattern.test(text) && !legalPropertyPattern.test(text) && !(message.hasAttachments && billPattern.test(text))) score -= 55
+      if (autoReplyNoisePattern.test(text)) score -= 45
+      return score
+    }
+    const isPriorityMail = (message: any, floor = 35) => mailPriorityScore(message) >= floor
+    const byPriorityThenDate = (a: any, b: any) => mailPriorityScore(b) - mailPriorityScore(a) || String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))
     const detectInsuranceType = (text: string) => {
       if (/(car|vehicle|motor|van|driver|mot|road tax)/i.test(text)) return 'car-insurance'
       if (/(shop|business|commercial|retail|public liability|employer.?s liability|stock|premises)/i.test(text)) return 'shop-business-insurance'
@@ -258,7 +289,7 @@ function createWindow() {
       return 'insurance'
     }
     const routeAgent = (message: any, text: string) => {
-      if (/(solicitor|conveyancer|land registry|court|tribunal|legal|law|freeholder|leasehold)/i.test(text)) return 'solicitor-agent'
+      if (legalPropertyPattern.test(text) || /(solicitor|conveyancer|land registry|court|tribunal|legal|law|freeholder|leasehold)/i.test(text)) return 'solicitor-agent'
       if (/(hmrc|vat|tax|accountant|payroll|invoice|receipt|statement|bill|payment|direct debit)/i.test(text)) return 'accountant-agent'
       if (/(insurance|renewal|policy|mot|quote|supplier|wholesale|stock|order)/i.test(text)) return 'purchase-guardian'
       return message.agentId || 'general-agent'
@@ -299,34 +330,38 @@ function createWindow() {
       senderMap.set(key, existing)
     })
     const billsToPay = sorted.filter((message: any) => {
-      const text = `${message.subject || ''} ${message.bodyPreview || ''} ${message.categoryLabel || ''}`
-      return billPattern.test(text) || moneyPattern.test(text) || ['council-bills', 'tax-vat-mot', 'insurance'].includes(message.categoryId)
-    }).slice(0, 80).map((message: any) => memoryItem(message, 'bill-payment'))
-    const deadlines = sorted.filter((message: any) => deadlinePattern.test(`${message.subject || ''} ${message.bodyPreview || ''}`))
-      .slice(0, 80).map((message: any) => memoryItem(message, 'deadline'))
+      const text = messageText(message)
+      return (billPattern.test(text) || moneyPattern.test(text) || ['council-bills', 'tax-vat-mot'].includes(message.categoryId)) &&
+        isPriorityMail(message, 30) && !autoReplyNoisePattern.test(text)
+    }).sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'bill-payment', { priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) }))
+    const deadlines = sorted.filter((message: any) => deadlinePattern.test(`${message.subject || ''} ${message.bodyPreview || ''}`) && isPriorityMail(message, 30))
+      .sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'deadline', { priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) }))
     const insuranceRenewals = sorted.filter((message: any) => {
       const text = messageText(message)
       return insurancePattern.test(text) || (renewalPattern.test(text) && /(car|vehicle|shop|business|pet|property|home|life|insurance|policy)/i.test(text))
-    }).slice(0, 80).map((message: any) => {
+    }).filter((message: any) => isPriorityMail(message, 25)).sort(byPriorityThenDate).slice(0, 80).map((message: any) => {
       const text = messageText(message)
-      return memoryItem(message, detectInsuranceType(text), { renewal: renewalPattern.test(text), needsQuoteResearch: true })
+      return memoryItem(message, detectInsuranceType(text), { renewal: renewalPattern.test(text), needsQuoteResearch: true, priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) })
     })
-    const supplierUpdates = sorted.filter((message: any) => supplierPattern.test(messageText(message)))
-      .slice(0, 80).map((message: any) => memoryItem(message, 'supplier-update'))
+    const supplierUpdates = sorted.filter((message: any) => supplierPattern.test(messageText(message)) && isPriorityMail(message, 20))
+      .sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'supplier-update', { priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) }))
     const staffInvoices = sorted.filter((message: any) => staffInvoicePattern.test(messageText(message)) && /(invoice|receipt|bill|expense|attachment|photo|whatsapp|staff|employee)/i.test(messageText(message)))
-      .slice(0, 80).map((message: any) => memoryItem(message, 'staff-invoice'))
+      .filter((message: any) => isPriorityMail(message, 20)).sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'staff-invoice', { priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) }))
     const upcomingImportant = sorted.filter((message: any) => {
       const text = messageText(message)
-      return message.unread || message.importance === 'high' || message.flagStatus === 'flagged' ||
+      return isPriorityMail(message, 30) && (
+        message.unread || message.importance === 'high' || message.flagStatus === 'flagged' ||
         billPattern.test(text) || deadlinePattern.test(text) || renewalPattern.test(text) ||
-        insurancePattern.test(text) || officialPattern.test(text)
-    }).slice(0, 120).map((message: any) => {
+        insurancePattern.test(text) || officialPattern.test(text) || legalPropertyPattern.test(text) ||
+        businessBillPattern.test(text) || homeBillPattern.test(text) || localPropertyPattern.test(text)
+      )
+    }).sort(byPriorityThenDate).slice(0, 120).map((message: any) => {
       const text = messageText(message)
-      const type = insurancePattern.test(text) ? detectInsuranceType(text) : billPattern.test(text) ? 'bill-payment' : deadlinePattern.test(text) ? 'deadline' : officialPattern.test(text) ? 'official-important' : 'important-mail'
-      return memoryItem(message, type, { renewal: renewalPattern.test(text), moneyMentioned: moneyPattern.test(text) })
+      const type = legalPropertyPattern.test(text) ? 'legal-property' : insurancePattern.test(text) ? detectInsuranceType(text) : billPattern.test(text) ? 'bill-payment' : deadlinePattern.test(text) ? 'deadline' : officialPattern.test(text) ? 'official-important' : localPropertyPattern.test(text) ? 'local-property-opportunity' : 'important-mail'
+      return memoryItem(message, type, { renewal: renewalPattern.test(text), moneyMentioned: moneyPattern.test(text), priorityScore: mailPriorityScore(message), hasAttachments: Boolean(message.hasAttachments) })
     })
-    const urgent = sorted.filter((message: any) => message.unread || message.importance === 'high' || message.flagStatus === 'flagged')
-      .slice(0, 80).map((message: any) => memoryItem(message, 'urgent', {
+    const urgent = sorted.filter((message: any) => (message.importance === 'high' || message.flagStatus === 'flagged' || (message.unread && isPriorityMail(message, 45))) && isPriorityMail(message, 35))
+      .sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'urgent', {
         reason: message.importance === 'high' ? 'high importance' : message.flagStatus === 'flagged' ? 'flagged' : 'unread'
       }))
     return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, upcomingImportant, urgent }
@@ -385,10 +420,14 @@ function createWindow() {
     const merged = { ...data, folders: Array.from(foldersByKey.values()).slice(0, 250), messages, summary: compactMemory.categories, memory: compactMemory, mailboxMemory: compactMemory }
     workspaceService.saveEmailIntelligence(merged)
 
-    const highValue = (message: any) => (
-      message.unread || message.importance === 'high' || message.flagStatus === 'flagged' ||
-      ['solicitors', 'visa-sponsors', 'tax-vat-mot', 'council-bills', 'land-registry', 'accountant', 'insurance'].includes(message.categoryId)
-    )
+    const highValue = (message: any) => {
+      const text = `${message.subject || ''} ${message.sender || ''} ${message.senderEmail || ''} ${message.bodyPreview || ''} ${message.categoryLabel || ''}`.toLowerCase()
+      const marketingNoise = /(newsletter|digest|substack|voucher|fashion|festival|shopping|sale|discount|clearance|promotion|promo|marketing|property alerts|rightmove news|national lottery|cash converters|campaign|petition|organise\.network)/i.test(text)
+      const strongEvidence = /(land registry|steamer street|howlish view|langdale place|ground rent|service charge|solicitor|rc\.legal|grangeford|hmrc|vat|tax return|accountant|invoice|statement|arrears|overdue|final notice|direct debit|council tax|credit card|bank statement|parfetts|silva retail|newton newsagent|newton store|fraud report|nfrc)/i.test(text)
+      return strongEvidence || message.importance === 'high' || message.flagStatus === 'flagged' ||
+        (!marketingNoise && message.unread && /(bill|invoice|payment|deadline|due|renewal|insurance|mot|supplier|wholesale|receipt|statement)/i.test(text)) ||
+        ['solicitors', 'visa-sponsors', 'tax-vat-mot', 'council-bills', 'land-registry', 'accountant'].includes(message.categoryId)
+    }
     const taskLimit = Math.max(0, Math.min(Number(options.taskLimit ?? 40), 125))
     const taskCandidates = incomingMessages.filter((message: any) => message.id && !processed.has(message.id) && highValue(message))
       .sort((a: any, b: any) => Number(highValue(b)) - Number(highValue(a)) || String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))).slice(0, taskLimit)

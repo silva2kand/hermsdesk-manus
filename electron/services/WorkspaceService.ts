@@ -22,6 +22,10 @@ Memory | Skills | Knowledges - Complete, additive, always updated.
 - Keep memory updated from approved email, document, finance, property, business, and task events.
 - For greetings and daily check-ins, use Mythos/Baba first: check mailbox memory, urgent/important buckets, engine status, browser/operator state, and then answer.
 - Priority ranking favours bills, payments, renewals, insurance, HMRC/VAT/tax, council, land registry, solicitor/legal, suppliers, staff invoices, property, and system errors.
+- Property/legal priority: 6F Steamer Street, Ground Rent, service charges, Land Registry, RC Legal, Grangeford, Howlish View, and fraud/report evidence are high priority even if an older analysis called them "ignore".
+- Business/accounting priority: gather invoices, bank statements, credit cards, Parfetts/E-Invoice supplier paperwork, VAT/HMRC, PAYE, receipts, direct debits, and shop bills for funding/funder analysis.
+- Property opportunity preference: prioritise Lancaster, Morecambe, Heysham, LA1-LA4, closed shop, corner-shop, commercial/retail/newsagent premises. Birmingham, West Midlands, Manchester, Liverpool and distant marketing are background unless Silva asks.
+- Z-reports/EPOS notifications from the shop are FYI/store operations unless abnormal: void/refund/cash variance/missing/failed/error.
 - Marketing, newsletters, campaigns, junk, discounts, fashion, vouchers, and generic property alerts are background unless Silva marks them important.
 - Money, payments, legal submissions, external messages, installs, and destructive actions require approval.
 

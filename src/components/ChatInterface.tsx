@@ -47,13 +47,20 @@ const scorePriorityMail = (item: any) => {
   let score = 0;
   if (item?.importanceStatus === 'important') score += 100;
   if (item?.importanceStatus === 'not-important') score -= 200;
+  if (typeof item?.priorityScore === 'number') score += Math.min(120, Math.max(-80, item.priorityScore));
   if (item?.unread) score += 6;
+  if (item?.hasAttachments) score += 12;
+  if (/steamer street|howlish view|langdale place|land registry|certificate of compliance|requisition|ground rent|service charge|leasehold|freehold|rc\.legal|grangeford|fraud report|nfrc/.test(text)) score += 85;
+  if (/silva retail|newton newsagent|newton store|parfetts|e-invoice|customer 105105|epos|z-report|merchant|card payment|bank statement|credit card/.test(text)) score += 55;
   if (/bill|invoice|payment due|overdue|final notice|statement|direct debit|arrears|balance due/.test(text)) score += 55;
   if (/deadline|expires|expiry|renewal|policy|premium|mot|road tax|vehicle tax|appointment|hearing/.test(text)) score += 50;
   if (/hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|legal|accountant/.test(text)) score += 45;
   if (/insurance|car insurance|business insurance|shop insurance|property insurance|pet insurance|life insurance/.test(text)) score += 42;
   if (/supplier|wholesale|staff invoice|receipt|payroll|wage|stock|order|parcel|delivery/.test(text)) score += 28;
+  if (/lancaster|morecambe|heysham|la1|la2|la3|la4|closed shop|corner.?shop|commercial premises|retail premises|shop premises/.test(text)) score += 20;
+  if (/birmingham|west midlands|manchester|liverpool|york|north east|carlisle|penrith|lake district/.test(text) && !/steamer street|legal|solicitor|land registry/.test(text)) score -= 35;
   if (/junk email|spam|unsubscribe|newsletter|digest|substack|fashion|festival|shopping voucher|sale|discount|clearance|promotion|promo|marketing|property alerts|organise\.network|petition|campaign/.test(text)) score -= 45;
+  if (/automatic reply|undeliverable|out of office/.test(text)) score -= 35;
   return score;
 };
 
