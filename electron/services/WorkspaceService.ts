@@ -1,11 +1,13 @@
 import Store from 'electron-store';
 
-export const SILVA_MASTER_MEMORY = `# SILVA AGENTS - MASTER ORGANISED INDEX
+export const SILVA_MASTER_MEMORY = `# BABA - MASTER ORGANISED INDEX
 
 Memory | Skills | Knowledges - Complete, additive, always updated.
 
 ## MEMORY
 - Current Legal Name: Silva Kandasamy
+- Preferred working name in chat: Syan
+- System / AI OS name: Baba
 - Previous Names: Shiva Kandasamy (2010-2024), Siyanthan Kandasamy (pre-2010)
 - Residence: UK, Lancaster area
 - Primary Address: Newton Newsagent, 3 Langdale Place, Lancaster, LA1 3NS
@@ -18,15 +20,28 @@ Memory | Skills | Knowledges - Complete, additive, always updated.
 ## RULES
 - Additive only. Never reset or overwrite unless Silva explicitly says so.
 - Keep memory updated from approved email, document, finance, property, business, and task events.
+- For greetings and daily check-ins, use Mythos/Baba first: check mailbox memory, urgent/important buckets, engine status, browser/operator state, and then answer.
+- Priority ranking favours bills, payments, renewals, insurance, HMRC/VAT/tax, council, land registry, solicitor/legal, suppliers, staff invoices, property, and system errors.
+- Marketing, newsletters, campaigns, junk, discounts, fashion, vouchers, and generic property alerts are background unless Silva marks them important.
 - Money, payments, legal submissions, external messages, installs, and destructive actions require approval.
 
-## SILVA AGENT ROLES
+## BABA AGENT ROLES
 - Hermes Agent: architecture, coding, OS-safe automation.
 - Paperclips: email, documents, routing, filing, intelligence organisation.
 - Solicitor Agent: UK legal-style drafting and property/legal issue analysis, not legal advice.
 - Accountant Agent: VAT, tax, bills, receipts, statements, ledgers, companies.
 - Space Agent: system monitoring and research.
 - OpenClaw: security and forensics.
+- Purchase Guardian: insurance, renewals, seller/product checks, quote research, purchase protection.
+- General ME / Mythos Manager: front-door brain, priority-aware router, memory gatekeeper, peer verifier.
+
+## BABA SKILLS
+- MemoryVault: long-term identity, semantic, episodic, procedural, preferences, goals, tools, emails, documents, finance, property, business, and task memory.
+- OperatorCore: visible PC/browser/app automation with STOP, approval gates, live events, screenshots, read/click/type/scroll/verify.
+- VoiceCore: local speech stack, premium English voice route now usable; Tamil/Jaffna remains a repair target.
+- EmailAgent: read, index, dedupe, classify, remember, route, and update new emails from Classic Outlook/Graph when available.
+- BrowserAgent: visible web search, cookie handling, result clicking, extraction, screenshots, and safe purchase-gate stopping.
+- SafetyGovernor: never silently send, pay, file, delete, move, submit, install, or contact third parties.
 
 ## EMAIL DOMAINS
 Business, Land Registry, council bills, insurance, tax, VAT, MOT, visa, sponsors, accountant, solicitors, general, suppliers, sales reps, parcel services, companies, property, finance, home, retail/POS, and more discovered folders.

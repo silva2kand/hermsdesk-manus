@@ -37,7 +37,22 @@ const CHAT_HISTORY_KEY = 'hermsdesk.chat.sessions.v1';
 const WHATSAPP_NUMBER_KEY = 'hermsdesk.user.whatsappNumber';
 
 const isStatusOrUpdatesPrompt = (text: string) =>
-  /(how are|how'?s it going|system status|status|any updates|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always)/i.test(text);
+  /\b(hi|hey|hello|good morning|good afternoon|good evening)\b|how are|how'?s it going|system status|status|any updates|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always/i.test(text);
+
+const scorePriorityMail = (item: any) => {
+  const text = `${item?.subject || ''} ${item?.sender || ''} ${item?.senderEmail || ''} ${item?.preview || item?.bodyPreview || ''} ${item?.type || ''} ${item?.categoryLabel || ''} ${item?.folderName || ''}`.toLowerCase();
+  let score = 0;
+  if (item?.importanceStatus === 'important') score += 100;
+  if (item?.importanceStatus === 'not-important') score -= 200;
+  if (item?.unread) score += 6;
+  if (/bill|invoice|payment due|overdue|final notice|statement|direct debit|arrears|balance due/.test(text)) score += 55;
+  if (/deadline|expires|expiry|renewal|policy|premium|mot|road tax|vehicle tax|appointment|hearing/.test(text)) score += 50;
+  if (/hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|legal|accountant/.test(text)) score += 45;
+  if (/insurance|car insurance|business insurance|shop insurance|property insurance|pet insurance|life insurance/.test(text)) score += 42;
+  if (/supplier|wholesale|staff invoice|receipt|payroll|wage|stock|order|parcel|delivery/.test(text)) score += 28;
+  if (/junk email|spam|unsubscribe|newsletter|digest|substack|fashion|festival|shopping voucher|sale|discount|clearance|promotion|promo|marketing|property alerts|organise\.network|petition|campaign/.test(text)) score -= 45;
+  return score;
+};
 
 type ChatSession = {
   id: string;
@@ -844,13 +859,15 @@ Use the controlled browser session if available. Keep every step visible in Even
         ...(memory?.deadlines || []),
         ...(memory?.urgent || [])
       ].filter((item: any, index: number, arr: any[]) => item?.id && arr.findIndex(other => other.id === item.id) === index)
-        .sort((a: any, b: any) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
+        .map((item: any) => ({ ...item, priorityScore: scorePriorityMail(item) }))
+        .filter((item: any) => item.priorityScore > 0 || item.importanceStatus === 'important')
+        .sort((a: any, b: any) => (b.priorityScore - a.priorityScore) || String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
         .slice(0, 3);
       const lines = priorityItems.length
-        ? priorityItems.map((item: any, index: number) => `${index + 1}. ${item.subject || '(no subject)'}\nFrom: ${item.sender || item.senderEmail || 'unknown'}\nReceived: ${item.receivedAt ? new Date(item.receivedAt).toLocaleString() : 'unknown'}\nType: ${item.type || item.categoryLabel || 'mail'}${item.assignedAgent ? `\nAgent: ${item.assignedAgent}` : ''}\nPreview: ${String(item.preview || item.bodyPreview || '').slice(0, 180)}`)
+        ? priorityItems.map((item: any, index: number) => `${index + 1}. ${item.subject || '(no subject)'}\nFrom: ${item.sender || item.senderEmail || 'unknown'}\nReceived: ${item.receivedAt ? new Date(item.receivedAt).toLocaleString() : 'unknown'}\nType: ${item.type || item.categoryLabel || 'mail'} | Priority score: ${item.priorityScore}${item.assignedAgent ? `\nAgent: ${item.assignedAgent}` : ''}\nPreview: ${String(item.preview || item.bodyPreview || '').slice(0, 180)}`)
         : ['No high-priority mailbox items are currently surfaced in local memory.'];
       const content = [
-        `I am ready. Mythos checked local memory and live system state, not raw model memory.`,
+        `Good morning Syan. Baba/Mythos checked local memory and live system state, not raw model memory.`,
         '',
         `Mailbox memory: ${(memory?.totalIndexed || 0).toLocaleString()} emails indexed, updated ${updated}.`,
         `Unread: ${(memory?.unreadCount || 0).toLocaleString()} | Bills/payments: ${(memory?.billsToPay?.length || 0).toLocaleString()} | Deadlines: ${(memory?.deadlines?.length || 0).toLocaleString()} | Insurance renewals: ${(memory?.insuranceRenewals?.length || 0).toLocaleString()}`,
