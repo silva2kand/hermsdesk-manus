@@ -128,6 +128,7 @@ type ChatInterfaceProps = {
 
 export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNavigate }: ChatInterfaceProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [input, setInput] = useState('');
   const [notice, setNotice] = useState('');
@@ -367,6 +368,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     window.setTimeout(() => setNotice(''), 3500);
   };
 
+  const focusChatInput = () => {
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   const startNewChat = () => {
     const now = new Date().toISOString();
     const id = `chat-${Date.now()}`;
@@ -376,6 +381,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     setMessages([]);
     setInput('');
     setShowHistory(false);
+    focusChatInput();
     addNotice('Started a new chat. Previous chat is saved in history.');
   };
 
@@ -387,6 +393,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   };
 
   const deleteChatSession = (id: string) => {
+    const now = new Date().toISOString();
     const next = chatSessions.filter(item => item.id !== id);
     setChatSessions(next);
     window.localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(next));
@@ -395,10 +402,19 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       if (fallback) {
         setActiveChatId(fallback.id);
         setMessages(fallback.messages || []);
+        window.localStorage.setItem('hermsdesk.chat.activeId', fallback.id);
       } else {
-        startNewChat();
+        const fresh = { id: `chat-${Date.now()}`, title: 'New chat', messages: [], createdAt: now, updatedAt: now };
+        setChatSessions([fresh]);
+        setActiveChatId(fresh.id);
+        setMessages([]);
+        setInput('');
+        window.localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify([fresh]));
+        window.localStorage.setItem('hermsdesk.chat.activeId', fresh.id);
       }
     }
+    setShowHistory(false);
+    focusChatInput();
     addNotice('Chat deleted from local history.');
   };
 
@@ -1696,6 +1712,7 @@ Use the controlled browser session if available. Keep every step visible in Even
         <div className="max-w-5xl mx-auto">
           <div className="relative border rounded-2xl bg-gray-50/30 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-50 transition-all">
             <textarea 
+              ref={inputRef}
               placeholder={`Message ${model}...`}
               className="w-full px-4 py-4 pr-12 text-sm bg-transparent border-none focus:ring-0 resize-none min-h-[56px] max-h-40"
               rows={1}
