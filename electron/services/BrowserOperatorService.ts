@@ -7,7 +7,7 @@ type BrowserWindowType = InstanceType<typeof BrowserWindow>;
 
 export type BrowserOperatorEvent = {
   id: string;
-  type: 'open' | 'navigate' | 'click' | 'type' | 'press' | 'scroll' | 'read' | 'screenshot' | 'vision' | 'error';
+  type: 'open' | 'navigate' | 'click' | 'type' | 'press' | 'scroll' | 'read' | 'screenshot' | 'vision' | 'ui' | 'error';
   status: 'done' | 'error';
   detail: string;
   url?: string;
@@ -23,6 +23,29 @@ type BrowserSession = {
   online: boolean;
   thumbnailPath?: string;
   updatedAt: string;
+};
+
+export type BrowserUiElement = {
+  id: string;
+  role: string;
+  text: string;
+  hint: string;
+  selector: string;
+  tag: string;
+  href?: string;
+  value?: string;
+  checked?: boolean;
+  visible: boolean;
+  location: { x: number; y: number; width: number; height: number };
+  score?: number;
+};
+
+type BrowserUiScan = {
+  ok: true;
+  title: string;
+  url: string;
+  viewport: { width: number; height: number };
+  elements: BrowserUiElement[];
 };
 
 const MAX_EVENTS = 100;
@@ -119,6 +142,46 @@ export class BrowserOperatorService {
       this.push({ type: 'error', status: 'error', detail: 'Browser Operator stopped by user.', sessionId });
       throw new Error('Browser Operator stopped by user.');
     }
+  }
+
+  private isRiskyActionText(value: string) {
+    return /(pay|purchase|order|submit|checkout|buy|confirm|book|sign|password|card|bank|sort code|cvv|security code)/i.test(value || '');
+  }
+
+  private scoreUiElement(element: BrowserUiElement, query: string, role?: string) {
+    const needle = String(query || '').trim().toLowerCase();
+    const wantedRole = String(role || '').trim().toLowerCase();
+    const text = `${element.text || ''} ${element.hint || ''} ${element.value || ''}`.trim().toLowerCase();
+    let score = 0;
+    if (wantedRole && element.role.toLowerCase() === wantedRole) score += 35;
+    if (wantedRole && element.role.toLowerCase().includes(wantedRole)) score += 18;
+    if (!needle) score += 1;
+    if (needle && text === needle) score += 110;
+    if (needle && text.includes(needle)) score += 75;
+    if (needle && needle.includes(text) && text.length > 2) score += 45;
+    if (needle) {
+      const tokens = needle.split(/\s+/).filter(token => token.length > 1);
+      for (const token of tokens) {
+        if (text.includes(token)) score += 12;
+      }
+    }
+    if (element.visible) score += 5;
+    if (element.role === 'button' || element.role === 'link' || element.role === 'input') score += 4;
+    if (element.location.width > 0 && element.location.height > 0) score += 3;
+    return score;
+  }
+
+  private getLatestUiElements(sessionId: string) {
+    const saved = this.store.get(`browserUiScan.${sessionId}`, null) as BrowserUiScan | null;
+    return saved?.elements || [];
+  }
+
+  private async clickAt(win: BrowserWindowType, x: number, y: number) {
+    win.webContents.sendInputEvent({ type: 'mouseMove', x, y });
+    await wait(40);
+    win.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+    await wait(40);
+    win.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
   }
 
   stopAll(reason = 'Stopped by user') {
@@ -285,6 +348,202 @@ export class BrowserOperatorService {
     } catch (error: any) {
       return { ok: false, error: error?.message || 'Could not read page' };
     }
+  }
+
+  async scanUi(sessionId = 'main'): Promise<BrowserUiScan | { ok: false; error: string }> {
+    this.assertNotStopped(sessionId);
+    const win = this.ensureWindow(sessionId);
+    try {
+      await this.dismissCookieOverlays(sessionId).catch(() => null);
+      const result = await win.webContents.executeJavaScript(`
+        (() => {
+          const cssEscape = (value) => {
+            if (window.CSS && CSS.escape) return CSS.escape(String(value));
+            return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
+          };
+          const visible = (el) => {
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0';
+          };
+          const textOf = (el) => ((el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('alt') || el.name || '') + '').replace(/\\s+/g, ' ').trim();
+          const hintOf = (el) => ([el.getAttribute('aria-label'), el.getAttribute('title'), el.placeholder, el.name, el.id].filter(Boolean).join(' ') || '').replace(/\\s+/g, ' ').trim();
+          const roleOf = (el) => {
+            const explicit = (el.getAttribute('role') || '').toLowerCase();
+            if (explicit) return explicit;
+            const tag = el.tagName.toLowerCase();
+            const type = (el.getAttribute('type') || '').toLowerCase();
+            if (tag === 'button' || type === 'button' || type === 'submit' || type === 'reset') return 'button';
+            if (tag === 'a') return 'link';
+            if (tag === 'textarea') return 'textarea';
+            if (tag === 'select') return 'select';
+            if (tag === 'input' && type === 'checkbox') return 'checkbox';
+            if (tag === 'input' && type === 'radio') return 'radio';
+            if (tag === 'input') return 'input';
+            if (tag === 'summary') return 'button';
+            if (/^h[1-6]$/.test(tag)) return 'heading';
+            if (el.isContentEditable) return 'input';
+            return 'text';
+          };
+          const selectorOf = (el) => {
+            const tag = el.tagName.toLowerCase();
+            if (el.id) return '#' + cssEscape(el.id);
+            const name = el.getAttribute('name');
+            if (name) return tag + '[name="' + String(name).replace(/"/g, '\\"') + '"]';
+            const aria = el.getAttribute('aria-label');
+            if (aria) return tag + '[aria-label="' + String(aria).replace(/"/g, '\\"') + '"]';
+            const href = el.getAttribute('href');
+            if (tag === 'a' && href) return 'a[href="' + String(href).replace(/"/g, '\\"') + '"]';
+            const parts = [];
+            let node = el;
+            while (node && node.nodeType === Node.ELEMENT_NODE && node !== document.body && parts.length < 5) {
+              const currentTag = node.tagName.toLowerCase();
+              const parent = node.parentElement;
+              if (!parent) break;
+              const siblings = Array.from(parent.children).filter(child => child.tagName === node.tagName);
+              const index = siblings.indexOf(node) + 1;
+              parts.unshift(siblings.length > 1 ? currentTag + ':nth-of-type(' + index + ')' : currentTag);
+              node = parent;
+            }
+            return parts.join(' > ');
+          };
+          const nodes = Array.from(document.querySelectorAll('a[href],button,input,textarea,select,[role],[aria-label],[title],[tabindex],summary,label,[contenteditable="true"],h1,h2,h3'));
+          const elements = [];
+          const seen = new Set();
+          for (const el of nodes) {
+            if (!visible(el)) continue;
+            const rect = el.getBoundingClientRect();
+            const role = roleOf(el);
+            const text = textOf(el).slice(0, 220);
+            const hint = hintOf(el).slice(0, 220);
+            const selector = selectorOf(el);
+            const key = selector + '|' + role + '|' + text + '|' + Math.round(rect.x) + ',' + Math.round(rect.y);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            elements.push({
+              id: 'ui-' + elements.length,
+              role,
+              text,
+              hint,
+              selector,
+              tag: el.tagName.toLowerCase(),
+              href: el.href || undefined,
+              value: ('value' in el ? String(el.value || '').slice(0, 220) : undefined),
+              checked: ('checked' in el ? Boolean(el.checked) : undefined),
+              visible: true,
+              location: {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height)
+              }
+            });
+            if (elements.length >= 180) break;
+          }
+          return {
+            ok: true,
+            title: document.title || '',
+            url: location.href,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            elements
+          };
+        })()
+      `) as BrowserUiScan;
+      this.store.set(`browserUiScan.${sessionId}`, result);
+      this.push({ type: 'ui', status: 'done', detail: `UI scan found ${result.elements.length} visible controls`, url: result.url, sessionId });
+      return result;
+    } catch (error: any) {
+      const message = error?.message || 'UI scan failed';
+      this.push({ type: 'error', status: 'error', detail: message, sessionId });
+      return { ok: false, error: message };
+    }
+  }
+
+  async resolveUi(query: string, role?: string, sessionId = 'main') {
+    const scan = await this.scanUi(sessionId);
+    if (!scan.ok) return scan;
+    const needle = String(query || '').trim();
+    const matches = scan.elements
+      .map(element => ({ ...element, score: this.scoreUiElement(element, needle, role) }))
+      .filter(element => (element.score || 0) > 0)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, 8);
+    const best = matches[0] || null;
+    this.push({
+      type: best ? 'ui' : 'error',
+      status: best ? 'done' : 'error',
+      detail: best ? `Resolved UI target "${needle || role || 'visible element'}" to ${best.role}: ${best.text || best.hint || best.selector}` : `No UI target matched "${needle}"`,
+      url: scan.url,
+      sessionId
+    });
+    return { ok: Boolean(best), query: needle, role, best, matches, url: scan.url, title: scan.title };
+  }
+
+  async clickUi(target: string, sessionId = 'main', role?: string) {
+    this.assertNotStopped(sessionId);
+    const win = this.ensureWindow(sessionId);
+    const raw = String(target || '').trim();
+    if (!raw) return { ok: false, error: 'UI click needs an element id, text, or natural language target.' };
+    let element: BrowserUiElement | null = null;
+    if (/^ui-\d+$/i.test(raw)) {
+      element = this.getLatestUiElements(sessionId).find(item => item.id === raw) || null;
+      if (!element) {
+        const scan = await this.scanUi(sessionId);
+        if (scan.ok) element = scan.elements.find(item => item.id === raw) || null;
+      }
+    } else {
+      const resolved = await this.resolveUi(raw, role, sessionId);
+      element = resolved.ok ? resolved.best : null;
+    }
+    if (!element) return { ok: false, error: `UI target not found: ${raw}` };
+    const label = `${element.text || ''} ${element.hint || ''} ${raw}`.trim();
+    if (this.isRiskyActionText(label)) {
+      throw new Error('Risky UI click blocked. Ask Silva/Syan for explicit approval before clicking pay/purchase/order/submit/checkout/sign/password/payment controls.');
+    }
+    const bySelector = element.selector ? await this.click(element.selector, sessionId).catch((error: any) => ({ ok: false, error: error?.message })) : { ok: false };
+    if (bySelector.ok) return { ok: true, method: 'selector', element, result: bySelector };
+    const x = Math.max(1, Math.round(element.location.x + element.location.width / 2));
+    const y = Math.max(1, Math.round(element.location.y + element.location.height / 2));
+    await this.clickAt(win, x, y);
+    await wait(600);
+    const url = win.webContents.getURL();
+    this.push({ type: 'click', status: 'done', detail: `Clicked UI target ${element.id} at ${x},${y}: ${element.text || element.hint || element.selector}`, url, sessionId });
+    return { ok: true, method: 'coordinates', element, x, y, url };
+  }
+
+  async typeUi(target: string, text: string, sessionId = 'main', role = 'input') {
+    this.assertNotStopped(sessionId);
+    const raw = String(target || '').trim();
+    if (!raw) return { ok: false, error: 'UI type needs an element id, label, placeholder, or natural language target.' };
+    let element: BrowserUiElement | null = null;
+    if (/^ui-\d+$/i.test(raw)) {
+      element = this.getLatestUiElements(sessionId).find(item => item.id === raw) || null;
+      if (!element) {
+        const scan = await this.scanUi(sessionId);
+        if (scan.ok) element = scan.elements.find(item => item.id === raw) || null;
+      }
+    } else {
+      const resolved = await this.resolveUi(raw, role, sessionId);
+      element = resolved.ok ? resolved.best : null;
+    }
+    if (!element) return { ok: false, error: `UI input target not found: ${raw}` };
+    const label = `${element.text || ''} ${element.hint || ''} ${raw}`.trim();
+    if (this.isRiskyActionText(label)) {
+      throw new Error('Risky UI typing blocked. Ask Silva/Syan for explicit approval before entering passwords, bank, card, payment, legal, or submission details.');
+    }
+    const bySelector = element.selector ? await this.type(element.selector, text, sessionId).catch((error: any) => ({ ok: false, error: error?.message })) : { ok: false };
+    if (bySelector.ok) return { ok: true, method: 'selector', element, result: bySelector };
+    const win = this.ensureWindow(sessionId);
+    const x = Math.max(1, Math.round(element.location.x + element.location.width / 2));
+    const y = Math.max(1, Math.round(element.location.y + element.location.height / 2));
+    await this.clickAt(win, x, y);
+    for (const char of String(text || '')) {
+      win.webContents.sendInputEvent({ type: 'char', keyCode: char });
+      await wait(12);
+    }
+    const url = win.webContents.getURL();
+    this.push({ type: 'type', status: 'done', detail: `Typed into UI target ${element.id}: ${element.text || element.hint || element.selector}`, url, sessionId });
+    return { ok: true, method: 'coordinates', element, url };
   }
 
   async click(selector: string, sessionId = 'main') {

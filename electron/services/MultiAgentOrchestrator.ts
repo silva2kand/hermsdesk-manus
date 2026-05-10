@@ -274,6 +274,10 @@ Available tools:
 - [TOOL: browser_search_visible(query="search query")]
 - [TOOL: browser_open(target="URL")]
 - [TOOL: browser_read()]
+- [TOOL: browser_ui_scan()]
+- [TOOL: browser_ui_resolve(query="Continue", role="button")]
+- [TOOL: browser_ui_click(query="Continue", role="button")]
+- [TOOL: browser_ui_type(query="Search", text="text to enter")]
 - [TOOL: browser_click(selector="CSS selector")]
 - [TOOL: browser_click_href(href="https://...")]
 - [TOOL: browser_click_text(text="visible link or button text")]
@@ -1036,7 +1040,7 @@ ${JSON.stringify({
 - **APPROVAL FIRST**: Destructive actions, money transfers, or external communication require explicit user approval.
 - **COLLABORATION**: Treat this as a shared HermesDesk task. Lead agent: ${agent.name}. Peer agents available for clarification/verification: ${collaborationPlan.length ? collaborationPlan.map(peer => `${peer.name} (${peer.role})`).join('; ') : 'none selected'}.
 - **TINYFISH WEB AGENT**: ${tinyFishStatus?.configured ? 'Available for real web automation on specific URLs. Use [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")] when a task needs live page inspection.' : 'Not available until a TinyFish API key is saved.'}
-- **BROWSER OPERATOR**: Available as a real controlled browser. Use [TOOL: browser_search_visible(query="search query")] for visible Google typing/searching, [TOOL: browser_open(target="URL")], [TOOL: browser_read()], [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="CSS selector")], [TOOL: browser_click_text(text="visible text")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="CSS selector", text="text")], [TOOL: browser_press(key="Enter")], [TOOL: browser_screenshot()], and [TOOL: browser_inspect()] for browser automation. Verify after each action. Do not click purchase/pay/submit/order/checkout without approval.
+- **BROWSER OPERATOR**: Available as a real controlled browser. Use [TOOL: browser_search_visible(query="search query")] for visible Google typing/searching, [TOOL: browser_open(target="URL")], [TOOL: browser_read()], [TOOL: browser_ui_scan()] to list visible controls, [TOOL: browser_ui_resolve(query="Continue", role="button")] to choose robust targets, [TOOL: browser_ui_click(query="Continue", role="button")] and [TOOL: browser_ui_type(query="Search", text="text")] for natural UI actions, [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="CSS selector")], [TOOL: browser_click_text(text="visible text")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="CSS selector", text="text")], [TOOL: browser_press(key="Enter")], [TOOL: browser_screenshot()], and [TOOL: browser_inspect()] for browser automation. Verify after each action. Do not click purchase/pay/submit/order/checkout without approval.
 
 ### TASTE ENGINE - REQUIRED BEHAVIOUR
 - **THOUGHTFULNESS**: infer the real goal, audience, context, risk, opportunity, and missing facts before acting.

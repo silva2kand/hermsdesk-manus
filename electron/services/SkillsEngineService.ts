@@ -91,7 +91,7 @@ export class SkillsEngineService {
       rules.push('Mythos PC Operator: prefer real local routes for files, terminal, browser opening, app launching, ME Computer activity, and approval-first OS actions.');
     }
     if (installed.includes('mythos-browser-automation')) {
-      rules.push('Browser Automation: for browser tasks use real tools, not explanations. For human-visible searching start with [TOOL: browser_search_visible(query="...")], inspect with [TOOL: browser_read()], scroll with [TOOL: browser_scroll(amount="700")], click selectors with [TOOL: browser_click(selector="...")], visible text with [TOOL: browser_click_text(text="...")], exact links with [TOOL: browser_click_href(href="https://...")], type with [TOOL: browser_type(selector="...", text="...")], press keys with [TOOL: browser_press(key="Enter")], and verify after every action with [TOOL: browser_inspect()]. Do not click pay/submit/order/purchase without explicit approval.');
+      rules.push('Browser Automation: for browser tasks use real tools, not explanations. For human-visible searching start with [TOOL: browser_search_visible(query="...")]. Before click/type work, scan controls with [TOOL: browser_ui_scan()], resolve targets with [TOOL: browser_ui_resolve(query="continue", role="button")], click natural targets with [TOOL: browser_ui_click(query="continue", role="button")], and type into natural targets with [TOOL: browser_ui_type(query="search", text="...")]. Use [TOOL: browser_read()], [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="...")], [TOOL: browser_click_text(text="...")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="...", text="...")], [TOOL: browser_press(key="Enter")], and verify after every action with [TOOL: browser_inspect()]. Do not click pay/submit/order/purchase without explicit approval.');
     }
     if (installed.includes('mythos-whatsapp-reply')) {
       rules.push('Mythos WhatsApp Reply: draft professional, concise replies from user-provided message text; open the real WhatsApp composer; never claim background read/send access. Use [TOOL: whatsapp_inspect_ui()] to see current messages.');
@@ -360,6 +360,43 @@ export class SkillsEngineService {
       if (!this.browserOperator) throw new Error('Browser operator not initialized');
       const page = await this.browserOperator.readPage(params.sessionId || 'main');
       return `Browser page read.\nTitle: ${page.title || ''}\nURL: ${page.url || ''}\n\nVisible text:\n${String(page.text || '').slice(0, 6000)}\n\nLinks:\n${(page.links || []).slice(0, 25).map((link: any, index: number) => `${index + 1}. ${link.text || '(no text)'} -> ${link.href}`).join('\n')}`;
+    }
+
+    if (name === 'browser_ui_scan' || name === 'browser-ui-scan' || name === 'ui_scan' || name === 'ui-scan') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const scan = await this.browserOperator.scanUi(params.sessionId || 'main');
+      if (!scan.ok) return `Browser UI scan failed: ${scan.error}`;
+      return `Browser UI scan complete.\nTitle: ${scan.title || ''}\nURL: ${scan.url || ''}\nVisible controls: ${scan.elements.length}\n\n${scan.elements.slice(0, 60).map((el: any) => `${el.id} [${el.role}] ${el.text || el.hint || el.selector} @ ${el.location.x},${el.location.y} ${el.location.width}x${el.location.height}${el.href ? ` -> ${el.href}` : ''}`).join('\n')}`;
+    }
+
+    if (name === 'browser_ui_resolve' || name === 'browser-ui-resolve' || name === 'ui_resolve' || name === 'ui-resolve') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const query = String(params.query || params.text || params.target || params.label || '').trim();
+      const role = params.role ? String(params.role) : undefined;
+      if (!query && !role) throw new Error('browser_ui_resolve needs a query, text, target, label, or role.');
+      const result = await this.browserOperator.resolveUi(query, role, params.sessionId || 'main');
+      if (!result.ok) return `Browser UI resolve failed for "${query}": ${result.error || 'No matching visible control.'}`;
+      return `Browser UI resolve result.\nBest: ${result.best.id} [${result.best.role}] ${result.best.text || result.best.hint || result.best.selector} (score ${result.best.score})\nURL: ${result.url || ''}\n\nMatches:\n${(result.matches || []).slice(0, 8).map((el: any) => `${el.id} [${el.role}] score=${el.score} ${el.text || el.hint || el.selector}`).join('\n')}`;
+    }
+
+    if (name === 'browser_ui_click' || name === 'browser-ui-click' || name === 'ui_click' || name === 'ui-click') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const target = String(params.elementId || params.id || params.query || params.text || params.target || params.label || '').trim();
+      if (!target) throw new Error('browser_ui_click needs an elementId/id/query/text/target/label.');
+      if (/(pay|purchase|order|submit|checkout|buy|confirm|book|sign|password|card|bank)/i.test(target)) {
+        throw new Error('Risky browser UI click blocked. Ask Silva/Syan for explicit approval before clicking pay/purchase/order/submit/checkout/sign/payment controls.');
+      }
+      const result = await this.browserOperator.clickUi(target, params.sessionId || 'main', params.role);
+      return `Browser UI click result: ${JSON.stringify(result).slice(0, 1400)}`;
+    }
+
+    if (name === 'browser_ui_type' || name === 'browser-ui-type' || name === 'ui_type' || name === 'ui-type') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const target = String(params.elementId || params.id || params.query || params.target || params.label || '').trim();
+      const text = String(params.text || params.value || params.input || params.content || '');
+      if (!target) throw new Error('browser_ui_type needs an elementId/id/query/target/label.');
+      const result = await this.browserOperator.typeUi(target, text, params.sessionId || 'main', params.role || 'input');
+      return `Browser UI type result: ${JSON.stringify(result).slice(0, 1400)}`;
     }
 
     if (name === 'browser_click' || name === 'browser-click') {

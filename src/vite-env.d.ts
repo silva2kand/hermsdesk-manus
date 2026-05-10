@@ -50,6 +50,10 @@ interface Window {
     openBrowserOperator: (target?: string, sessionId?: string, label?: string) => Promise<any>;
     navigateBrowserOperator: (target: string, sessionId?: string) => Promise<any>;
     readBrowserOperator: (sessionId?: string) => Promise<any>;
+    scanBrowserUi: (sessionId?: string) => Promise<any>;
+    resolveBrowserUi: (query: string, role?: string, sessionId?: string) => Promise<any>;
+    clickBrowserUi: (target: string, sessionId?: string, role?: string) => Promise<any>;
+    typeBrowserUi: (target: string, text: string, sessionId?: string, role?: string) => Promise<any>;
     clickBrowserOperator: (selector: string, sessionId?: string) => Promise<any>;
     clickHrefBrowserOperator: (href: string, sessionId?: string) => Promise<any>;
     typeBrowserOperator: (selector: string, text: string, sessionId?: string) => Promise<any>;
