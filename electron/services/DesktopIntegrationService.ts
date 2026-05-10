@@ -17,8 +17,11 @@ const VOICE_STACK_ROOT = fs.existsSync('C:\\Users\\Silva\\WorkSpace\\voicelcl\\s
   : path.join(process.cwd(), 'bin', 'silva-voice');
 const VOICE_STACK_LAUNCHER = path.join(VOICE_STACK_ROOT, 'run_server.bat');
 const VOICE_STACK_MODELS = path.join(VOICE_STACK_ROOT, 'models');
-const VOICE_STACK_PYTHON = path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
-const VOICE_STACK_URL = 'http://127.0.0.1:7100';
+const VOICE_STACK_PYTHON = fs.existsSync(path.join(VOICE_STACK_ROOT, 'env311', 'Scripts', 'python.exe'))
+  ? path.join(VOICE_STACK_ROOT, 'env311', 'Scripts', 'python.exe')
+  : path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
+const VOICE_STACK_PRIMARY_URL = 'http://127.0.0.1:7100';
+const VOICE_STACK_FALLBACK_URLS = ['http://127.0.0.1:7100', 'http://127.0.0.1:8000'];
 
 export class DesktopIntegrationService {
   private classicOutlookStatusCache: { value: any; at: number } | null = null;
@@ -60,6 +63,22 @@ export class DesktopIntegrationService {
 
   private psString(value: string) {
     return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  private async probeVoiceStackUrl(baseUrl: string, timeout = 1800) {
+    const root = await axios.get(`${baseUrl}/`, { timeout, validateStatus: status => status >= 200 && status < 500 }).catch(() => null);
+    if (root?.status && root.status >= 200 && root.status < 500) return { ok: true, url: baseUrl, status: root.status, data: root.data };
+    const health = await axios.get(`${baseUrl}/health`, { timeout, validateStatus: status => status >= 200 && status < 500 }).catch(() => null);
+    if (health?.status && health.status >= 200 && health.status < 500) return { ok: true, url: baseUrl, status: health.status, data: health.data };
+    return { ok: false, url: baseUrl };
+  }
+
+  private async getActiveVoiceStackUrl(timeout = 1800) {
+    for (const url of VOICE_STACK_FALLBACK_URLS) {
+      const probe = await this.probeVoiceStackUrl(url, timeout);
+      if (probe.ok) return probe;
+    }
+    return null;
   }
 
   private isRiskyPcAction(value: string) {
@@ -520,8 +539,10 @@ public class Win32PcClick {
         return shell.openExternal('msteams://');
       case 'voice stack':
       case 'silva voice stack':
-        await this.startVoiceStackServer();
-        return shell.openExternal('http://localhost:7100/');
+        {
+          const started = await this.startVoiceStackServer();
+          return shell.openExternal(`${started.url || VOICE_STACK_PRIMARY_URL}/`);
+        }
       case 'outlook':
       case 'new outlook':
         return shell.openExternal('outlook://');
@@ -555,27 +576,36 @@ public class Win32PcClick {
 
   private async startVoiceStackServer() {
     try {
-      await axios.get(`${VOICE_STACK_URL}/`, { timeout: 1200, validateStatus: status => status >= 200 && status < 500 });
-      return { ok: true, alreadyRunning: true };
+      const active = await this.getActiveVoiceStackUrl(1200);
+      if (active?.ok) return { ok: true, alreadyRunning: true, url: active.url };
     } catch {
       // Ensure folder and server files exist
+    }
+
+    try {
       await this.buildVoiceStackFilesOnly();
 
-      if (!fs.existsSync(VOICE_STACK_LAUNCHER)) return { ok: false, error: 'Silva Voice Stack launcher was not found.' };
+      if (!fs.existsSync(VOICE_STACK_PYTHON) && !fs.existsSync(VOICE_STACK_LAUNCHER)) {
+        return { ok: false, error: 'Silva Voice Stack Python runtime and launcher were not found.' };
+      }
       
-      const child = spawn(VOICE_STACK_LAUNCHER, [], { cwd: VOICE_STACK_ROOT, detached: true, stdio: 'ignore', windowsHide: true });
+      const child = fs.existsSync(VOICE_STACK_PYTHON)
+        ? spawn(VOICE_STACK_PYTHON, ['-m', 'uvicorn', 'silva_voice.server:app', '--host', '127.0.0.1', '--port', '7100'], { cwd: VOICE_STACK_ROOT, detached: true, stdio: 'ignore', windowsHide: true })
+        : spawn(VOICE_STACK_LAUNCHER, [], { cwd: VOICE_STACK_ROOT, detached: true, stdio: 'ignore', windowsHide: true });
       child.unref();
 
       for (let attempt = 0; attempt < 15; attempt += 1) {
         await new Promise(resolve => setTimeout(resolve, 2000));
         try {
-          await axios.get(`${VOICE_STACK_URL}/`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 });
-          return { ok: true, started: true };
+          const active = await this.getActiveVoiceStackUrl(2500);
+          if (active?.ok) return { ok: true, started: true, url: active.url };
         } catch {
           // Voice models can take a moment to initialize.
         }
       }
-      return { ok: true, started: true, warmingUp: true };
+      return { ok: true, started: true, warmingUp: true, url: VOICE_STACK_PRIMARY_URL };
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'Voice Stack failed to start.', url: VOICE_STACK_PRIMARY_URL };
     }
   }
 
@@ -819,15 +849,16 @@ if not exist "venv_311\\Scripts\\python.exe" py -3.11 -m venv venv_311
 
   async getVoiceStackStatus() {
     try {
-      await this.startVoiceStackServer();
+      const started = await this.startVoiceStackServer();
+      const baseUrl = started.url || VOICE_STACK_PRIMARY_URL;
       const [home, profiles, accents] = await Promise.all([
-        axios.get(`${VOICE_STACK_URL}/`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }),
-        axios.get(`${VOICE_STACK_URL}/tts/profiles`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }).catch(() => null),
-        axios.get(`${VOICE_STACK_URL}/tts/accents`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }).catch(() => null)
+        axios.get(`${baseUrl}/`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }),
+        axios.get(`${baseUrl}/tts/profiles`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }).catch(() => null),
+        axios.get(`${baseUrl}/tts/accents`, { timeout: 2500, validateStatus: status => status >= 200 && status < 500 }).catch(() => null)
       ]);
-      return { ok: true, ready: true, url: `${VOICE_STACK_URL}/`, status: home.status, profiles: profiles?.data || null, accents: accents?.data || null };
+      return { ok: true, ready: true, url: `${baseUrl}/`, status: home.status, profiles: profiles?.data || null, accents: accents?.data || null };
     } catch (error: any) {
-      return { ok: false, url: `${VOICE_STACK_URL}/`, error: error.message };
+      return { ok: false, url: `${VOICE_STACK_PRIMARY_URL}/`, error: error.message };
     }
   }
 
@@ -900,16 +931,20 @@ $speaker.Speak('${escaped}')
     const language = options.language || 'en';
     // Map user-friendly voice names to valid accent_id values the server recognizes
     const accentMap: Record<string, string> = {
-      'tamil-jaffna': 'ta-default', 'tamil': 'ta-default', 'ta': 'ta-default',
+      'tamil-jaffna': 'ta-default', 'ta-m1': 'ta-default', 'tamil': 'ta-default', 'ta': 'ta-default',
       'english-uk': 'en-gb-default', 'en-gb': 'en-gb-default',
+      'en-gb-m1': 'en-gb-default', 'en-gb-f1': 'en-gb-default',
       'english-us': 'en-us-default', 'en-us': 'en-us-default',
+      'en-us-m1': 'en-us-default', 'en-us-f1': 'en-us-default',
       'english-india': 'en-in-default', 'en-in': 'en-in-default',
+      'en-in-m1': 'en-in-default', 'en-in-f1': 'en-in-default',
       'english-us-sapi': 'en-us-sapi',
     };
     const rawAccentId = options.accent_id || options.accentId || voice;
     const accent_id = accentMap[rawAccentId] || rawAccentId;
     const payload = {
       text: cleanText,
+      profile_id: options.profile_id || options.profileId || 'silva-premium',
       accent_id,
       accentId: accent_id,
       voice,
@@ -922,11 +957,13 @@ $speaker.Speak('${escaped}')
     const endpoints = ['/tts/synthesize', '/api/speak', '/speak', '/api/tts', '/tts', '/v1/audio/speech'];
     let lastError = '';
 
-    await this.startVoiceStackServer().catch(() => null);
+    const started = await this.startVoiceStackServer().catch(() => null);
+    const active = await this.getActiveVoiceStackUrl(1200).catch(() => null);
+    const baseUrl = active?.url || started?.url || VOICE_STACK_PRIMARY_URL;
 
     for (const endpoint of endpoints) {
       try {
-        const response = await axios.post(`${VOICE_STACK_URL}${endpoint}`, payload, {
+        const response = await axios.post(`${baseUrl}${endpoint}`, payload, {
           timeout: 180000,
           responseType: 'arraybuffer',
           validateStatus: status => status >= 200 && status < 300
@@ -974,7 +1011,7 @@ $speaker.Speak('${escaped}')
 
     return {
       ok: false,
-      url: `${VOICE_STACK_URL}/`,
+      url: `${baseUrl}/`,
       error: `Silva Voice Stack did not accept known speak endpoints and Windows speech fallback failed. Last error: ${lastError || 'offline'}`
     };
   }
