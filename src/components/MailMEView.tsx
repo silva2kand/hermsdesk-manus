@@ -268,7 +268,25 @@ export const MailMEView = () => {
     const result = await window.ipcRenderer?.updateMailMemoryItem?.(item.id, patch);
     const nextMemory = result?.mailboxMemory || result?.memory;
     if (nextMemory) setMailMemory(nextMemory);
-    showNotice(patch.importanceStatus === 'important' ? 'Marked important and kept in memory.' : patch.importanceStatus === 'not-important' ? 'Marked not important; ME will reduce its priority.' : 'Mail memory updated.');
+    showNotice(
+      patch.deletedAt
+        ? 'Deleted from Mail ME memory list. Original mailbox email was not touched.'
+        : patch.importanceStatus === 'important'
+          ? 'Marked important and kept in memory.'
+          : patch.importanceStatus === 'not-important'
+            ? 'Marked not important; ME will reduce its priority.'
+            : 'Mail memory updated.'
+    );
+  };
+
+  const deleteMemoryItem = async (item: any) => {
+    const ok = window.confirm(`Delete this item from Mail ME memory list?\n\n${item.subject || '(No subject)'}\n\nThis only removes it from HermesDesk memory views. It will not delete the original email from Outlook/Gmail.`);
+    if (!ok) return;
+    await updateMemoryItem(item, {
+      followUpStatus: 'deleted',
+      deletedAt: new Date().toISOString(),
+      deleteReason: 'user-deleted-from-mail-me'
+    });
   };
 
   const draftCustomResponse = async (item: any) => {
@@ -280,7 +298,7 @@ export const MailMEView = () => {
       item.assignedAgent || 'general-agent'
     );
     await updateMemoryItem(item, { followUpStatus: 'draft-requested', userNote: message });
-    showNotice('Reply drafting task queued to the right agent. It will not send without approval.');
+    showNotice('Custom reply task queued and saved on this mail item. It will not send without approval.');
   };
 
   const notifyWhatsApp = async (item: any) => {
@@ -301,8 +319,18 @@ export const MailMEView = () => {
     });
     await updateMemoryItem(item, { followUpStatus: 'whatsapp-drafted' });
     const openNow = window.confirm('Open WhatsApp composer now?');
-    if (openNow) await window.ipcRenderer?.composeWhatsApp?.(message, phone);
-    showNotice(draft?.id ? 'WhatsApp draft saved and desktop notification queued.' : 'WhatsApp draft prepared.');
+    const result = openNow
+      ? await window.ipcRenderer?.composeWhatsApp?.(message, phone).catch((error: any) => ({ ok: false, error: error?.message }))
+      : null;
+    showNotice(
+      openNow
+        ? result?.ok
+          ? 'WhatsApp draft saved, notification queued, composer opened. Press Send manually.'
+          : `WhatsApp draft saved, but composer failed: ${(result as any)?.error || 'unknown error'}`
+        : draft?.id
+          ? 'WhatsApp draft saved and desktop notification queued.'
+          : 'WhatsApp draft prepared.'
+    );
   };
 
   const copyEmail = () => {
@@ -691,6 +719,9 @@ export const MailMEView = () => {
                       </button>
                       <button title="Prepare WhatsApp notification" onClick={() => notifyWhatsApp(item)} className="p-2 rounded-xl bg-green-50 text-green-700 hover:bg-green-100">
                         <Send className="w-3.5 h-3.5" />
+                      </button>
+                      <button title="Delete from Mail ME memory list" onClick={() => deleteMemoryItem(item)} className="p-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>

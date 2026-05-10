@@ -204,23 +204,30 @@ export class WorkspaceService {
   getEmailIntelligenceSummary() {
     const current = this.getEmailIntelligence();
     const memory = current.mailboxMemory || current.memory || {};
+    const itemState = this.store.get('mailMemoryItemState', {}) as Record<string, any>;
+    const isDeleted = (item: any) => Boolean(itemState[item?.id]?.deletedAt || item?.deletedAt);
+    const visibleMessages = (current.messages || []).filter((message: any) => !isDeleted(message));
+    const visibleMemory: any = { ...memory };
+    for (const [key, list] of Object.entries(memory)) {
+      visibleMemory[key] = Array.isArray(list) ? list.filter((item: any) => !isDeleted(item)) : list;
+    }
     if ((current.messages || []).length > 2500 || (current.folders || []).length > 250) {
       this.store.set('emailIntelligence', {
         ...current,
         folders: (current.folders || []).slice(0, 250),
-        messages: (current.messages || []).slice(0, 2500),
-        memory,
-        mailboxMemory: memory
+        messages: visibleMessages.slice(0, 2500),
+        memory: visibleMemory,
+        mailboxMemory: visibleMemory
       });
     }
     return {
       syncedAt: current.syncedAt || null,
       folders: (current.folders || []).slice(0, 200),
       summary: current.summary || {},
-      memory,
-      mailboxMemory: memory,
-      latestMessages: (current.messages || []).slice(0, 100),
-      messageCount: (current.messages || []).length
+      memory: visibleMemory,
+      mailboxMemory: visibleMemory,
+      latestMessages: visibleMessages.slice(0, 100),
+      messageCount: visibleMessages.length
     };
   }
 
@@ -244,6 +251,8 @@ export class WorkspaceService {
       importanceStatus: patch.importanceStatus,
       followUpStatus: patch.followUpStatus,
       userNote: patch.userNote,
+      deletedAt: patch.deletedAt,
+      deleteReason: patch.deleteReason,
       lastReviewedAt: new Date().toISOString()
     };
     const cleanPatch = Object.fromEntries(Object.entries(safePatch).filter(([, value]) => value !== undefined));
@@ -251,9 +260,10 @@ export class WorkspaceService {
     itemState[itemId] = { ...(itemState[itemId] || {}), ...cleanPatch };
     this.store.set('mailMemoryItemState', itemState);
 
-    const updateArray = (items: any[] = []) => items.map((item: any) =>
-      item?.id === itemId ? { ...item, ...cleanPatch } : item
-    );
+    const updateArray = (items: any[] = []) => {
+      const updated = items.map((item: any) => item?.id === itemId ? { ...item, ...cleanPatch } : item);
+      return cleanPatch.deletedAt ? updated.filter((item: any) => item?.id !== itemId) : updated;
+    };
     const memoryKeys = ['billsToPay', 'deadlines', 'urgent', 'insuranceRenewals', 'supplierUpdates', 'staffInvoices', 'zReports', 'accountingEvidence', 'legalEvidence', 'knownProviderEvidence', 'businessResearchEvidence', 'propertyAnalysisEvidence', 'acquisitionEvidence', 'fundingEvidence', 'personalAdminEvidence', 'upcomingImportant'];
     const memory = { ...(current.mailboxMemory || current.memory || {}) };
     for (const key of memoryKeys) memory[key] = updateArray(memory[key] || []);
