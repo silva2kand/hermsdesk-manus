@@ -1144,7 +1144,25 @@ function createWindow() {
   ipcMain.handle('workspace:get-mail', () => workspaceService.getMailSettings())
   ipcMain.handle('workspace:save-mail', (_, s) => workspaceService.saveMailSettings(s))
   ipcMain.handle('workspace:get-whatsapp-drafts', () => workspaceService.getWhatsAppDrafts())
-  ipcMain.handle('workspace:save-whatsapp-draft', (_, d) => workspaceService.saveWhatsAppDraft(d))
+  ipcMain.handle('workspace:save-whatsapp-draft', (_, d) => {
+    const draft = workspaceService.saveWhatsAppDraft(d)
+    try {
+      if (Notification.isSupported()) {
+        new Notification({
+          title: 'HermesDesk WhatsApp draft ready',
+          body: `${draft?.label || draft?.title || 'WhatsApp draft'}${draft?.phone ? `\nTo: ${draft.phone}` : ''}`
+        }).show()
+      }
+      eventBus?.emit('channel.message.out', 'whatsapp', {
+        channel: 'whatsapp',
+        draftId: draft?.id,
+        manualSendOnly: true,
+        status: 'draft-notification',
+        label: draft?.label || draft?.title || 'WhatsApp draft'
+      })
+    } catch {}
+    return draft
+  })
   ipcMain.handle('workspace:mark-whatsapp-opened', (_, id) => workspaceService.updateWhatsAppDraftStatus(id, 'opened'))
   ipcMain.handle('workspace:get-tasks', () => workspaceService.getScheduledTasks())
   ipcMain.handle('workspace:save-tasks', (_, t) => workspaceService.saveScheduledTasks(t))

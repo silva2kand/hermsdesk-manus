@@ -519,10 +519,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   };
 
   const voiceOptions: Record<string, any> = {
-    'tamil-jaffna': { voice: 'tamil-jaffna', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-LK', accent: 'jaffna', style: 'professional' },
-    'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional' },
-    'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional' },
-    'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional' }
+    'tamil-jaffna': { voice: 'tamil-jaffna', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-LK', accent: 'jaffna', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional', allow_windows_fallback: true },
+    'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional', allow_windows_fallback: true }
   };
 
   const speakMessage = async (content: string) => {
@@ -533,7 +533,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       .replace(/\s+/g, ' ')
       .trim();
 
-    const voiceResult = await window.ipcRenderer?.speakVoiceStack?.(`ME says. ${spoken}`, voiceOptions[voicePreset]).catch((error: any) => ({ ok: false, error: error?.message }));
+    const selectedVoice = voiceOptions[voicePreset] || voiceOptions['english-uk'];
+    const speechText = voicePreset.startsWith('tamil') ? spoken : `ME says. ${spoken}`;
+    const voiceResult = await window.ipcRenderer?.speakVoiceStack?.(speechText, selectedVoice).catch((error: any) => ({ ok: false, error: error?.message }));
     if (voiceResult?.ok) {
       addNotice(`Silva Voice Stack speaking: ${(voiceResult as any).voice || voicePreset}`);
       return;
@@ -753,7 +755,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     if (result?.ok && draft?.id) {
       await window.ipcRenderer?.markWhatsAppOpened?.(draft.id).catch(() => null);
     }
-    addNotice(result?.ok ? 'Opened WhatsApp composer. Review and press Send manually.' : 'Could not open WhatsApp.');
+    addNotice(result?.ok ? 'WhatsApp draft saved and composer opened. Review and press Send manually.' : 'WhatsApp draft saved, but the composer did not open.');
   };
 
   const extractWhatsAppNumber = (text: string) => {
@@ -821,8 +823,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       role: 'assistant',
       engine: 'WhatsApp ME',
       content: result?.ok
-        ? `Opened the real WhatsApp composer to ${phone} with this draft:\n\n${message}\n\nPlease review and press Send manually.`
-        : `I saved the WhatsApp draft, but could not open the composer: ${(result as any)?.error || 'unknown error'}`
+        ? `Saved the WhatsApp draft, sent a desktop notification, and opened the real WhatsApp composer to ${phone}:\n\n${message}\n\nPlease review and press Send manually.`
+        : `I saved the WhatsApp draft and sent a desktop notification, but could not open the composer: ${(result as any)?.error || 'unknown error'}`
     }]);
     return true;
   };

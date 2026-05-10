@@ -909,6 +909,15 @@ $speaker.Speak('${escaped}')
   async speakWithVoiceStack(text: string, options: any = {}): Promise<any> {
     const cleanText = String(text || '').trim();
     if (!cleanText) return { ok: false, error: 'No text to speak.' };
+    const language = String(options.language || 'en');
+    const voiceName = String(options.voice || options.accent_id || options.accentId || '');
+    const strictLanguage = Boolean(
+      options.strict_language ||
+      options.strictLanguage ||
+      options.allow_windows_fallback === false ||
+      language.toLowerCase().startsWith('ta') ||
+      voiceName.toLowerCase().includes('tamil')
+    );
 
     const chunks = this.splitSpeechText(cleanText);
     if (!options.__singleChunk && chunks.length > 1) {
@@ -923,12 +932,11 @@ $speaker.Speak('${escaped}')
         mode: 'silva-voice-stack-complete-sequenced',
         chunks: chunks.length,
         voice: options.voice || 'en-gb-default',
-        language: options.language || 'en'
+        language
       };
     }
 
     const voice = options.voice || 'en-gb-default';
-    const language = options.language || 'en';
     // Map user-friendly voice names to valid accent_id values the server recognizes
     const accentMap: Record<string, string> = {
       'tamil-jaffna': 'ta-default', 'ta-m1': 'ta-default', 'tamil': 'ta-default', 'ta': 'ta-default',
@@ -949,6 +957,8 @@ $speaker.Speak('${escaped}')
       accentId: accent_id,
       voice,
       language,
+      strict_language: strictLanguage,
+      allow_windows_fallback: !strictLanguage,
       accent: options.accent || options.style || undefined,
       rate: options.rate || 1,
       style: options.style || 'professional'
@@ -993,6 +1003,17 @@ $speaker.Speak('${escaped}')
         try { parsed = JSON.parse(body); } catch { parsed = { message: body }; }
         const responseMode = String(parsed?.mode || parsed?.engine || '').toLowerCase();
         const fallback = responseMode.includes('sapi') || responseMode.includes('fallback');
+        if (fallback && strictLanguage) {
+          return {
+            ok: false,
+            mode: 'strict-language-blocked-fallback',
+            endpoint,
+            voice,
+            language,
+            response: parsed,
+            error: `Tamil voice is selected, but the voice server tried to use Windows/English fallback. Repair or install the Tamil/Jaffna voice route instead of speaking English.`
+          };
+        }
         return { ok: true, mode: fallback ? 'windows-sapi-from-voice-stack' : 'silva-premium-voice-stack', endpoint, voice, language, response: parsed };
       } catch (error: any) {
         if (error?.code === 'ECONNABORTED') {
@@ -1003,6 +1024,16 @@ $speaker.Speak('${escaped}')
           ? Buffer.from(error.response.data).toString('utf8').slice(0, 300)
           : error?.message || String(error);
       }
+    }
+
+    if (strictLanguage) {
+      return {
+        ok: false,
+        url: `${baseUrl}/`,
+        voice,
+        language,
+        error: `Tamil voice is selected, but no Tamil audio route accepted the request. I refused the English Windows fallback. Last error: ${lastError || 'offline'}`
+      };
     }
 
     if (this.speakWithWindowsSapiDetached(cleanText)) {

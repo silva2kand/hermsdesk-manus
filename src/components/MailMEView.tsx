@@ -290,7 +290,7 @@ export const MailMEView = () => {
     const savedPhone = window.localStorage.getItem(WHATSAPP_NUMBER_KEY) || '';
     const phone = window.prompt('WhatsApp phone number for this notification', savedPhone) || savedPhone;
     if (phone) window.localStorage.setItem(WHATSAPP_NUMBER_KEY, phone);
-    await window.ipcRenderer?.saveWhatsAppDraft?.({
+    const draft = await window.ipcRenderer?.saveWhatsAppDraft?.({
       title: item.subject || 'Mail reminder',
       message,
       phone,
@@ -302,6 +302,7 @@ export const MailMEView = () => {
     await updateMemoryItem(item, { followUpStatus: 'whatsapp-drafted' });
     const openNow = window.confirm('Open WhatsApp composer now?');
     if (openNow) await window.ipcRenderer?.composeWhatsApp?.(message, phone);
+    showNotice(draft?.id ? 'WhatsApp draft saved and desktop notification queued.' : 'WhatsApp draft prepared.');
   };
 
   const copyEmail = () => {
