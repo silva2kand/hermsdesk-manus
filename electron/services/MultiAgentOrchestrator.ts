@@ -1047,7 +1047,12 @@ ${JSON.stringify({
   zReports: (mailboxMemory.zReports || []).slice(0, 8),
   accountingEvidence: (mailboxMemory.accountingEvidence || []).slice(0, 8),
   legalEvidence: (mailboxMemory.legalEvidence || []).slice(0, 8),
-  knownProviderEvidence: (mailboxMemory.knownProviderEvidence || []).slice(0, 8)
+  knownProviderEvidence: (mailboxMemory.knownProviderEvidence || []).slice(0, 8),
+  businessResearchEvidence: (mailboxMemory.businessResearchEvidence || []).slice(0, 8),
+  propertyAnalysisEvidence: (mailboxMemory.propertyAnalysisEvidence || []).slice(0, 8),
+  acquisitionEvidence: (mailboxMemory.acquisitionEvidence || []).slice(0, 8),
+  fundingEvidence: (mailboxMemory.fundingEvidence || []).slice(0, 8),
+  personalAdminEvidence: (mailboxMemory.personalAdminEvidence || []).slice(0, 8)
 }, null, 2)}
 
 ### CRITICAL CONSTRAINTS

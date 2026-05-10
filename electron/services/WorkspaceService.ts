@@ -33,6 +33,7 @@ Memory | Skills | Knowledges - Complete, additive, always updated.
 - Z-reports/EPOS notifications from the shop are low-priority FYI/store operations unless abnormal: void/refund/cash variance/missing/failed/error. Still keep them in memory as sales/accounting/VAT/funding evidence.
 - Separate "review now" from "keep as evidence": retain zReports, accountingEvidence, and legalEvidence memory even when those items are not urgent.
 - Important known providers/senders must always be remembered and classified: Elavon, PayPoint, Fiserv, Clover, Viva Wallet, PaymentSave, PayPal, VBR EPos/Visual Business Retail, HMRC, Companies House, Pension Regulator auto-enrolment, DVLA, Action Fraud/Police, RC Legal, Holdens Law, William Harris Solicitors, EPP/AMC surveyors, Lancaster Council, BP Auctions, MYT Accounts/QuickBooks/Payroll, Tide, ANNA, Nationwide, Loqbox, iwoca, Funding Circle, Capital One, Simply Business, Darwin, Vavista, Insurance Factory, JTI, Parcelly, Sysco, Deliveroo, Sky, BT, Three, DocuSign.
+- Domain engine memory buckets: accountingEvidence, legalEvidence, businessResearchEvidence, propertyAnalysisEvidence, acquisitionEvidence, fundingEvidence, personalAdminEvidence, zReports, and knownProviderEvidence must be kept as history even when not urgent.
 - Marketing, newsletters, campaigns, junk, discounts, fashion, vouchers, and generic property alerts are background unless Silva marks them important.
 - Money, payments, legal submissions, external messages, installs, and destructive actions require approval.
 
@@ -253,7 +254,7 @@ export class WorkspaceService {
     const updateArray = (items: any[] = []) => items.map((item: any) =>
       item?.id === itemId ? { ...item, ...cleanPatch } : item
     );
-    const memoryKeys = ['billsToPay', 'deadlines', 'urgent', 'insuranceRenewals', 'supplierUpdates', 'staffInvoices', 'zReports', 'accountingEvidence', 'legalEvidence', 'knownProviderEvidence', 'upcomingImportant'];
+    const memoryKeys = ['billsToPay', 'deadlines', 'urgent', 'insuranceRenewals', 'supplierUpdates', 'staffInvoices', 'zReports', 'accountingEvidence', 'legalEvidence', 'knownProviderEvidence', 'businessResearchEvidence', 'propertyAnalysisEvidence', 'acquisitionEvidence', 'fundingEvidence', 'personalAdminEvidence', 'upcomingImportant'];
     const memory = { ...(current.mailboxMemory || current.memory || {}) };
     for (const key of memoryKeys) memory[key] = updateArray(memory[key] || []);
     current.messages = updateArray(current.messages || []);

@@ -643,6 +643,16 @@ export const MailMEView = () => {
           </div>
         )}
 
+        {mailMemory && (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <IndexStat label="Business research" value={(mailMemory.businessResearchEvidence?.length || 0).toLocaleString()} />
+            <IndexStat label="Property analysis" value={(mailMemory.propertyAnalysisEvidence?.length || 0).toLocaleString()} />
+            <IndexStat label="Acquisition pipeline" value={(mailMemory.acquisitionEvidence?.length || 0).toLocaleString()} />
+            <IndexStat label="Funding evidence" value={(mailMemory.fundingEvidence?.length || 0).toLocaleString()} />
+            <IndexStat label="Personal admin" value={(mailMemory.personalAdminEvidence?.length || 0).toLocaleString()} />
+          </div>
+        )}
+
         {upcomingItems.length > 0 && (
           <div className="p-4 bg-white border border-gray-100 rounded-2xl">
             <div className="flex items-center justify-between gap-3">

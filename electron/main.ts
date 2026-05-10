@@ -254,6 +254,9 @@ function createWindow() {
     const localPropertyPattern = /(lancaster|morecambe|heysham|la1|la2|la3|la4|la5|la6|closed shop|corner.?shop|mixed.?use|commercial premises|retail premises|newsagent|shop premises|off.?market|auction|estate agent|mortgage broker|surveyor|epc|daltons business)/i
     const operationalPattern = /(pos alert|staff activity|till open|till close|open\/close|refund|void|stock order|delivery confirmation|supplier shortage|shortage|price change|tobacco|lottery compliance|card machine|payment processor|cctv|pos system update)/i
     const personalAdminPattern = /(nhs|gp|dvla|personal bank|personal insurance|family legal|family document)/i
+    const businessResearchPattern = /(supplier offer|wholesaler promotion|price increase|cost increase|retail equipment|cctv|pos update|payment processor|card machine|contract renewal|fee change|market trend|competitor|business rates|council update|jti|sysco|parcelly|deliveroo|bt|sky|three)/i
+    const acquisitionPattern = /(offer deadline|auction deadline|legal pack|completion|exchange|funding required|solicitor required|missing document|auction|property purchase|buying|acquisition|bid|registration|due diligence)/i
+    const fundingPattern = /(funding|funder|lender|loan|overdraft|pre.?approved|instant approval|cashflow|cash flow|bank statement|credit score|capital|iwoca|funding circle|tide|anna|nationwide finance|loqbox|capital one)/i
     const distantPropertyNoisePattern = /(birmingham|west midlands|manchester|liverpool|york|north east|carlisle|penrith|cumbria|lake district)/i
     const marketingNoisePattern = /(newsletter|digest|substack|voucher|win £|win\s?\d|fashion|festival|sale|discount|clearance|promotion|promo|marketing|campaign|petition|organise\.network|national lottery|cash converters|rightmove news|home worth|valuation update|most-viewed homes|unsubscribe|black friday|christmas offer)/i
     const autoReplyNoisePattern = /(automatic reply|undeliverable|out of office|delivery status notification)/i
@@ -410,6 +413,36 @@ function createWindow() {
         knownSenderCategory: knownSenderCategory(message),
         evidenceUse: 'trusted sender/provider memory'
       }))
+    const businessResearchEvidence = sorted.filter((message: any) => businessResearchPattern.test(messageText(message)) || ['storeOps', 'paymentProvider', 'utilitiesTelecom'].includes(knownSenderCategory(message)))
+      .sort(byPriorityThenDate).slice(0, 160).map((message: any) => memoryItem(message, 'business-research-evidence', {
+        priorityScore: mailPriorityScore(message),
+        hasAttachments: Boolean(message.hasAttachments),
+        evidenceUse: 'business research, supplier intelligence, cost/risk/opportunity tracking'
+      }))
+    const propertyAnalysisEvidence = sorted.filter((message: any) => localPropertyPattern.test(messageText(message)) || knownSenderCategory(message) === 'councilProperty')
+      .sort(byPriorityThenDate).slice(0, 160).map((message: any) => memoryItem(message, 'property-analysis-evidence', {
+        priorityScore: mailPriorityScore(message),
+        hasAttachments: Boolean(message.hasAttachments),
+        evidenceUse: 'property listing, survey, auction, planning, shop-premises analysis'
+      }))
+    const acquisitionEvidence = sorted.filter((message: any) => acquisitionPattern.test(messageText(message)) || (localPropertyPattern.test(messageText(message)) && /auction|offer|legal pack|completion|bid|purchase/i.test(messageText(message))))
+      .sort(byPriorityThenDate).slice(0, 120).map((message: any) => memoryItem(message, 'acquisition-evidence', {
+        priorityScore: mailPriorityScore(message),
+        hasAttachments: Boolean(message.hasAttachments),
+        evidenceUse: 'buying/acquisition workflow, solicitor/funding/completion tracking'
+      }))
+    const fundingEvidence = sorted.filter((message: any) => fundingPattern.test(messageText(message)) || knownSenderCategory(message) === 'businessBankingFunding')
+      .sort(byPriorityThenDate).slice(0, 160).map((message: any) => memoryItem(message, 'funding-evidence', {
+        priorityScore: mailPriorityScore(message),
+        hasAttachments: Boolean(message.hasAttachments),
+        evidenceUse: 'funding intelligence, lender packs, affordability/cashflow review'
+      }))
+    const personalAdminEvidence = sorted.filter((message: any) => personalAdminPattern.test(messageText(message)))
+      .sort(byPriorityThenDate).slice(0, 120).map((message: any) => memoryItem(message, 'personal-admin-evidence', {
+        priorityScore: mailPriorityScore(message),
+        hasAttachments: Boolean(message.hasAttachments),
+        evidenceUse: 'personal admin, vehicle, DVLA, NHS/GP, personal banking/insurance'
+      }))
     const upcomingImportant = sorted.filter((message: any) => {
       const text = messageText(message)
       return isPriorityMail(message, 30) && (
@@ -427,7 +460,7 @@ function createWindow() {
       .sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'urgent', {
         reason: message.importance === 'high' ? 'high importance' : message.flagStatus === 'flagged' ? 'flagged' : 'unread'
       }))
-    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, zReports, accountingEvidence, legalEvidence, knownProviderEvidence, upcomingImportant, urgent }
+    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, zReports, accountingEvidence, legalEvidence, knownProviderEvidence, businessResearchEvidence, propertyAnalysisEvidence, acquisitionEvidence, fundingEvidence, personalAdminEvidence, upcomingImportant, urgent }
   }
 
   const processEmailIntelligence = async (data: any, source = 'mailbox', options: { taskLimit?: number } = {}) => {
@@ -481,6 +514,11 @@ function createWindow() {
       accountingEvidence: mergeMemoryList('accountingEvidence', 240),
       legalEvidence: mergeMemoryList('legalEvidence', 160),
       knownProviderEvidence: mergeMemoryList('knownProviderEvidence', 240),
+      businessResearchEvidence: mergeMemoryList('businessResearchEvidence', 160),
+      propertyAnalysisEvidence: mergeMemoryList('propertyAnalysisEvidence', 160),
+      acquisitionEvidence: mergeMemoryList('acquisitionEvidence', 120),
+      fundingEvidence: mergeMemoryList('fundingEvidence', 160),
+      personalAdminEvidence: mergeMemoryList('personalAdminEvidence', 120),
       upcomingImportant: mergeMemoryList('upcomingImportant', 120),
       urgent: mergeMemoryList('urgent')
     };
