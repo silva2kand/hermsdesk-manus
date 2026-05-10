@@ -21,7 +21,7 @@ const VOICE_STACK_PYTHON = fs.existsSync(path.join(VOICE_STACK_ROOT, 'env311', '
   ? path.join(VOICE_STACK_ROOT, 'env311', 'Scripts', 'python.exe')
   : path.join(VOICE_STACK_ROOT, 'venv_311', 'Scripts', 'python.exe');
 const VOICE_STACK_PRIMARY_URL = 'http://127.0.0.1:7100';
-const VOICE_STACK_FALLBACK_URLS = ['http://127.0.0.1:7100', 'http://127.0.0.1:8000'];
+const VOICE_STACK_FALLBACK_URLS = ['http://127.0.0.1:7100'];
 
 export class DesktopIntegrationService {
   private classicOutlookStatusCache: { value: any; at: number } | null = null;
