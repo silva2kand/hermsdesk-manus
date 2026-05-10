@@ -42,8 +42,16 @@ const isStatusOrUpdatesPrompt = (text: string) =>
 const isPreferenceTrainingPrompt = (text: string) =>
   /(remember|from now on|you must|must|don't show|do not show|not interested|only show|treat this|mark this|ignore this|my preference|i prefer|i want you to|when you analyse|when you analyze|always|never|training|learn this|thanks? yes|thank yes|i have booked|i booked|gather all|filter|prioriti[sz]e)/i.test(text);
 
+const timeAwareGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
 const scorePriorityMail = (item: any) => {
   const text = `${item?.subject || ''} ${item?.sender || ''} ${item?.senderEmail || ''} ${item?.preview || item?.bodyPreview || ''} ${item?.type || ''} ${item?.categoryLabel || ''} ${item?.folderName || ''}`.toLowerCase();
+  const normalZReport = /z[-\s]?report|epos/.test(text) && !/void|refund|short|over|missing|failed|error|cash difference|variance|mismatch/.test(text);
   let score = 0;
   if (item?.importanceStatus === 'important') score += 100;
   if (item?.importanceStatus === 'not-important') score -= 200;
@@ -51,7 +59,7 @@ const scorePriorityMail = (item: any) => {
   if (item?.unread) score += 6;
   if (item?.hasAttachments) score += 12;
   if (/steamer street|howlish view|langdale place|land registry|certificate of compliance|requisition|ground rent|service charge|leasehold|freehold|rc\.legal|grangeford|fraud report|nfrc/.test(text)) score += 85;
-  if (/silva retail|newton newsagent|newton store|parfetts|e-invoice|customer 105105|epos|z-report|merchant|card payment|bank statement|credit card/.test(text)) score += 55;
+  if (/silva retail|newton newsagent|newton store|parfetts|e-invoice|customer 105105|merchant|card payment|bank statement|credit card/.test(text)) score += 55;
   if (/bill|invoice|payment due|overdue|final notice|statement|direct debit|arrears|balance due/.test(text)) score += 55;
   if (/deadline|expires|expiry|renewal|policy|premium|mot|road tax|vehicle tax|appointment|hearing/.test(text)) score += 50;
   if (/hmrc|vat|tax|council|lancaster city council|land registry|solicitor|conveyancer|court|tribunal|legal|accountant/.test(text)) score += 45;
@@ -61,6 +69,7 @@ const scorePriorityMail = (item: any) => {
   if (/birmingham|west midlands|manchester|liverpool|york|north east|carlisle|penrith|lake district/.test(text) && !/steamer street|legal|solicitor|land registry/.test(text)) score -= 35;
   if (/junk email|spam|unsubscribe|newsletter|digest|substack|fashion|festival|shopping voucher|sale|discount|clearance|promotion|promo|marketing|property alerts|organise\.network|petition|campaign/.test(text)) score -= 45;
   if (/automatic reply|undeliverable|out of office/.test(text)) score -= 35;
+  if (normalZReport && item?.importanceStatus !== 'important') score = Math.min(score, 20);
   return score;
 };
 
@@ -879,7 +888,7 @@ Use the controlled browser session if available. Keep every step visible in Even
         ? priorityItems.map((item: any, index: number) => `${index + 1}. ${item.subject || '(no subject)'}\nFrom: ${item.sender || item.senderEmail || 'unknown'}\nReceived: ${item.receivedAt ? new Date(item.receivedAt).toLocaleString() : 'unknown'}\nType: ${item.type || item.categoryLabel || 'mail'} | Priority score: ${item.priorityScore}${item.assignedAgent ? `\nAgent: ${item.assignedAgent}` : ''}\nPreview: ${String(item.preview || item.bodyPreview || '').slice(0, 180)}`)
         : ['No high-priority mailbox items are currently surfaced in local memory.'];
       const content = [
-        `Good morning Syan. Baba/Mythos checked local memory and live system state, not raw model memory.`,
+        `${timeAwareGreeting()} Syan. Baba/Mythos checked local memory and live system state, not raw model memory.`,
         '',
         `Mailbox memory: ${(memory?.totalIndexed || 0).toLocaleString()} emails indexed, updated ${updated}.`,
         `Unread: ${(memory?.unreadCount || 0).toLocaleString()} | Bills/payments: ${(memory?.billsToPay?.length || 0).toLocaleString()} | Deadlines: ${(memory?.deadlines?.length || 0).toLocaleString()} | Insurance renewals: ${(memory?.insuranceRenewals?.length || 0).toLocaleString()}`,
