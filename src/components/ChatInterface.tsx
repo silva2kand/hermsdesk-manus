@@ -39,6 +39,9 @@ const WHATSAPP_NUMBER_KEY = 'hermsdesk.user.whatsappNumber';
 const isStatusOrUpdatesPrompt = (text: string) =>
   /\b(hi|hey|hello|good morning|good afternoon|good evening)\b|how are|how'?s it going|system status|status|any updates|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always/i.test(text);
 
+const isPreferenceTrainingPrompt = (text: string) =>
+  /(remember|from now on|you must|must|don't show|do not show|not interested|only show|treat this|mark this|ignore this|my preference|i prefer|i want you to|when you analyse|when you analyze|always|never|training|learn this|thanks? yes|thank yes|i have booked|i booked|gather all|filter|prioriti[sz]e)/i.test(text);
+
 const scorePriorityMail = (item: any) => {
   const text = `${item?.subject || ''} ${item?.sender || ''} ${item?.senderEmail || ''} ${item?.preview || item?.bodyPreview || ''} ${item?.type || ''} ${item?.categoryLabel || ''} ${item?.folderName || ''}`.toLowerCase();
   let score = 0;
@@ -64,6 +67,7 @@ type ChatSession = {
 
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
+  if (isPreferenceTrainingPrompt(prompt)) return 'general-agent';
   if (/(browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish)/.test(text)) return 'browser-automation-agent';
   if (/(court|tribunal|appeal|judg|justice|legal|solicitor|law|claim|evidence|ombudsman|complaint|hmcts|uk)/.test(text)) return 'justice-case-agent';
   if (/(buy|seller|refund|chargeback|section 75|scam|product|purchase|return|ebay|amazon|shop|payment)/.test(text)) return 'purchase-guardian-agent';
@@ -402,6 +406,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const buildMailboxEvidenceAnswer = (prompt: string, mailboxMemory: any, matches: any[]) => {
     const lower = prompt.toLowerCase();
+    if (isPreferenceTrainingPrompt(prompt)) return '';
     const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking)/i.test(prompt);
     if (!isMailQuestion) return '';
 
@@ -478,10 +483,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   };
 
   const voiceOptions: Record<string, any> = {
-    'tamil-jaffna': { voice: 'ta-m1', accent_id: 'ta-m1', language: 'ta-LK', accent: 'jaffna', style: 'professional' },
-    'tamil-india': { voice: 'ta-default', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional' },
-    'english-uk': { voice: 'en-gb-default', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional' },
-    'english-us': { voice: 'en-us-default', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional' }
+    'tamil-jaffna': { voice: 'tamil-jaffna', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-LK', accent: 'jaffna', style: 'professional' },
+    'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional' },
+    'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-gb-default', language: 'en-GB', accent: 'uk', style: 'professional' },
+    'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-default', language: 'en-US', accent: 'us', style: 'professional' }
   };
 
   const speakMessage = async (content: string) => {
@@ -887,6 +892,58 @@ Use the controlled browser session if available. Keep every step visible in Even
     }
   };
 
+  const handlePreferenceTrainingIntent = async (outgoing: string) => {
+    if (!isPreferenceTrainingPrompt(outgoing)) return false;
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps(['Routing as Baba memory training', 'Saving preference rules', 'Updating future priority filters', 'Not searching random email evidence']);
+
+    try {
+      const learnedRules: string[] = [];
+      const lower = outgoing.toLowerCase();
+      if (/z[-\s]?reports?/.test(lower)) learnedRules.push('Z-Reports from VBR EPOS/Newton Newsagent are normal staff/shop notifications; surface as FYI unless abnormal, missing, duplicated, cash/card mismatch, or explicitly requested.');
+      if (/mot/.test(lower) && /(booked|next week|book)/.test(lower)) learnedRules.push('MOT for YK13WNZ is booked for next week; do not keep treating the current MOT reminder as unresolved urgent unless a new risk appears.');
+      if (/birmingham/.test(lower) && /not interested/.test(lower)) learnedRules.push('Property opportunity filter: Birmingham/West Midlands opportunities are not currently interesting unless Syan explicitly asks.');
+      if (/lancaster|morecambe|morecome|surrounding/.test(lower)) learnedRules.push('Property opportunity filter: prioritise Lancaster, Morecambe, and nearby surrounding areas.');
+      if (/accounting|bank statements?|funders?|funding/.test(lower)) learnedRules.push('Funding preparation: gather and organise accounting records, invoices, statements, bank statements, Z-reports, VAT/tax evidence, and finance emails so Accountant/Purchase Guardian can identify funders and finance options.');
+      if (/closed shop|shop premisses|shop premises|cornershop|corner shop|premises/.test(lower)) learnedRules.push('Property analysis preference: when analysing property opportunities, look for closed shop/corner-shop premises and retail conversion/business potential, not just residential investment.');
+      if (!learnedRules.length) learnedRules.push(`Preference/training note from Syan: ${outgoing}`);
+
+      const existing = await window.ipcRenderer?.getSilvaMemory?.().catch(() => '') || '';
+      const stamp = new Date().toISOString();
+      const block = [
+        '',
+        `## BABA LEARNED PREFERENCES - ${stamp}`,
+        ...learnedRules.map(rule => `- ${rule}`)
+      ].join('\n');
+      await window.ipcRenderer?.saveSilvaMemory?.(`${existing}\n${block}`.trim()).catch(() => false);
+
+      window.ipcRenderer?.createAgentTask?.(
+        `Baba preference update from Syan. Apply these rules to future mailbox triage, property analysis, accounting preparation, and morning updates:\n${learnedRules.map(rule => `- ${rule}`).join('\n')}`,
+        'general-agent'
+      ).catch(() => null);
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        engine: 'Mythos Memory Trainer',
+        content: [
+          'Understood Syan. I saved this as Baba/Mythos preference training, not as an insurance/email search.',
+          '',
+          'Updated rules:',
+          ...learnedRules.map(rule => `- ${rule}`),
+          '',
+          'Future morning updates and mailbox intelligence should use these filters before surfacing priorities. External actions still need approval.'
+        ].join('\n')
+      }]);
+    } finally {
+      setIsTyping(false);
+      setResearchSteps([]);
+    }
+    return true;
+  };
+
   const openVideoCall = async () => {
     await window.ipcRenderer?.openApp?.('video call');
     addNotice('Opened video call room in your browser.');
@@ -1018,6 +1075,7 @@ Use the controlled browser session if available. Keep every step visible in Even
     if (await handleWhatsAppIntent(outgoing)) return;
     if (await handleBrowserAutomationIntent(outgoing)) return;
     if (await handleFrontDoorStatusIntent(outgoing)) return;
+    if (await handlePreferenceTrainingIntent(outgoing)) return;
 
     if (/(build|repair|fix|install|setup|self[-\s]?build).*(voice|tts|speech|silva voice)|voice.*(build|repair|fix|install|setup|self[-\s]?build)/i.test(outgoing)) {
       const userMessage = { role: 'user', content: outgoing };
@@ -1056,7 +1114,7 @@ Use the controlled browser session if available. Keep every step visible in Even
     }
 
     const userMessage = { role: 'user', content: outgoing };
-    const needsMailMemory = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|importon|iporton|updates?|need looking|what needs)/i.test(outgoing);
+    const needsMailMemory = !isPreferenceTrainingPrompt(outgoing) && /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|importon|iporton|updates?|need looking|what needs)/i.test(outgoing);
     const wantsLiveWeb = !needsMailMemory && /(research|web|internet|latest|current|today|news|official|source|cite|verify online|search online|browser)/i.test(outgoing);
     let memoryContext: any = null;
     let matchingEmails: any[] = [];

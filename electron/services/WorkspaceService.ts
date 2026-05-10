@@ -38,7 +38,7 @@ Memory | Skills | Knowledges - Complete, additive, always updated.
 ## BABA SKILLS
 - MemoryVault: long-term identity, semantic, episodic, procedural, preferences, goals, tools, emails, documents, finance, property, business, and task memory.
 - OperatorCore: visible PC/browser/app automation with STOP, approval gates, live events, screenshots, read/click/type/scroll/verify.
-- VoiceCore: local speech stack, premium English voice route now usable; Tamil/Jaffna remains a repair target.
+- VoiceCore: local speech stack; premium English route works; Tamil/Jaffna UI routes through working ta-default while ta-jaffna-premium remains a model/profile repair target.
 - EmailAgent: read, index, dedupe, classify, remember, route, and update new emails from Classic Outlook/Graph when available.
 - BrowserAgent: visible web search, cookie handling, result clicking, extraction, screenshots, and safe purchase-gate stopping.
 - SafetyGovernor: never silently send, pay, file, delete, move, submit, install, or contact third parties.
