@@ -36,8 +36,15 @@ const providerLabel = (name: string) => name === 'Auto' ? 'Auto Mix (local first
 const CHAT_HISTORY_KEY = 'hermsdesk.chat.sessions.v1';
 const WHATSAPP_NUMBER_KEY = 'hermsdesk.user.whatsappNumber';
 
+const isCasualChatPrompt = (text: string) => {
+  const clean = text.toLowerCase().replace(/[^\w\s']/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!clean) return false;
+  return /^(hi|hey|hello|hiya|yo|good morning|good afternoon|good evening|how are you|how are you doing|how's it going|how you doing|you ok|are you ok|thanks|thank you|cheers)\b/.test(clean)
+    && !/(update|urgent|important|status|email|mail|bill|payment|deadline|insurance|mot|tax|hmrc|legal|property|accounting|funding|search|research|open|run|check|find|show|list|delete|send|draft|whatsapp)/i.test(clean);
+};
+
 const isStatusOrUpdatesPrompt = (text: string) =>
-  /\b(hi|hey|hello|good morning|good afternoon|good evening)\b|how are|how'?s it going|system status|status|any updates|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always/i.test(text);
+  /system status|\bstatus\b|any updates|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always|check memory|check emails|mailbox|inbox/i.test(text);
 
 const isPreferenceTrainingPrompt = (text: string) =>
   /(remember|from now on|you must|must|don't show|do not show|not interested|only show|treat this|mark this|ignore this|my preference|i prefer|i want you to|when you analyse|when you analyze|always|never|training|learn this|thanks? yes|thank yes|i have booked|i booked|gather all|filter|prioriti[sz]e)/i.test(text);
@@ -1006,6 +1013,29 @@ Use the controlled browser session if available. Keep every step visible in Even
     }
   };
 
+  const handleCasualChatIntent = async (outgoing: string) => {
+    if (!isCasualChatPrompt(outgoing)) return false;
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps(['Routing to Baba general chat']);
+
+    try {
+      const greeting = timeAwareGreeting();
+      const content = [
+        `${greeting} Syan. I am doing good. I am here and ready.`,
+        '',
+        'Normal chat mode is active. Ask for updates, urgent items, emails, bills, legal, accounting, property, or funding when you want the full Mythos scan.'
+      ].join('\n');
+      setMessages(prev => [...prev, { role: 'assistant', engine: 'Baba General Chat', content }]);
+      return true;
+    } finally {
+      setIsTyping(false);
+      setResearchSteps([]);
+    }
+  };
+
   const handlePreferenceTrainingIntent = async (outgoing: string) => {
     if (!isPreferenceTrainingPrompt(outgoing)) return false;
     const userMessage = { role: 'user', content: outgoing };
@@ -1188,6 +1218,7 @@ Use the controlled browser session if available. Keep every step visible in Even
 
     if (await handleWhatsAppIntent(outgoing)) return;
     if (await handleBrowserAutomationIntent(outgoing)) return;
+    if (await handleCasualChatIntent(outgoing)) return;
     if (await handleFrontDoorStatusIntent(outgoing)) return;
     if (await handlePreferenceTrainingIntent(outgoing)) return;
 
