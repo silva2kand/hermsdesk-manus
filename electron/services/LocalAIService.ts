@@ -49,6 +49,10 @@ export class LocalAIService {
   constructor(sharedStore?: any) {
     this.store = sharedStore || new Store({ name: 'config', atomically: false, watch: false });
     this.activeJanModel = this.store.get('activeJanModel', '') as string;
+    const cachedPc = this.store.get('pcHardwareCache', null) as any;
+    if (cachedPc?.gpu && !/detecting/i.test(cachedPc.gpu)) {
+      this.pcCache = cachedPc;
+    }
     if (!fs.existsSync(this.modelsPath)) fs.mkdirSync(this.modelsPath, { recursive: true });
     if (!fs.existsSync(this.getHermsDeskJanProfileRoot())) fs.mkdirSync(this.getHermsDeskJanProfileRoot(), { recursive: true });
   }
@@ -512,6 +516,37 @@ export class LocalAIService {
   }
 
   private async scanNvidiaSmi() {
+    const candidates = [
+      'nvidia-smi',
+      'C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe',
+      'C:\\Windows\\System32\\nvidia-smi.exe'
+    ];
+    for (const candidate of candidates) {
+      try {
+        const { stdout } = await execFileAsync(candidate, ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], { timeout: 2500, windowsHide: true });
+        const line = stdout.split(/\r?\n/).find(Boolean) || '';
+        const [name, memoryMb] = line.split(',').map(v => v.trim());
+        if (name) return { name, vramGb: Math.round(Number(memoryMb) / 1024) };
+      } catch {}
+    }
+    return null;
+  }
+
+  private cachePcResources(next: any) {
+    const clean = {
+      ...next,
+      gpu: next?.gpu && !/detecting/i.test(next.gpu) ? next.gpu : 'GPU not detected',
+      vram: next?.vram || '0GB',
+      ram: next?.ram || `${Math.round(os.totalmem() / (1024 ** 3))}GB`,
+      os: next?.os || `${os.type()} ${os.release()}`,
+      scannedAt: Date.now()
+    };
+    this.pcCache = clean;
+    this.store.set('pcHardwareCache', clean);
+    return clean;
+  }
+
+  private async scanNvidiaSmiLegacy() {
     try {
       const { stdout } = await execFileAsync('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], { timeout: 2500, windowsHide: true });
       const [name, memoryMb] = stdout.split(',').map(v => v.trim());
@@ -521,10 +556,14 @@ export class LocalAIService {
 
   private async scanWindowsHardwareFallback() {
     const nvidiaGpu = await this.scanNvidiaSmi();
-    const script = `$ErrorActionPreference = 'SilentlyContinue'; $gpu = Get-CimInstance Win32_VideoController | Sort-Object AdapterRAM -Descending | Select-Object -First 1; $os = Get-CimInstance Win32_OperatingSystem; [pscustomobject]@{ gpu = if ($gpu.Name) { [string]$gpu.Name } else { 'GPU not detected' }; vram = if ($gpu.AdapterRAM) { [math]::Round([double]$gpu.AdapterRAM / 1GB) } else { 0 }; ram = if ($os.TotalVisibleMemorySize) { [math]::Round([double]$os.TotalVisibleMemorySize / 1MB) } else { 0 }; os = "$($os.Caption) $($os.Version)" } | ConvertTo-Json -Compress`;
-    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], { timeout: 5000, windowsHide: true });
-    const parsed = JSON.parse(stdout.trim());
-    return { gpu: nvidiaGpu?.name || parsed.gpu, vram: `${nvidiaGpu?.vramGb || parsed.vram}GB`, ram: `${parsed.ram}GB`, os: parsed.os, scannedAt: Date.now(), approximate: false };
+    try {
+      const script = `$ErrorActionPreference = 'SilentlyContinue'; $gpu = Get-CimInstance Win32_VideoController | Sort-Object AdapterRAM -Descending | Select-Object -First 1; $os = Get-CimInstance Win32_OperatingSystem; [pscustomobject]@{ gpu = if ($gpu.Name) { [string]$gpu.Name } else { 'GPU not detected' }; vram = if ($gpu.AdapterRAM) { [math]::Round([double]$gpu.AdapterRAM / 1GB) } else { 0 }; ram = if ($os.TotalVisibleMemorySize) { [math]::Round([double]$os.TotalVisibleMemorySize / 1MB) } else { 0 }; os = "$($os.Caption) $($os.Version)" } | ConvertTo-Json -Compress`;
+      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], { timeout: 5000, windowsHide: true });
+      const parsed = JSON.parse(stdout.trim());
+      return this.cachePcResources({ gpu: nvidiaGpu?.name || parsed.gpu, vram: `${nvidiaGpu?.vramGb || parsed.vram || 0}GB`, ram: `${parsed.ram || Math.round(os.totalmem() / (1024 ** 3))}GB`, os: parsed.os, approximate: false });
+    } catch {
+      return this.cachePcResources({ gpu: nvidiaGpu?.name || this.pcCache.gpu || 'GPU not detected', vram: `${nvidiaGpu?.vramGb || Number(String(this.pcCache.vram || '').match(/\d+/)?.[0] || 0)}GB`, ram: `${Math.round(os.totalmem() / (1024 ** 3))}GB`, os: `${os.type()} ${os.release()}`, approximate: true });
+    }
   }
 
   async scanPCResources() {
@@ -532,18 +571,16 @@ export class LocalAIService {
       const [gpus, mem, osInfo] = await Promise.all([this.withTimeout(si.graphics(), 3500, 'GPU'), this.withTimeout(si.mem(), 2500, 'RAM'), this.withTimeout(si.osInfo(), 2500, 'OS')]);
       const mainGpu = gpus.controllers[0];
       const nvidiaGpu = await this.scanNvidiaSmi();
-      this.pcCache = { 
+      return this.cachePcResources({ 
         gpu: nvidiaGpu?.name || mainGpu?.model || 'Integrated', 
         vram: `${nvidiaGpu?.vramGb || Math.round((mainGpu?.vram || 0) / 1024) || 0}GB`, 
         ram: `${Math.round(mem.total / (1024 ** 3))}GB`, 
         os: `${osInfo.distro} ${osInfo.release}`, 
         scannedAt: Date.now(), 
         approximate: !mainGpu 
-      };
-      return this.pcCache;
+      });
     } catch (e) {
-      this.pcCache = await this.scanWindowsHardwareFallback();
-      return this.pcCache;
+      return this.scanWindowsHardwareFallback();
     }
   }
 

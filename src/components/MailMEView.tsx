@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { mailCategories } from '../data/hermesAgents';
 
+const WHATSAPP_NUMBER_KEY = 'hermsdesk.user.whatsappNumber';
+
 export const MailMEView = () => {
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState('');
@@ -285,16 +287,21 @@ export const MailMEView = () => {
     const defaultMessage = `ME reminder: ${item.subject || 'important mail'}\nFrom: ${item.sender || 'mailbox'}\n${item.preview || ''}`.slice(0, 950);
     const message = window.prompt('WhatsApp notification text', defaultMessage);
     if (!message) return;
+    const savedPhone = window.localStorage.getItem(WHATSAPP_NUMBER_KEY) || '';
+    const phone = window.prompt('WhatsApp phone number for this notification', savedPhone) || savedPhone;
+    if (phone) window.localStorage.setItem(WHATSAPP_NUMBER_KEY, phone);
     await window.ipcRenderer?.saveWhatsAppDraft?.({
       title: item.subject || 'Mail reminder',
       message,
+      phone,
+      label: `Mail alert: ${item.subject || 'important mail'}`.slice(0, 80),
       route: item.assignedAgent || 'general-agent',
       source: 'mail-memory',
       sourceId: item.id
     });
     await updateMemoryItem(item, { followUpStatus: 'whatsapp-drafted' });
     const openNow = window.confirm('Open WhatsApp composer now?');
-    if (openNow) await window.ipcRenderer?.composeWhatsApp?.(message);
+    if (openNow) await window.ipcRenderer?.composeWhatsApp?.(message, phone);
   };
 
   const copyEmail = () => {

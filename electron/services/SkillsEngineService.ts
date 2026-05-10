@@ -344,6 +344,12 @@ export class SkillsEngineService {
       return `Visible browser search complete.\nQuery: ${query}\nURL: ${result.url || ''}\nTitle: ${result.title || ''}\n\nVisible text:\n${String(result.text || '').slice(0, 4000)}\n\nLinks:\n${(result.links || []).slice(0, 25).map((link: any, index: number) => `${index + 1}. ${link.text || '(no text)'} -> ${link.href}`).join('\n')}`;
     }
 
+    if (name === 'browser_handle_cookies' || name === 'browser-handle-cookies') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const result = await this.browserOperator.dismissCookieOverlays?.(params.sessionId || 'main');
+      return `Browser cookie handler result: ${JSON.stringify(result).slice(0, 1000)}`;
+    }
+
     if (name === 'browser_navigate' || name === 'browser-navigate') {
       if (!this.browserOperator) throw new Error('Browser operator not initialized');
       const result = await this.browserOperator.navigate(params.target || params.url || params.query || 'https://www.google.com', params.sessionId || 'main');

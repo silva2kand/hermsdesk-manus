@@ -149,6 +149,50 @@ export class BrowserOperatorService {
     return `https://www.google.com/search?q=${encodeURIComponent(raw)}`;
   }
 
+  async dismissCookieOverlays(sessionId = 'main') {
+    this.assertNotStopped(sessionId);
+    const win = this.ensureWindow(sessionId);
+    try {
+      const result = await win.webContents.executeJavaScript(`
+        (() => {
+          const labels = [
+            'reject all', 'reject optional', 'reject non-essential', 'decline all',
+            'continue without accepting', 'save choices', 'save preferences',
+            'accept all', 'accept cookies', 'allow all', 'i agree', 'agree',
+            'ok', 'got it', 'continue'
+          ];
+          const visible = (el) => {
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+          };
+          const textOf = (el) => ((el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || '') + '').trim().toLowerCase();
+          const candidates = Array.from(document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')).filter(visible);
+          for (const label of labels) {
+            const el = candidates.find(item => textOf(item) === label || textOf(item).includes(label));
+            if (el) {
+              el.scrollIntoView({ block: 'center', inline: 'center' });
+              el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+              el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+              el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+              return { ok: true, label, text: textOf(el).slice(0, 120), url: location.href };
+            }
+          }
+          const bodyText = document.body ? document.body.innerText.toLowerCase().slice(0, 3000) : '';
+          return { ok: false, cookieWallLikely: /cookie|consent|privacy|gdpr/.test(bodyText), url: location.href };
+        })()
+      `);
+      if (result.ok) {
+        await wait(700);
+        this.push({ type: 'click', status: 'done', detail: `Handled cookie/consent popup: ${result.text || result.label}`, url: result.url, sessionId });
+      }
+      return result;
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'Cookie handler failed' };
+    }
+  }
+
   private ensureWindow(sessionId = 'main', label = 'Main Computer') {
     const existing = this.operatorWindows.get(sessionId);
     if (existing && !existing.isDestroyed()) {
@@ -197,6 +241,8 @@ export class BrowserOperatorService {
       const win = this.ensureWindow(sessionId, label);
       await win.loadURL(url);
       win.show();
+      await wait(700);
+      await this.dismissCookieOverlays(sessionId).catch(() => null);
       this.saveSession(sessionId, label, url, true);
       return {
         ok: true,
@@ -415,8 +461,7 @@ export class BrowserOperatorService {
     const opened = await this.open('https://www.google.com/', sessionId, label);
     if (!opened.ok) return opened;
     await wait(900);
-    await this.clickText('Accept all', sessionId).catch(() => null);
-    await this.clickText('I agree', sessionId).catch(() => null);
+    await this.dismissCookieOverlays(sessionId).catch(() => null);
     const typed = await this.type('textarea[name="q"], input[name="q"]', text, sessionId);
     if (!typed.ok) return typed;
     const pressed = await this.press('Enter', sessionId);

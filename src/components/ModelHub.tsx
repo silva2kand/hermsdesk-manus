@@ -137,7 +137,13 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
       return;
     }
     if (diagnostics.modelsPath) setModelsPath(diagnostics.modelsPath);
-    if (diagnostics.pc) setPcCapabilities({ ...diagnostics.pc, approximate: Boolean(diagnostics.pc.approximate) });
+    if (diagnostics.pc && !/detecting/i.test(String(diagnostics.pc.gpu || ''))) {
+      setPcCapabilities({ ...diagnostics.pc, approximate: Boolean(diagnostics.pc.approximate) });
+    } else if (window.ipcRenderer?.scanPC) {
+      window.ipcRenderer.scanPC()
+        .then(caps => setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) }))
+        .catch(() => null);
+    }
     if (diagnostics.jan) {
       setJanStatus(diagnostics.jan);
     }
@@ -201,6 +207,9 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         .catch(e => console.error('ModelHub models path error:', e));
 
       if (window.ipcRenderer.modelHubDiagnostics) {
+        window.ipcRenderer.scanPC?.()
+          .then(caps => isMounted && setPcCapabilities({ ...caps, approximate: Boolean(caps.approximate) }))
+          .catch(() => null);
         window.ipcRenderer.modelHubDiagnostics()
           .then(data => isMounted && applyModelHubDiagnostics(data))
           .catch(error => {

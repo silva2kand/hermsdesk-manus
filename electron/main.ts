@@ -702,6 +702,7 @@ function createWindow() {
   ipcMain.handle('browser-operator:press', (_, { key, sessionId }) => browserOperator.press(key || 'Enter', sessionId))
   ipcMain.handle('browser-operator:scroll', (_, { amount, sessionId }) => browserOperator.scroll(amount || 700, sessionId))
   ipcMain.handle('browser-operator:search-visible', (_, { query, sessionId, label }) => browserOperator.searchVisible(query, sessionId, label))
+  ipcMain.handle('browser-operator:handle-cookies', (_, s) => browserOperator.dismissCookieOverlays(s))
   ipcMain.handle('browser-operator:screenshot', (_, s) => browserOperator.screenshot(s))
   ipcMain.handle('browser-operator:inspect', (_, s) => browserOperator.inspectScreen(s))
   ipcMain.handle('outlook:classic-status', () => integrationService.getClassicOutlookStatus())
