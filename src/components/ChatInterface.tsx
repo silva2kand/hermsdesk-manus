@@ -174,6 +174,15 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     });
   }, [messages, activeChatId, historyLoaded]);
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, isTyping, researchSteps.length, liveTrace.length]);
+
   // Update when initialModel changes
   React.useEffect(() => {
     let isMounted = true;
