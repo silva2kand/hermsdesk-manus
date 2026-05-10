@@ -430,6 +430,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     const updated = mailboxMemory?.generatedAt ? new Date(mailboxMemory.generatedAt).toLocaleString() : 'recently';
     const wantsUrgents = /urgent|important|need looking|look at|priority|top\s*3|3 urgents/i.test(lower);
     const wantsVehicleInsurance = /car|vehicle|motor|mot|insurance|renewal|policy|premium/i.test(lower);
+    const wantsCarInsuranceDue = /(car|vehicle|motor|van).{0,30}(insurance|policy|renewal|renew|due|expire|expiry|expires)|insurance.{0,30}(car|vehicle|motor|van|due|renewal|renew|expire|expiry|expires)/i.test(lower);
+    const vehiclePolicyEvidence = (email: any) => {
+      const raw = `${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''}`.toLowerCase();
+      const hasVehicle = /(car|vehicle|motor|van|driver|yk13wnz|sva23|admiral|aviva|direct line|churchill|hastings|1st central|tesco bank|esure|swinton|lv=|rac|the aa|aa insurance|saga)/i.test(raw);
+      const hasPolicy = /(insurance|policy|premium|renewal|renew|expires|expiry|cover|certificate|schedule|quote|no claims)/i.test(raw);
+      const noise = /(life insurance|pet insurance|funding|loan|finance review|unclaimed benefit|alibaba|linkedin|security alert|takepayments|payment processor|newsletter|promotion|gift card|cashback|claim compensation)/i.test(raw);
+      return hasVehicle && hasPolicy && !noise;
+    };
     const curated = wantsUrgents
       ? [
           ...(mailboxMemory?.upcomingImportant || []),
@@ -440,8 +448,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         ]
       : wantsVehicleInsurance
         ? [
-            ...(mailboxMemory?.insuranceRenewals || []),
-            ...matches.filter((email: any) => /car|vehicle|motor|mot|insurance|renewal|policy|premium|go\.?compare|comparethemarket/i.test(`${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.bodyPreview || ''}`))
+            ...(mailboxMemory?.insuranceRenewals || []).filter(vehiclePolicyEvidence),
+            ...matches.filter(vehiclePolicyEvidence)
           ]
         : matches;
     const seen = new Set<string>();
@@ -449,7 +457,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       if (!email?.id || seen.has(email.id)) return false;
       seen.add(email.id);
       if (wantsVehicleInsurance) {
-        return /car|vehicle|motor|mot|insurance|renewal|policy|premium|go\.?compare|comparethemarket/i.test(`${email.type || ''} ${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''}`);
+        return vehiclePolicyEvidence(email);
       }
       return true;
     }).slice(0, wantsUrgents ? 3 : 8);
@@ -462,6 +470,18 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         : 'Here are the strongest email matches I found in your indexed mailbox memory';
 
     if (!evidence.length) {
+      if (wantsCarInsuranceDue) {
+        return [
+          `I checked your local indexed mailbox memory (${total} emails, updated ${updated}).`,
+          '',
+          'I did not find a reliable car-insurance policy or renewal email with a confirmed due/expiry date in the indexed preview text.',
+          '',
+          'I ignored noisy matches such as life insurance adverts, funding/finance marketing, security alerts, Alibaba/LinkedIn, and payment-processor emails because they are not real car-insurance renewal evidence.',
+          '',
+          'Best next step: open the real insurer email or policy attachment, then Baba can extract and save the renewal date into memory.',
+          'I will not move, delete, send, unsubscribe, pay, or contact anyone without your approval.'
+        ].join('\n');
+      }
       const bills = (mailboxMemory?.billsToPay || []).slice(0, 8);
       const deadlines = (mailboxMemory?.deadlines || []).slice(0, 8);
       if (!bills.length && !deadlines.length) return '';
@@ -881,7 +901,7 @@ Use the controlled browser session if available. Keep every step visible in Even
         ...(memory?.urgent || [])
       ].filter((item: any, index: number, arr: any[]) => item?.id && arr.findIndex(other => other.id === item.id) === index)
         .map((item: any) => ({ ...item, priorityScore: scorePriorityMail(item) }))
-        .filter((item: any) => item.priorityScore > 0 || item.importanceStatus === 'important')
+        .filter((item: any) => item.priorityScore > 30 || item.importanceStatus === 'important')
         .sort((a: any, b: any) => (b.priorityScore - a.priorityScore) || String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
         .slice(0, 3);
       const lines = priorityItems.length
