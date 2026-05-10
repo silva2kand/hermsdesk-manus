@@ -91,7 +91,7 @@ export class SkillsEngineService {
       rules.push('Mythos PC Operator: prefer real local routes for files, terminal, browser opening, app launching, ME Computer activity, and approval-first OS actions.');
     }
     if (installed.includes('mythos-browser-automation')) {
-      rules.push('Browser Automation: for browser tasks use real tools, not explanations. Start with [TOOL: browser_open(target="search or url")], inspect with [TOOL: browser_read()], click selectors with [TOOL: browser_click(selector="...")] or visible text with [TOOL: browser_click_text(text="...")], type with [TOOL: browser_type(selector="...", text="...")], and verify after every action with [TOOL: browser_inspect()]. Do not click pay/submit/order/purchase without explicit approval.');
+      rules.push('Browser Automation: for browser tasks use real tools, not explanations. For human-visible searching start with [TOOL: browser_search_visible(query="...")], inspect with [TOOL: browser_read()], scroll with [TOOL: browser_scroll(amount="700")], click selectors with [TOOL: browser_click(selector="...")], visible text with [TOOL: browser_click_text(text="...")], exact links with [TOOL: browser_click_href(href="https://...")], type with [TOOL: browser_type(selector="...", text="...")], press keys with [TOOL: browser_press(key="Enter")], and verify after every action with [TOOL: browser_inspect()]. Do not click pay/submit/order/purchase without explicit approval.');
     }
     if (installed.includes('mythos-whatsapp-reply')) {
       rules.push('Mythos WhatsApp Reply: draft professional, concise replies from user-provided message text; open the real WhatsApp composer; never claim background read/send access. Use [TOOL: whatsapp_inspect_ui()] to see current messages.');
@@ -336,6 +336,14 @@ export class SkillsEngineService {
       return `Browser opened.\nURL: ${result.url || ''}\nSession: ${result.sessionId || params.sessionId || 'main'}`;
     }
 
+    if (name === 'browser_search_visible' || name === 'browser-search-visible') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const query = String(params.query || params.target || params.text || '').trim();
+      if (!query) throw new Error('browser_search_visible needs a query.');
+      const result = await this.browserOperator.searchVisible(query, params.sessionId || 'main', params.label || 'Browser Automation');
+      return `Visible browser search complete.\nQuery: ${query}\nURL: ${result.url || ''}\nTitle: ${result.title || ''}\n\nVisible text:\n${String(result.text || '').slice(0, 4000)}\n\nLinks:\n${(result.links || []).slice(0, 25).map((link: any, index: number) => `${index + 1}. ${link.text || '(no text)'} -> ${link.href}`).join('\n')}`;
+    }
+
     if (name === 'browser_navigate' || name === 'browser-navigate') {
       if (!this.browserOperator) throw new Error('Browser operator not initialized');
       const result = await this.browserOperator.navigate(params.target || params.url || params.query || 'https://www.google.com', params.sessionId || 'main');
@@ -370,10 +378,33 @@ export class SkillsEngineService {
       return `Browser click-by-text result: ${JSON.stringify(result).slice(0, 1000)}`;
     }
 
+    if (name === 'browser_click_href' || name === 'browser-click-href') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const href = String(params.href || params.url || '').trim();
+      if (!href) throw new Error('browser_click_href needs a link URL.');
+      if (/(pay|purchase|order|submit|checkout|buy|confirm)/i.test(href)) {
+        throw new Error('Risky browser link blocked. Ask Silva for explicit approval before clicking pay/purchase/order/submit/checkout links.');
+      }
+      const result = await this.browserOperator.clickHref(href, params.sessionId || 'main');
+      return `Browser click-link result: ${JSON.stringify(result).slice(0, 1000)}`;
+    }
+
     if (name === 'browser_type' || name === 'browser-type') {
       if (!this.browserOperator) throw new Error('Browser operator not initialized');
       const result = await this.browserOperator.type(params.selector, params.text || '', params.sessionId || 'main');
       return `Browser type result: ${JSON.stringify(result).slice(0, 1000)}`;
+    }
+
+    if (name === 'browser_press' || name === 'browser-press') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const result = await this.browserOperator.press(params.key || 'Enter', params.sessionId || 'main');
+      return `Browser key press result: ${JSON.stringify(result).slice(0, 1000)}`;
+    }
+
+    if (name === 'browser_scroll' || name === 'browser-scroll') {
+      if (!this.browserOperator) throw new Error('Browser operator not initialized');
+      const result = await this.browserOperator.scroll(Number(params.amount || 700), params.sessionId || 'main');
+      return `Browser scroll result: ${JSON.stringify(result).slice(0, 1000)}`;
     }
 
     if (name === 'browser_screenshot' || name === 'browser-screenshot') {

@@ -51,7 +51,11 @@ interface Window {
     navigateBrowserOperator: (target: string, sessionId?: string) => Promise<any>;
     readBrowserOperator: (sessionId?: string) => Promise<any>;
     clickBrowserOperator: (selector: string, sessionId?: string) => Promise<any>;
+    clickHrefBrowserOperator: (href: string, sessionId?: string) => Promise<any>;
     typeBrowserOperator: (selector: string, text: string, sessionId?: string) => Promise<any>;
+    pressBrowserOperator: (key: string, sessionId?: string) => Promise<any>;
+    scrollBrowserOperator: (amount: number, sessionId?: string) => Promise<any>;
+    searchVisibleBrowserOperator: (query: string, sessionId?: string, label?: string) => Promise<any>;
     screenshotBrowserOperator: (sessionId?: string) => Promise<any>;
     inspectBrowserOperator: (sessionId?: string) => Promise<any>;
     getClassicOutlookStatus: () => Promise<any>;

@@ -271,11 +271,15 @@ Rules:
 - For shopping/research, open result pages, extract prices/specs/risks/reviews, compare evidence, and stop before purchase/checkout.
 
 Available tools:
-- [TOOL: browser_open(target="search query or URL")]
+- [TOOL: browser_search_visible(query="search query")]
+- [TOOL: browser_open(target="URL")]
 - [TOOL: browser_read()]
 - [TOOL: browser_click(selector="CSS selector")]
+- [TOOL: browser_click_href(href="https://...")]
 - [TOOL: browser_click_text(text="visible link or button text")]
 - [TOOL: browser_type(selector="CSS selector", text="text to enter")]
+- [TOOL: browser_press(key="Enter")]
+- [TOOL: browser_scroll(amount="700")]
 - [TOOL: browser_screenshot()]
 - [TOOL: browser_inspect()]
 - [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")]`
@@ -691,14 +695,15 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
       return text;
     };
 
-    this.emitThought(task, agent, 'TOOL_CALL', 'Browser Automation Agent bootstrapping real browser_open and browser_read before model planning.', {
+    this.emitThought(task, agent, 'TOOL_CALL', 'Browser Automation Agent bootstrapping visible browser search and browser_read before model planning.', {
       sessionId
     });
-    const opened = await runTool('browser_open', {
-      target: task.input,
+    const opened = await runTool('browser_search_visible', {
+      query: task.input,
       sessionId,
       label: 'Browser Automation Agent'
     });
+    await runTool('browser_scroll', { amount: 650, sessionId });
     const page = await runTool('browser_read', { sessionId });
     return `Browser bootstrap completed.\nSession: ${sessionId}\n\n${opened}\n\n${page}`;
   }
@@ -773,7 +778,8 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
 
     const query = this.buildShoppingSearchQuery(task.input);
     this.emitThought(task, agent, 'PLAN', `Running deterministic shopping comparison for: ${query}`, { sessionId, query });
-    await runTool('browser_open', { target: query, sessionId, label: 'Shopping Comparison Agent' });
+    await runTool('browser_search_visible', { query, sessionId, label: 'Shopping Comparison Agent' });
+    await runTool('browser_scroll', { amount: 700, sessionId });
     const searchRead = await runTool('browser_read', { sessionId });
     const links = this.parseBrowserLinks(searchRead);
     sendUpdate(`Candidate product/result pages selected: ${links.length}`, 'info');
@@ -786,8 +792,17 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     }, task.id);
 
     const candidates: any[] = [];
-    for (const link of links) {
-      await runTool('browser_open', { target: link.href, sessionId, label: 'Shopping Comparison Agent' });
+    for (let index = 0; index < links.length; index++) {
+      const link = links[index];
+      if (index === 0) {
+        const clicked = await runTool('browser_click_href', { href: link.href, sessionId });
+        if (/ok"?\s*:\s*false|not found|error/i.test(clicked)) {
+          await runTool('browser_open', { target: link.href, sessionId, label: 'Shopping Comparison Agent' });
+        }
+      } else {
+        await runTool('browser_open', { target: link.href, sessionId, label: 'Shopping Comparison Agent' });
+      }
+      await runTool('browser_scroll', { amount: 600, sessionId });
       const page = await runTool('browser_read', { sessionId });
       candidates.push(this.summarizeCandidate(link.href, page));
       await runTool('browser_screenshot', { sessionId });
@@ -1021,7 +1036,7 @@ ${JSON.stringify({
 - **APPROVAL FIRST**: Destructive actions, money transfers, or external communication require explicit user approval.
 - **COLLABORATION**: Treat this as a shared HermesDesk task. Lead agent: ${agent.name}. Peer agents available for clarification/verification: ${collaborationPlan.length ? collaborationPlan.map(peer => `${peer.name} (${peer.role})`).join('; ') : 'none selected'}.
 - **TINYFISH WEB AGENT**: ${tinyFishStatus?.configured ? 'Available for real web automation on specific URLs. Use [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")] when a task needs live page inspection.' : 'Not available until a TinyFish API key is saved.'}
-- **BROWSER OPERATOR**: Available as a real controlled browser. Use [TOOL: browser_open(target="query or URL")], [TOOL: browser_read()], [TOOL: browser_click(selector="CSS selector")], [TOOL: browser_click_text(text="visible text")], [TOOL: browser_type(selector="CSS selector", text="text")], [TOOL: browser_screenshot()], and [TOOL: browser_inspect()] for browser automation. Verify after each action. Do not click purchase/pay/submit/order/checkout without approval.
+- **BROWSER OPERATOR**: Available as a real controlled browser. Use [TOOL: browser_search_visible(query="search query")] for visible Google typing/searching, [TOOL: browser_open(target="URL")], [TOOL: browser_read()], [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="CSS selector")], [TOOL: browser_click_text(text="visible text")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="CSS selector", text="text")], [TOOL: browser_press(key="Enter")], [TOOL: browser_screenshot()], and [TOOL: browser_inspect()] for browser automation. Verify after each action. Do not click purchase/pay/submit/order/checkout without approval.
 
 ### TASTE ENGINE - REQUIRED BEHAVIOUR
 - **THOUGHTFULNESS**: infer the real goal, audience, context, risk, opportunity, and missing facts before acting.

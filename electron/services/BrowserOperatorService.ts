@@ -7,7 +7,7 @@ type BrowserWindowType = InstanceType<typeof BrowserWindow>;
 
 export type BrowserOperatorEvent = {
   id: string;
-  type: 'open' | 'navigate' | 'click' | 'type' | 'read' | 'screenshot' | 'vision' | 'error';
+  type: 'open' | 'navigate' | 'click' | 'type' | 'press' | 'scroll' | 'read' | 'screenshot' | 'vision' | 'error';
   status: 'done' | 'error';
   detail: string;
   url?: string;
@@ -26,6 +26,7 @@ type BrowserSession = {
 };
 
 const MAX_EVENTS = 100;
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class BrowserOperatorService {
   private operatorWindow: BrowserWindowType | null = null;
@@ -292,23 +293,77 @@ export class BrowserOperatorService {
     }
   }
 
+  async clickHref(href: string, sessionId = 'main') {
+    this.assertNotStopped(sessionId);
+    const win = this.ensureWindow(sessionId);
+    const target = String(href || '').trim();
+    if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'A real http/https href is required.' };
+    try {
+      const result = await win.webContents.executeJavaScript(`
+        (() => {
+          const target = ${JSON.stringify(target)};
+          const clean = (value) => String(value || '').replace(/[?#].*$/, '');
+          const anchors = Array.from(document.querySelectorAll('a[href]'));
+          const el = anchors.find((a) => a.href === target || clean(a.href) === clean(target) || a.href.startsWith(target));
+          if (!el) return { ok: false, error: 'Link href not found on current page', url: location.href };
+          el.scrollIntoView({ block: 'center', inline: 'center' });
+          el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+          el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          return { ok: true, matchedText: (el.innerText || el.getAttribute('aria-label') || '').trim().slice(0, 200), url: location.href, href: el.href };
+        })()
+      `);
+      this.push({ type: result.ok ? 'click' : 'error', status: result.ok ? 'done' : 'error', detail: result.ok ? `Clicked link ${target}` : `${target}: ${result.error}`, url: result.url, sessionId });
+      return result;
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'Click link failed' };
+    }
+  }
+
   async type(selector: string, text: string, sessionId = 'main') {
     this.assertNotStopped(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
-      const result = await win.webContents.executeJavaScript(`
+      const focused = await win.webContents.executeJavaScript(`
         (() => {
           const el = document.querySelector(${JSON.stringify(selector)});
           if (!el) return { ok: false, error: 'Selector not found' };
+          el.scrollIntoView({ block: 'center', inline: 'center' });
           el.focus();
           if ('value' in el) {
-            el.value = ${JSON.stringify(text)};
+            el.value = '';
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
           } else {
-            el.textContent = ${JSON.stringify(text)};
+            el.textContent = '';
           }
           return { ok: true, url: location.href };
+        })()
+      `);
+      if (!focused.ok) {
+        this.push({ type: 'error', status: 'error', detail: `${selector}: ${focused.error}`, url: focused.url, sessionId });
+        return focused;
+      }
+      const visibleText = String(text || '');
+      for (const char of visibleText) {
+        this.assertNotStopped(sessionId);
+        win.webContents.sendInputEvent({ type: 'char', keyCode: char });
+        await wait(12);
+      }
+      const result = await win.webContents.executeJavaScript(`
+        (() => {
+          const el = document.querySelector(${JSON.stringify(selector)});
+          if (!el) return { ok: false, error: 'Selector not found after typing', url: location.href };
+          const expected = ${JSON.stringify(text)};
+          if ('value' in el && el.value !== expected) {
+            el.value = expected;
+          } else if (!('value' in el) && (el.textContent || '') !== expected) {
+            el.textContent = expected;
+          }
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return { ok: true, value: ('value' in el ? el.value : el.textContent || '').slice(0, 300), url: location.href };
         })()
       `);
       this.push({ type: result.ok ? 'type' : 'error', status: result.ok ? 'done' : 'error', detail: result.ok ? `Typed into ${selector}` : `${selector}: ${result.error}`, url: result.url, sessionId });
@@ -316,6 +371,66 @@ export class BrowserOperatorService {
     } catch (error: any) {
       return { ok: false, error: error?.message || 'Type failed' };
     }
+  }
+
+  async press(key: string, sessionId = 'main') {
+    this.assertNotStopped(sessionId);
+    const win = this.ensureWindow(sessionId);
+    const keyCode = String(key || 'Enter');
+    try {
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+      await wait(40);
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+      await wait(500);
+      const url = win.webContents.getURL();
+      this.push({ type: 'press', status: 'done', detail: `Pressed ${keyCode}`, url, sessionId });
+      return { ok: true, key: keyCode, url };
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'Key press failed' };
+    }
+  }
+
+  async scroll(amount = 700, sessionId = 'main') {
+    this.assertNotStopped(sessionId);
+    const win = this.ensureWindow(sessionId);
+    const delta = Number(amount) || 700;
+    try {
+      const result = await win.webContents.executeJavaScript(`
+        (() => {
+          window.scrollBy({ top: ${JSON.stringify(delta)}, left: 0, behavior: 'smooth' });
+          return { ok: true, x: window.scrollX, y: window.scrollY, url: location.href };
+        })()
+      `);
+      await wait(450);
+      this.push({ type: 'scroll', status: 'done', detail: `Scrolled ${delta}px`, url: result.url, sessionId });
+      return result;
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'Scroll failed' };
+    }
+  }
+
+  async searchVisible(query: string, sessionId = 'main', label = 'Browser Automation') {
+    const text = String(query || '').trim();
+    if (!text) return { ok: false, error: 'Search query is required.' };
+    const opened = await this.open('https://www.google.com/', sessionId, label);
+    if (!opened.ok) return opened;
+    await wait(900);
+    await this.clickText('Accept all', sessionId).catch(() => null);
+    await this.clickText('I agree', sessionId).catch(() => null);
+    const typed = await this.type('textarea[name="q"], input[name="q"]', text, sessionId);
+    if (!typed.ok) return typed;
+    const pressed = await this.press('Enter', sessionId);
+    await wait(1600);
+    const page = await this.readPage(sessionId);
+    return {
+      ok: true,
+      query: text,
+      url: page.url || pressed.url,
+      title: page.title,
+      text: page.text,
+      links: page.links,
+      event: this.push({ type: 'navigate', status: 'done', detail: `Visible search completed for "${text}"`, url: page.url || pressed.url, sessionId })
+    };
   }
 
   async screenshot(sessionId = 'main') {
