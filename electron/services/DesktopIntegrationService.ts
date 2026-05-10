@@ -945,7 +945,9 @@ $speaker.Speak('${escaped}')
     // Map user-friendly voice names to valid accent_id values the server recognizes
     const accentMap: Record<string, string> = {
       'tamil-jaffna': 'ta-jaffna-premium', 'ta-jaffna': 'ta-jaffna-premium',
-      'ta-m1': 'ta-default', 'tamil': 'ta-jaffna-premium', 'ta': 'ta-jaffna-premium',
+      'ta-m1': 'ta-default', 'tamil': 'ta-default', 'ta': 'ta-default',
+      'tamil-india': 'ta-default', 'tamil-generic': 'ta-default',
+      'tamil-speaker-1': 'ta-m1-s1', 'tamil-speaker-2': 'ta-m1-s2', 'tamil-speaker-3': 'ta-m1-s3',
       'english-uk': 'en-us-sapi', 'en-gb': 'en-us-sapi',
       'en-gb-m1': 'en-us-sapi', 'en-gb-f1': 'en-us-sapi',
       'english-us': 'en-us-sapi', 'en-us': 'en-us-sapi',

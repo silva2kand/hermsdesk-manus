@@ -544,6 +544,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const voiceOptions: Record<string, any> = {
     'tamil-jaffna': { voice: 'tamil-jaffna', profile_id: 'silva-premium', accent_id: 'ta-jaffna-premium', language: 'ta-LK', accent: 'jaffna', style: 'professional', strict_language: true, allow_windows_fallback: false },
     'tamil-india': { voice: 'tamil-india', profile_id: 'silva-premium', accent_id: 'ta-default', language: 'ta-IN', accent: 'india', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'tamil-speaker-1': { voice: 'tamil-speaker-1', profile_id: 'silva-premium', accent_id: 'ta-m1-s1', language: 'ta-IN', accent: 'generic', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'tamil-speaker-2': { voice: 'tamil-speaker-2', profile_id: 'silva-premium', accent_id: 'ta-m1-s2', language: 'ta-IN', accent: 'generic', style: 'professional', strict_language: true, allow_windows_fallback: false },
+    'tamil-speaker-3': { voice: 'tamil-speaker-3', profile_id: 'silva-premium', accent_id: 'ta-m1-s3', language: 'ta-IN', accent: 'generic', style: 'professional', strict_language: true, allow_windows_fallback: false },
     'english-uk': { voice: 'english-uk', profile_id: 'silva-premium', accent_id: 'en-us-sapi', language: 'en-GB', accent: 'uk', style: 'professional', strict_language: true, allow_windows_fallback: false },
     'english-us': { voice: 'english-us', profile_id: 'silva-premium', accent_id: 'en-us-sapi', language: 'en-US', accent: 'us', style: 'professional', strict_language: true, allow_windows_fallback: false }
   };
@@ -551,6 +554,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const recognitionLanguageByVoice: Record<string, string> = {
     'tamil-jaffna': 'ta-LK',
     'tamil-india': 'ta-IN',
+    'tamil-speaker-1': 'ta-IN',
+    'tamil-speaker-2': 'ta-IN',
+    'tamil-speaker-3': 'ta-IN',
     'english-uk': 'en-GB',
     'english-us': 'en-US'
   };
@@ -1713,8 +1719,11 @@ Use the controlled browser session if available. Keep every step visible in Even
               value={voicePreset}
               onChange={(e) => setVoicePreset(e.target.value)}
             >
-              <option value="tamil-jaffna">Tamil Jaffna</option>
-              <option value="tamil-india">Tamil India</option>
+              <option value="tamil-jaffna">Jaffna Tamil Real</option>
+              <option value="tamil-india">Tamil Generic</option>
+              <option value="tamil-speaker-1">Tamil Speaker 1</option>
+              <option value="tamil-speaker-2">Tamil Speaker 2</option>
+              <option value="tamil-speaker-3">Tamil Speaker 3</option>
               <option value="english-uk">English UK</option>
               <option value="english-us">English US</option>
             </select>
