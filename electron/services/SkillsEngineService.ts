@@ -35,6 +35,7 @@ export class SkillsEngineService {
   private microsoftGraph: any;
   private indexService: any;
   private browserOperator: any;
+  private desktopIntegration: any;
 
   private defaultSkills = [
     'me-api',
@@ -53,11 +54,12 @@ export class SkillsEngineService {
     'mythos-purchase-protection'
   ];
 
-  constructor(sharedStore?: any, microsoftGraph?: any, indexService?: any, browserOperator?: any) {
+  constructor(sharedStore?: any, microsoftGraph?: any, indexService?: any, browserOperator?: any, desktopIntegration?: any) {
     this.store = sharedStore || new Store({ name: 'skills-engine', atomically: false, watch: false });
     this.microsoftGraph = microsoftGraph;
     this.indexService = indexService;
     this.browserOperator = browserOperator;
+    this.desktopIntegration = desktopIntegration;
   }
 
   getInstalledSkills() {
@@ -88,7 +90,7 @@ export class SkillsEngineService {
       rules.push('Mythos Recovery: when a tool/model/action fails, diagnose, retry with a smaller step, choose a fallback route, and report exactly what was recovered.');
     }
     if (installed.includes('mythos-pc-operator')) {
-      rules.push('Mythos PC Operator: prefer real local routes for files, terminal, browser opening, app launching, ME Computer activity, and approval-first OS actions.');
+      rules.push('Mythos PC Operator: prefer real local routes for files, terminal, browser opening, app launching, ME Computer activity, and approval-first OS actions. For visible Windows apps use [TOOL: pc_window_list()], [TOOL: pc_window_focus(id="...")], [TOOL: pc_ui_scan()], [TOOL: pc_ui_resolve(query="OK", role="Button")], [TOOL: pc_ui_click(query="OK", role="Button")], and [TOOL: pc_ui_type(query="File name", text="...")]. Always scan/focus before acting and verify after action.');
     }
     if (installed.includes('mythos-browser-automation')) {
       rules.push('Browser Automation: for browser tasks use real tools, not explanations. For human-visible searching start with [TOOL: browser_search_visible(query="...")]. Before click/type work, scan controls with [TOOL: browser_ui_scan()], resolve targets with [TOOL: browser_ui_resolve(query="continue", role="button")], click natural targets with [TOOL: browser_ui_click(query="continue", role="button")], and type into natural targets with [TOOL: browser_ui_type(query="search", text="...")]. Use [TOOL: browser_read()], [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="...")], [TOOL: browser_click_text(text="...")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="...", text="...")], [TOOL: browser_press(key="Enter")], and verify after every action with [TOOL: browser_inspect()]. Do not click pay/submit/order/purchase without explicit approval.');
@@ -460,6 +462,59 @@ export class SkillsEngineService {
       if (!this.browserOperator) throw new Error('Browser operator not initialized');
       const result = await this.browserOperator.inspectScreen(params.sessionId || 'main');
       return `Browser inspection.\nURL: ${result.url || ''}\nTitle: ${result.title || ''}\nScreenshot: ${result.screenshotPath || ''}\n\nVisible text:\n${String(result.visibleText || '').slice(0, 4000)}`;
+    }
+
+    // --- PC UIA OPERATOR TOOLS ---
+    if (name === 'pc_window_list' || name === 'pc-window-list') {
+      if (!this.desktopIntegration) throw new Error('Desktop integration service not initialized');
+      const result = await this.desktopIntegration.pcWindowList();
+      if (!result?.ok) return `PC window list failed: ${result?.error || 'Unknown error'}`;
+      return `PC windows detected: ${(result.windows || []).length}\nActive window: ${result.activeWindowId || ''}\n\n${(result.windows || []).slice(0, 60).map((win: any) => `${win.id} ${win.isActive ? '[ACTIVE]' : ''} ${win.app}: ${win.title}`).join('\n')}`;
+    }
+
+    if (name === 'pc_window_focus' || name === 'pc-window-focus') {
+      if (!this.desktopIntegration) throw new Error('Desktop integration service not initialized');
+      const id = String(params.id || params.windowId || '').trim();
+      if (!id) throw new Error('pc_window_focus needs id/windowId from pc_window_list.');
+      const result = await this.desktopIntegration.pcWindowFocus(id);
+      return `PC window focus result: ${JSON.stringify(result).slice(0, 1000)}`;
+    }
+
+    if (name === 'pc_ui_scan' || name === 'pc-ui-scan') {
+      if (!this.desktopIntegration) throw new Error('Desktop integration service not initialized');
+      const result = await this.desktopIntegration.pcUiScan(params.windowId || params.id);
+      if (!result?.ok) return `PC UI scan failed: ${result?.error || 'Unknown error'}`;
+      return `PC UI scan complete.\nWindow: ${result.app || ''} / ${result.title || ''}\nWindow ID: ${result.windowId || ''}\nVisible controls: ${(result.elements || []).length}\n\n${(result.elements || []).slice(0, 80).map((el: any) => `${el.id} [${el.role}] ${el.name || el.automationId || el.controlType} @ ${el.bounding?.x},${el.bounding?.y} ${el.bounding?.width}x${el.bounding?.height}`).join('\n')}`;
+    }
+
+    if (name === 'pc_ui_resolve' || name === 'pc-ui-resolve') {
+      if (!this.desktopIntegration) throw new Error('Desktop integration service not initialized');
+      const query = String(params.query || params.text || params.target || params.label || '').trim();
+      const role = params.role ? String(params.role) : undefined;
+      if (!query && !role) throw new Error('pc_ui_resolve needs query/text/target/label or role.');
+      const result = await this.desktopIntegration.pcUiResolve(query, role, params.windowId || params.id);
+      if (!result?.ok) return `PC UI resolve failed for "${query}": ${result?.error || 'No matching visible control.'}`;
+      return `PC UI resolve result.\nBest: ${result.best.id} [${result.best.role}] ${result.best.name || result.best.automationId || result.best.controlType} (score ${result.best.score})\nWindow: ${result.app || ''} / ${result.title || ''}\n\nMatches:\n${(result.matches || []).slice(0, 10).map((el: any) => `${el.id} [${el.role}] score=${el.score} ${el.name || el.automationId || el.controlType}`).join('\n')}`;
+    }
+
+    if (name === 'pc_ui_click' || name === 'pc-ui-click') {
+      if (!this.desktopIntegration) throw new Error('Desktop integration service not initialized');
+      const target = String(params.elementId || params.id || params.query || params.text || params.target || params.label || '').trim();
+      if (!target) throw new Error('pc_ui_click needs an elementId/id/query/text/target/label.');
+      if (/(pay|purchase|order|submit|checkout|buy|confirm|book|sign|password|card|bank|uninstall|format|reset|delete)/i.test(target)) {
+        throw new Error('Risky PC UI click blocked. Ask Silva/Syan for explicit approval before clicking pay/purchase/order/submit/checkout/password/card/bank/uninstall/reset/delete controls.');
+      }
+      const result = await this.desktopIntegration.pcUiClick(target, params.role, params.windowId);
+      return `PC UI click result: ${JSON.stringify(result).slice(0, 1400)}`;
+    }
+
+    if (name === 'pc_ui_type' || name === 'pc-ui-type') {
+      if (!this.desktopIntegration) throw new Error('Desktop integration service not initialized');
+      const target = String(params.elementId || params.id || params.query || params.target || params.label || '').trim();
+      const text = String(params.text || params.value || params.input || params.content || '');
+      if (!target) throw new Error('pc_ui_type needs an elementId/id/query/target/label.');
+      const result = await this.desktopIntegration.pcUiType(target, text, params.windowId, params.role || 'Edit');
+      return `PC UI type result: ${JSON.stringify(result).slice(0, 1400)}`;
     }
 
     // --- EXPERT OS TOOLS ---

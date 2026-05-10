@@ -101,7 +101,7 @@ function initializeStoreAndServices() {
   emailIndexService = new EmailIndexService(store)
   browserOperator = new BrowserOperatorService(store)
   microsoftGraph = new MicrosoftGraphService(store, emailIndexService)
-  skillsEngine = new SkillsEngineService(store, microsoftGraph, emailIndexService, browserOperator)
+  skillsEngine = new SkillsEngineService(store, microsoftGraph, emailIndexService, browserOperator, integrationService)
   workspaceService = new WorkspaceService(store)
   orchestrator = new MultiAgentOrchestrator(store, aiService, skillsEngine, workspaceService)
   schedulerService = new SchedulerService(store, workspaceService, orchestrator)
@@ -135,7 +135,7 @@ function initializeStoreAndServices() {
      emailIndexService = new EmailIndexService(store);
      browserOperator = new BrowserOperatorService(store);
      microsoftGraph = new MicrosoftGraphService(store, emailIndexService);
-     skillsEngine = new SkillsEngineService(store, microsoftGraph, emailIndexService, browserOperator);
+     skillsEngine = new SkillsEngineService(store, microsoftGraph, emailIndexService, browserOperator, integrationService);
      workspaceService = new WorkspaceService(store);
      orchestrator = new MultiAgentOrchestrator(store, aiService, skillsEngine, workspaceService);
      schedulerService = new SchedulerService(store, workspaceService, orchestrator);
@@ -669,6 +669,12 @@ function createWindow() {
   ipcMain.handle('desktop:reveal-path', (_, p) => integrationService.revealPath(p))
   ipcMain.handle('desktop:open-path', (_, p) => integrationService.openPath(p))
   ipcMain.handle('desktop:open-terminal', (_, p) => integrationService.openTerminal(p))
+  ipcMain.handle('pc-window:list', () => integrationService.pcWindowList())
+  ipcMain.handle('pc-window:focus', (_, id) => integrationService.pcWindowFocus(id))
+  ipcMain.handle('pc-ui:scan', (_, p) => integrationService.pcUiScan(typeof p === 'object' ? (p.windowId || p.id) : p))
+  ipcMain.handle('pc-ui:resolve', (_, p) => integrationService.pcUiResolve(p.query || p.text || p.target || p.label || '', p.role, p.windowId || p.id))
+  ipcMain.handle('pc-ui:click', (_, p) => integrationService.pcUiClick(p.elementId || p.id || p.query || p.text || p.target || p.label, p.role, p.windowId))
+  ipcMain.handle('pc-ui:type', (_, p) => integrationService.pcUiType(p.elementId || p.id || p.query || p.target || p.label, p.text || p.value || p.input || p.content || '', p.windowId, p.role || 'Edit'))
   ipcMain.handle('desktop:whatsapp-compose', (_, { message, phone }) => integrationService.composeWhatsAppMessage(message, phone))
   ipcMain.handle('whatsapp:status', () => whatsAppChannelService.getStatus())
   ipcMain.handle('whatsapp:ensure-active', () => whatsAppChannelService.ensureActive())

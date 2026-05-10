@@ -22,6 +22,7 @@ const VOICE_STACK_URL = 'http://127.0.0.1:7100';
 
 export class DesktopIntegrationService {
   private classicOutlookStatusCache: { value: any; at: number } | null = null;
+  private lastPcUiScan: any[] = [];
 
   private async runPowerShellJson(script: string, timeout = 30000, maxBufferMb = 5) {
     const { stdout, stderr } = await execFileAsync('powershell.exe', [
@@ -59,6 +60,257 @@ export class DesktopIntegrationService {
 
   private psString(value: string) {
     return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  private isRiskyPcAction(value: string) {
+    return /(pay|purchase|order|submit|checkout|buy|confirm|book|sign|password|card|bank|sort code|cvv|security code|uninstall|format|reset|delete|remove|security|account settings|network settings|windows update)/i.test(value || '');
+  }
+
+  private scorePcUiElement(element: any, query: string, role?: string) {
+    const needle = String(query || '').trim().toLowerCase();
+    const wantedRole = String(role || '').trim().toLowerCase();
+    const text = `${element.name || ''} ${element.automationId || ''} ${element.controlType || ''} ${element.role || ''} ${element.windowTitle || ''} ${element.app || ''}`.trim().toLowerCase();
+    let score = 0;
+    if (wantedRole && String(element.role || '').toLowerCase() === wantedRole) score += 35;
+    if (wantedRole && String(element.controlType || '').toLowerCase().includes(wantedRole)) score += 20;
+    if (!needle) score += 1;
+    if (needle && text === needle) score += 110;
+    if (needle && text.includes(needle)) score += 75;
+    if (needle && needle.includes(String(element.name || '').toLowerCase()) && String(element.name || '').length > 2) score += 45;
+    if (needle) {
+      const tokens = needle.split(/\s+/).filter(token => token.length > 1);
+      for (const token of tokens) {
+        if (text.includes(token)) score += 12;
+      }
+    }
+    if (element.enabled !== false) score += 5;
+    const b = element.bounding || {};
+    if ((Number(b.width) || 0) > 0 && (Number(b.height) || 0) > 0) score += 5;
+    return score;
+  }
+
+  async pcWindowList() {
+    if (process.platform !== 'win32') return { ok: false, error: 'PC UIA is only available on Windows.' };
+    const script = `
+      Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32WindowList {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+}
+"@
+      $active = [Win32WindowList]::GetForegroundWindow().ToInt64()
+      $items = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | Sort-Object ProcessName,MainWindowTitle | ForEach-Object {
+        [pscustomobject]@{
+          id = [string]$_.MainWindowHandle.ToInt64()
+          title = [string]$_.MainWindowTitle
+          app = [string]$_.ProcessName
+          pid = [int]$_.Id
+          isActive = ($_.MainWindowHandle.ToInt64() -eq $active)
+        }
+      }
+      [pscustomobject]@{ ok = $true; activeWindowId = [string]$active; windows = @($items) } | ConvertTo-Json -Compress -Depth 4
+    `;
+    return this.runPowerShellJson(script, 12000, 2);
+  }
+
+  async pcWindowFocus(id: string) {
+    if (process.platform !== 'win32') return { ok: false, error: 'PC UIA is only available on Windows.' };
+    const windowId = String(id || '').trim();
+    if (!/^\d+$/.test(windowId)) return { ok: false, error: 'pc_window_focus needs a numeric window id from pc_window_list.' };
+    const script = `
+      Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32Focus {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+}
+"@
+      $h = [IntPtr]${windowId}
+      $ok = [Win32Focus]::SetForegroundWindow($h)
+      Start-Sleep -Milliseconds 250
+      [pscustomobject]@{ ok = [bool]$ok; requestedWindowId = '${windowId}'; activeWindowId = [string][Win32Focus]::GetForegroundWindow().ToInt64() } | ConvertTo-Json -Compress
+    `;
+    return this.runPowerShellJson(script, 12000, 1);
+  }
+
+  async pcUiScan(windowId?: string) {
+    if (process.platform !== 'win32') return { ok: false, error: 'PC UIA is only available on Windows.' };
+    const safeWindowId = String(windowId || '').trim();
+    const windowExpr = /^\d+$/.test(safeWindowId) ? `[IntPtr]${safeWindowId}` : '[Win32UiaScan]::GetForegroundWindow()';
+    const script = `
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
+      Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32UiaScan {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+"@
+      $hwnd = ${windowExpr}
+      [void][Win32UiaScan]::SetForegroundWindow($hwnd)
+      Start-Sleep -Milliseconds 150
+      $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+      if ($null -eq $root) {
+        [pscustomobject]@{ ok = $false; error = 'No active UIA root window found.' } | ConvertTo-Json -Compress
+        exit
+      }
+      $rootPid = 0
+      try { $rootPid = [int]$root.Current.ProcessId } catch {}
+      $proc = $null
+      try { if ($rootPid -gt 0) { $proc = Get-Process -Id $rootPid -ErrorAction SilentlyContinue } } catch {}
+      $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+      $queue = New-Object System.Collections.ArrayList
+      [void]$queue.Add([pscustomobject]@{ Element = $root; Path = '0'; Depth = 0 })
+      $items = New-Object System.Collections.ArrayList
+      $limit = 420
+      $index = 0
+      while ($queue.Count -gt 0 -and $items.Count -lt $limit) {
+        $entry = $queue[0]
+        $queue.RemoveAt(0)
+        $el = $entry.Element
+        try {
+          $rect = $el.Current.BoundingRectangle
+          $name = [string]$el.Current.Name
+          $automationId = [string]$el.Current.AutomationId
+          $controlType = [string]$el.Current.ControlType.ProgrammaticName
+          $role = $controlType -replace '^ControlType\\.', ''
+          $enabled = [bool]$el.Current.IsEnabled
+          $visible = ($rect.Width -gt 0 -and $rect.Height -gt 0)
+          if ($visible -and ($name -or $automationId -or $role)) {
+            [void]$items.Add([pscustomobject]@{
+              id = "pc-ui-$index"
+              role = $role
+              name = $name
+              automationId = $automationId
+              controlType = $controlType
+              enabled = $enabled
+              app = [string]($proc.ProcessName)
+              pid = $rootPid
+              windowId = [string]$hwnd.ToInt64()
+              windowTitle = [string]$root.Current.Name
+              uiaPath = [string]$entry.Path
+              bounding = [pscustomobject]@{
+                x = [int][Math]::Round($rect.X)
+                y = [int][Math]::Round($rect.Y)
+                width = [int][Math]::Round($rect.Width)
+                height = [int][Math]::Round($rect.Height)
+              }
+            })
+            $index++
+          }
+          if ($entry.Depth -lt 5) {
+            $child = $walker.GetFirstChild($el)
+            $childIndex = 0
+            while ($null -ne $child -and $queue.Count -lt 900 -and $items.Count -lt $limit) {
+              [void]$queue.Add([pscustomobject]@{ Element = $child; Path = "$($entry.Path).$childIndex"; Depth = ($entry.Depth + 1) })
+              $child = $walker.GetNextSibling($child)
+              $childIndex++
+            }
+          }
+        } catch {}
+      }
+      [pscustomobject]@{
+        ok = $true
+        windowId = [string]$hwnd.ToInt64()
+        title = [string]$root.Current.Name
+        app = [string]($proc.ProcessName)
+        pid = $rootPid
+        elements = @($items)
+      } | ConvertTo-Json -Compress -Depth 6
+    `;
+    const result = await this.runPowerShellJson(script, 20000, 8);
+    if (result?.ok && Array.isArray(result.elements)) this.lastPcUiScan = result.elements;
+    return result;
+  }
+
+  async pcUiResolve(query: string, role?: string, windowId?: string) {
+    const scan = await this.pcUiScan(windowId);
+    if (!scan?.ok) return scan;
+    const matches = (scan.elements || [])
+      .map((element: any) => ({ ...element, score: this.scorePcUiElement(element, query, role) }))
+      .filter((element: any) => Number(element.score || 0) > 0)
+      .sort((a: any, b: any) => Number(b.score || 0) - Number(a.score || 0))
+      .slice(0, 10);
+    const best = matches[0] || null;
+    return { ok: Boolean(best), query, role, best, matches, windowId: scan.windowId, title: scan.title, app: scan.app };
+  }
+
+  async pcUiClick(target: string, role?: string, windowId?: string) {
+    if (process.platform !== 'win32') return { ok: false, error: 'PC UIA is only available on Windows.' };
+    const raw = String(target || '').trim();
+    if (!raw) return { ok: false, error: 'pc_ui_click needs an element id, name, or query.' };
+    let element = /^pc-ui-\d+$/i.test(raw) ? this.lastPcUiScan.find(item => item.id === raw) : null;
+    if (!element) {
+      const resolved = await this.pcUiResolve(raw, role, windowId);
+      if (!resolved?.ok) return resolved;
+      element = resolved.best;
+    }
+    const label = `${element.name || ''} ${element.automationId || ''} ${element.role || ''} ${raw}`.trim();
+    if (this.isRiskyPcAction(label)) {
+      throw new Error('Risky PC UI click blocked. Ask Silva/Syan for explicit approval before clicking pay/purchase/order/submit/checkout/password/card/bank/uninstall/reset/delete controls.');
+    }
+    const b = element.bounding || {};
+    const x = Math.round(Number(b.x || 0) + Number(b.width || 0) / 2);
+    const y = Math.round(Number(b.y || 0) + Number(b.height || 0) / 2);
+    const hwnd = String(element.windowId || windowId || '').trim();
+    const script = `
+      Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32PcClick {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+}
+"@
+      ${/^\d+$/.test(hwnd) ? `[void][Win32PcClick]::SetForegroundWindow([IntPtr]${hwnd})` : ''}
+      Start-Sleep -Milliseconds 120
+      [void][Win32PcClick]::SetCursorPos(${x}, ${y})
+      Start-Sleep -Milliseconds 60
+      [Win32PcClick]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+      Start-Sleep -Milliseconds 50
+      [Win32PcClick]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+      [pscustomobject]@{ ok = $true; x = ${x}; y = ${y}; elementId = ${this.psString(element.id || '')}; name = ${this.psString(element.name || '')}; role = ${this.psString(element.role || '')}; windowId = ${this.psString(hwnd)} } | ConvertTo-Json -Compress
+    `;
+    const result = await this.runPowerShellJson(script, 12000, 1);
+    return { ...result, element };
+  }
+
+  async pcUiType(target: string, text: string, windowId?: string, role = 'Edit') {
+    if (process.platform !== 'win32') return { ok: false, error: 'PC UIA is only available on Windows.' };
+    const raw = String(target || '').trim();
+    if (!raw) return { ok: false, error: 'pc_ui_type needs an element id, name, or query.' };
+    let element = /^pc-ui-\d+$/i.test(raw) ? this.lastPcUiScan.find(item => item.id === raw) : null;
+    if (!element) {
+      const resolved = await this.pcUiResolve(raw, role, windowId);
+      if (!resolved?.ok) return resolved;
+      element = resolved.best;
+    }
+    const label = `${element.name || ''} ${element.automationId || ''} ${element.role || ''} ${raw}`.trim();
+    if (this.isRiskyPcAction(label)) {
+      throw new Error('Risky PC UI typing blocked. Ask Silva/Syan for explicit approval before entering passwords, bank, card, payment, account, or system-security details.');
+    }
+    const clickResult = await this.pcUiClick(element.id, undefined, element.windowId || windowId);
+    if (!clickResult?.ok) return clickResult;
+    const script = `
+      $oldClipboard = $null
+      try { $oldClipboard = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      Set-Clipboard -Value ${this.psString(String(text || ''))}
+      Start-Sleep -Milliseconds 80
+      $shell = New-Object -ComObject WScript.Shell
+      $shell.SendKeys('^a')
+      Start-Sleep -Milliseconds 50
+      $shell.SendKeys('^v')
+      Start-Sleep -Milliseconds 120
+      if ($null -ne $oldClipboard) { Set-Clipboard -Value $oldClipboard }
+      [pscustomobject]@{ ok = $true; elementId = ${this.psString(element.id || '')}; name = ${this.psString(element.name || '')}; role = ${this.psString(element.role || '')}; chars = ${String(text || '').length} } | ConvertTo-Json -Compress
+    `;
+    const result = await this.runPowerShellJson(script, 12000, 1);
+    return { ...result, element };
   }
 
   private async getFolderSize(folderPath: string, limit = 5000) {

@@ -37,6 +37,12 @@ interface Window {
     revealPath: (targetPath: string) => Promise<{ ok: boolean, path?: string, error?: string }>;
     openPath: (targetPath: string) => Promise<{ ok: boolean, path?: string, error?: string }>;
     openTerminal: (folderPath?: string) => Promise<{ ok: boolean, path?: string }>;
+    listPcWindows: () => Promise<any>;
+    focusPcWindow: (id: string) => Promise<any>;
+    scanPcUi: (windowId?: string) => Promise<any>;
+    resolvePcUi: (query: string, role?: string, windowId?: string) => Promise<any>;
+    clickPcUi: (target: string, role?: string, windowId?: string) => Promise<any>;
+    typePcUi: (target: string, text: string, windowId?: string, role?: string) => Promise<any>;
     composeWhatsApp: (message: string, phone?: string) => Promise<{ ok: boolean, url: string, mode: string }>;
     getVoiceStackStatus: () => Promise<{ ok: boolean, url: string, status?: number, error?: string, profiles?: any, accents?: any }>;
     speakVoiceStack: (text: string, options?: any) => Promise<{ ok: boolean, mode?: string, endpoint?: string, voice?: string, language?: string, path?: string, error?: string }>;
