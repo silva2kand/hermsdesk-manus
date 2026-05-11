@@ -1281,10 +1281,13 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
                 continue;
               }
 
+              const actionParams = normalizedTool === 'approval_request' || normalizedTool === 'approval-request'
+                ? { taskId: task.id, ...(toolCall.params || {}) }
+                : toolCall.params;
               const action = this.skillsEngine.proposeAction({
                 name: toolCall.name,
                 type: this.getToolType(toolCall.name),
-                params: toolCall.params
+                params: actionParams
               });
 
               if (this.toolNeedsManualApproval(toolCall.name, toolCall.params)) {
@@ -1292,7 +1295,7 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
                 sendUpdate(approvalMessage, 'tool');
                 this.emitThought(task, agent, 'OBSERVATION', approvalMessage, {
                   tool: toolCall.name,
-                  params: toolCall.params,
+                  params: actionParams,
                   approvalId: action.id
                 });
                 messages.push({ role: 'assistant', content });

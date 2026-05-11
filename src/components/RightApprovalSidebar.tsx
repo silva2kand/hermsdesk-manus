@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, X, RefreshCw, ShieldCheck, Mail, Bot, FolderOpen, Activity, Globe, Search, CalendarClock, Monitor, Scale, CreditCard, Radio } from 'lucide-react';
+import { Check, X, RefreshCw, ShieldCheck, Mail, Bot, FolderOpen, Activity, Globe, Search, CalendarClock, Monitor, Scale, CreditCard, Radio, MousePointerClick } from 'lucide-react';
 
 const agentNames: Record<string, string> = {
   'general-agent': 'Mythos Manager',
@@ -33,6 +33,15 @@ const approvalAccent = (domain = '') => {
   return 'bg-gray-50 border-gray-100 text-gray-800';
 };
 
+const eventLabel = (event: any) => {
+  const payload = event?.payload || {};
+  return payload.content || payload.message || payload.query || payload.title || payload.tool || payload.engine || payload.url || payload.status || event?.source || event?.type || 'Event';
+};
+
+const shortTime = (value: any) => {
+  try { return new Date(value).toLocaleTimeString(); } catch { return ''; }
+};
+
 export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const [pendingSkills, setPendingSkills] = useState<any[]>([]);
   const [emailIntel, setEmailIntel] = useState<any>({ folders: [], messages: [], summary: {} });
@@ -42,6 +51,8 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const [silvaEvents, setSilvaEvents] = useState<any[]>([]);
   const [computerSessions, setComputerSessions] = useState<any[]>([]);
   const [agentTasks, setAgentTasks] = useState<any[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState('');
+  const [correctionText, setCorrectionText] = useState('');
   const [operatorText, setOperatorText] = useState('');
   const [operatorAgent, setOperatorAgent] = useState('browser-automation-agent');
 
@@ -190,10 +201,21 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
         `Silva approved this prepared approval card. Continue only inside this approved scope; do not exceed it.
 
 Domain: ${contract.domain || 'general'}
+Title: ${contract.title || ''}
+Target: ${contract.target || ''}
 Approved action: ${contract.action || action.name}
+Why: ${contract.why || ''}
 Summary: ${contract.summary || ''}
 Details: ${contract.details || ''}
+Amount: ${contract.amount || ''}
+Term: ${contract.term || ''}
+APR/rate: ${contract.apr || ''}
+Repayment: ${contract.repayment || ''}
 Evidence checked: ${contract.evidence || ''}
+Evidence items: ${(contract.evidenceItems || []).join('; ')}
+Draft/form preview: ${contract.draftPreview || ''}
+Will do: ${(contract.willDo || []).join('; ')}
+Will not do: ${(contract.willNotDo || []).join('; ')}
 Risk Silva saw: ${contract.risk || ''}
 Missing facts: ${contract.missing || ''}
 Approved next step: ${contract.nextStep || ''}
@@ -217,6 +239,46 @@ Now complete the next safe step using real tools where available. If the next st
       .filter((message: any) => message.approvalStatus !== 'done')
       .slice(0, 30);
   }, [emailIntel]);
+
+  const selectedTask = useMemo(() => {
+    return agentTasks.find(task => task.id === selectedTaskId) || null;
+  }, [agentTasks, selectedTaskId]);
+
+  const selectedTaskEvents = useMemo(() => {
+    if (!selectedTask) return [];
+    return silvaEvents
+      .filter(event => event.sessionId === selectedTask.id || event.payload?.taskId === selectedTask.id)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [selectedTask, silvaEvents]);
+
+  const selectedApprovals = useMemo(() => {
+    if (!selectedTask) return [];
+    return pendingSkills.filter(action => action.approvalContract?.taskId === selectedTask.id || action.params?.taskId === selectedTask.id);
+  }, [pendingSkills, selectedTask]);
+
+  const selectedTaskStats = useMemo(() => {
+    const events = selectedTaskEvents;
+    const toolEvents = events.filter(event => /^tool\.|browser|pc_ui|pc-window/i.test(`${event.type} ${event.source} ${event.payload?.tool || ''}`));
+    const webEvents = events.filter(event => /browser|search|tinyfish|web/i.test(`${event.type} ${event.source} ${event.payload?.url || ''}`));
+    const mailEvents = events.filter(event => /mail|outlook|email/i.test(`${event.type} ${event.source} ${event.payload?.message || ''}`));
+    const fileEvents = events.filter(event => /file|pdf|document|read_file|list_dir/i.test(`${event.type} ${event.source} ${event.payload?.tool || ''}`));
+    return {
+      tools: toolEvents.length,
+      web: webEvents.length,
+      mail: mailEvents.length,
+      files: fileEvents.length,
+      approvals: selectedApprovals.length
+    };
+  }, [selectedTaskEvents, selectedApprovals]);
+
+  const sendTaskCorrection = async () => {
+    const text = correctionText.trim();
+    if (!text || !selectedTask) return;
+    const result = await window.ipcRenderer?.injectOperatorInstruction?.(selectedTask.assignedAgentId, `Correction for task ${selectedTask.id}: ${text}`).catch((error: any) => ({ ok: false, error: error?.message }));
+    setNotice(result?.ok ? 'Correction sent to the live agent.' : `Correction failed: ${result?.error || 'unknown error'}`);
+    setCorrectionText('');
+    window.setTimeout(() => setNotice(''), 4000);
+  };
 
   const approveEmail = async (id: string, status: 'approved' | 'denied' | 'done') => {
     const target = routeItems.find((message: any) => message.id === id);
@@ -357,7 +419,7 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
               : status === 'queued' ? 'text-amber-700 bg-amber-50 border-amber-100'
               : 'text-blue-700 bg-blue-50 border-blue-100';
             return (
-              <div key={task.id} className="p-3 bg-white border border-gray-100 rounded-2xl space-y-2">
+              <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className="w-full p-3 bg-white border border-gray-100 hover:border-blue-100 hover:bg-blue-50/30 rounded-2xl space-y-2 text-left transition-all">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 truncate">{task.id}</span>
                   <span className={`px-2 py-1 rounded-full border text-[8px] font-black uppercase ${statusClass}`}>{status}</span>
@@ -381,7 +443,7 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
                     Gates: {task.manager.approvalGates.join(', ')}
                   </p>
                 )}
-              </div>
+              </button>
             );
           })}
         </section>
@@ -596,6 +658,115 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
           ))}
         </section>
       </div>
+      {selectedTask && (
+        <div className="fixed top-4 bottom-4 right-[21rem] w-[30rem] bg-white border border-gray-100 rounded-3xl shadow-2xl z-[120] flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-950 text-white">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">Task Detail</p>
+                <h3 className="text-sm font-black mt-1 line-clamp-2">{selectedTask.input}</h3>
+                <p className="text-[9px] text-gray-300 mt-1">{selectedTask.id} · {agentNames[selectedTask.assignedAgentId] || selectedTask.assignedAgentId}</p>
+              </div>
+              <button onClick={() => setSelectedTaskId('')} className="p-2 rounded-xl bg-white/10 hover:bg-white/15" aria-label="Close task detail">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-5 gap-2 mt-4">
+              <div className="rounded-xl bg-white/10 p-2"><p className="text-sm font-black">{selectedTaskStats.tools}</p><p className="text-[8px] uppercase font-black text-gray-300">Tools</p></div>
+              <div className="rounded-xl bg-white/10 p-2"><p className="text-sm font-black">{selectedTaskStats.web}</p><p className="text-[8px] uppercase font-black text-gray-300">Web</p></div>
+              <div className="rounded-xl bg-white/10 p-2"><p className="text-sm font-black">{selectedTaskStats.mail}</p><p className="text-[8px] uppercase font-black text-gray-300">Mail</p></div>
+              <div className="rounded-xl bg-white/10 p-2"><p className="text-sm font-black">{selectedTaskStats.files}</p><p className="text-[8px] uppercase font-black text-gray-300">Files</p></div>
+              <div className="rounded-xl bg-white/10 p-2"><p className="text-sm font-black">{selectedTaskStats.approvals}</p><p className="text-[8px] uppercase font-black text-gray-300">Cards</p></div>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <section className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-gray-50 border border-gray-100 p-3">
+                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Status</p>
+                <p className="text-xs font-black text-gray-900 uppercase mt-1">{selectedTask.status}</p>
+              </div>
+              <div className="rounded-2xl bg-gray-50 border border-gray-100 p-3">
+                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Priority</p>
+                <p className="text-xs font-black text-gray-900 uppercase mt-1">{selectedTask.manager?.priority || 'normal'}</p>
+              </div>
+            </section>
+
+            {selectedTask.manager && (
+              <section className="rounded-2xl bg-blue-50 border border-blue-100 p-3">
+                <p className="text-[8px] font-black uppercase tracking-widest text-blue-700">Mythos Route</p>
+                <p className="text-[10px] font-bold text-blue-900 mt-1">{selectedTask.manager.routeReason}</p>
+                {selectedTask.manager.collaborators?.length > 0 && (
+                  <p className="text-[9px] text-blue-700 mt-2">Verifiers: {selectedTask.manager.collaborators.map((item: any) => item.name || item.id).join(', ')}</p>
+                )}
+                {selectedTask.manager.approvalGates?.length > 0 && (
+                  <p className="text-[9px] text-amber-700 mt-2">Approval gates: {selectedTask.manager.approvalGates.join(', ')}</p>
+                )}
+              </section>
+            )}
+
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Timeline</p>
+                <span className="text-[9px] font-black text-gray-400">{selectedTaskEvents.length}</span>
+              </div>
+              {selectedTaskEvents.length === 0 && <p className="text-[10px] text-gray-400">No task-scoped events captured yet.</p>}
+              {selectedTaskEvents.map(event => (
+                <div key={event.id} className="relative pl-4 pb-3 border-l border-gray-200">
+                  <span className="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-gray-900" />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-500 truncate">{event.type}</p>
+                    <span className="text-[8px] text-gray-400">{shortTime(event.createdAt)}</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-900 mt-1">{event.source}</p>
+                  <p className="text-[9px] text-gray-600 mt-1 whitespace-pre-wrap line-clamp-5">{eventLabel(event)}</p>
+                </div>
+              ))}
+            </section>
+
+            {selectedApprovals.length > 0 && (
+              <section className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Linked Approval Cards</p>
+                {selectedApprovals.map(action => (
+                  <div key={action.id} className={`p-3 border rounded-2xl ${approvalAccent(action.approvalContract?.domain)}`}>
+                    <p className="text-[9px] font-black uppercase tracking-widest">{action.approvalContract?.domain || 'approval'}</p>
+                    <p className="text-[11px] font-black text-gray-950 mt-1">{action.approvalContract?.title || action.approvalContract?.action || action.name}</p>
+                    <p className="text-[9px] text-gray-700 mt-1 line-clamp-3">{action.approvalContract?.summary || action.approvalContract?.details || 'Waiting for review.'}</p>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            <section className="rounded-2xl bg-gray-50 border border-gray-100 p-3 space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Correction Loop</p>
+              <textarea
+                value={correctionText}
+                onChange={event => setCorrectionText(event.target.value)}
+                placeholder="Tell the agent what is wrong or what to verify next..."
+                className="w-full min-h-[76px] rounded-xl border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold text-gray-800 outline-none focus:border-blue-300"
+              />
+              <div className="flex items-center gap-2">
+                <button onClick={sendTaskCorrection} className="flex-1 py-2 rounded-xl bg-gray-900 text-white text-[9px] font-black uppercase tracking-widest">
+                  Send Correction
+                </button>
+                <button onClick={() => setCorrectionText('This extraction or route looks wrong. Re-check the evidence and explain what changed.')} className="px-3 py-2 rounded-xl bg-white border border-gray-200 text-[9px] font-black text-gray-700">
+                  Mark Wrong
+                </button>
+              </div>
+            </section>
+
+            <section className="grid grid-cols-2 gap-2">
+              <button onClick={() => window.ipcRenderer?.openBrowserOperator?.('https://www.google.com', `review-${selectedTask.id}`, `Review ${selectedTask.id}`).catch(() => {})} className="rounded-2xl bg-blue-50 border border-blue-100 p-3 text-left">
+                <Globe className="w-4 h-4 text-blue-700" />
+                <p className="text-[10px] font-black text-blue-900 mt-2">Open Web Review</p>
+              </button>
+              <button onClick={() => window.ipcRenderer?.getBrowserOperatorState?.().then(state => setComputerSessions(state?.sessions || [])).catch(() => {})} className="rounded-2xl bg-gray-50 border border-gray-100 p-3 text-left">
+                <MousePointerClick className="w-4 h-4 text-gray-700" />
+                <p className="text-[10px] font-black text-gray-900 mt-2">Refresh Live Views</p>
+              </button>
+            </section>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };
