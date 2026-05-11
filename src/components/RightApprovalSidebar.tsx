@@ -41,18 +41,21 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [silvaEvents, setSilvaEvents] = useState<any[]>([]);
   const [computerSessions, setComputerSessions] = useState<any[]>([]);
+  const [agentTasks, setAgentTasks] = useState<any[]>([]);
   const [operatorText, setOperatorText] = useState('');
   const [operatorAgent, setOperatorAgent] = useState('browser-automation-agent');
 
   const refresh = async () => {
-    const [skills, intel, browserState] = await Promise.all([
+    const [skills, intel, browserState, tasks] = await Promise.all([
       window.ipcRenderer?.getPendingSkills?.().catch(() => []),
       window.ipcRenderer?.getEmailIntelligence?.().catch(() => null),
-      window.ipcRenderer?.getBrowserOperatorState?.().catch(() => null)
+      window.ipcRenderer?.getBrowserOperatorState?.().catch(() => null),
+      window.ipcRenderer?.getAgentTasks?.().catch(() => [])
     ]);
     setPendingSkills(skills || []);
     if (intel) setEmailIntel(intel);
     setComputerSessions(browserState?.sessions || []);
+    setAgentTasks(tasks || []);
   };
 
   useEffect(() => {
@@ -89,6 +92,9 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
         title: event?.type || 'Silva Event',
         message: event?.payload?.message || event?.payload?.query || event?.payload?.tool || event?.payload?.engine || event?.source || 'Event bus update'
       });
+      if (/^agent\.task\.|manager\.decision|agent\.thought/.test(event?.type || '')) {
+        window.ipcRenderer?.getAgentTasks?.().then(tasks => setAgentTasks(tasks || [])).catch(() => {});
+      }
     };
     const onSyncMail = () => syncMail();
 
@@ -339,6 +345,49 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
 
         <section className="space-y-2">
           <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Task Monitor</h3>
+            <span className="text-[9px] font-black text-gray-400">{agentTasks.length}</span>
+          </div>
+          {agentTasks.length === 0 && <p className="text-[10px] text-gray-400">No agent tasks yet.</p>}
+          {agentTasks.slice(0, 8).map(task => {
+            const last = (task.history || []).slice(-1)[0];
+            const status = String(task.status || 'unknown');
+            const statusClass = status === 'done' ? 'text-green-700 bg-green-50 border-green-100'
+              : status === 'failed' ? 'text-red-700 bg-red-50 border-red-100'
+              : status === 'queued' ? 'text-amber-700 bg-amber-50 border-amber-100'
+              : 'text-blue-700 bg-blue-50 border-blue-100';
+            return (
+              <div key={task.id} className="p-3 bg-white border border-gray-100 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 truncate">{task.id}</span>
+                  <span className={`px-2 py-1 rounded-full border text-[8px] font-black uppercase ${statusClass}`}>{status}</span>
+                </div>
+                <p className="text-[10px] font-black text-gray-900 line-clamp-2">{task.input}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-gray-50 p-2">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Lead</p>
+                    <p className="text-[9px] font-bold text-gray-700 truncate">{agentNames[task.assignedAgentId] || task.assignedAgentId}</p>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 p-2">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Priority</p>
+                    <p className="text-[9px] font-bold text-gray-700 truncate">{task.manager?.priority || 'normal'}</p>
+                  </div>
+                </div>
+                <p className="text-[9px] text-gray-500 line-clamp-2">
+                  Last: {last?.content || task.manager?.routeReason || 'Waiting for first live event'}
+                </p>
+                {task.manager?.approvalGates?.length > 0 && (
+                  <p className="text-[8px] font-bold text-amber-700 line-clamp-2">
+                    Gates: {task.manager.approvalGates.join(', ')}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </section>
+
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Event Bus</h3>
             <span className="text-[9px] font-black text-gray-400">{silvaEvents.length}</span>
           </div>
@@ -455,8 +504,18 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
                 <p className="text-[9px] font-black uppercase tracking-widest truncate">{domain}</p>
                 <span className="text-[8px] font-black uppercase opacity-70">{contract ? 'Approval card' : action.type}</span>
               </div>
-              <p className="text-[11px] font-black text-gray-950">{contract?.action || action.name}</p>
+              <p className="text-[11px] font-black text-gray-950">{contract?.title || contract?.action || action.name}</p>
+              {contract?.target && <p className="text-[9px] font-black text-gray-500">Target: {contract.target}</p>}
+              {contract?.why && <p className="text-[9px] text-gray-700"><span className="font-black">Why:</span> {contract.why}</p>}
               {contract?.summary && <p className="text-[10px] font-bold text-gray-700">{contract.summary}</p>}
+              {(contract?.amount || contract?.term || contract?.apr || contract?.repayment) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {contract?.amount && <div className="rounded-xl bg-white/70 border border-white/80 p-2"><p className="text-[8px] font-black uppercase text-gray-400">Amount</p><p className="text-[9px] font-black text-gray-800">{contract.amount}</p></div>}
+                  {contract?.term && <div className="rounded-xl bg-white/70 border border-white/80 p-2"><p className="text-[8px] font-black uppercase text-gray-400">Term</p><p className="text-[9px] font-black text-gray-800">{contract.term}</p></div>}
+                  {contract?.apr && <div className="rounded-xl bg-white/70 border border-white/80 p-2"><p className="text-[8px] font-black uppercase text-gray-400">Rate</p><p className="text-[9px] font-black text-gray-800">{contract.apr}</p></div>}
+                  {contract?.repayment && <div className="rounded-xl bg-white/70 border border-white/80 p-2"><p className="text-[8px] font-black uppercase text-gray-400">Repayment</p><p className="text-[9px] font-black text-gray-800">{contract.repayment}</p></div>}
+                </div>
+              )}
               {contract?.details && (
                 <div className="rounded-xl bg-white/70 border border-white/80 p-2">
                   <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Details</p>
@@ -467,6 +526,34 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
                 <div className="rounded-xl bg-white/70 border border-white/80 p-2">
                   <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Evidence Checked</p>
                   <p className="text-[9px] text-gray-700 line-clamp-4">{contract.evidence}</p>
+                </div>
+              )}
+              {contract?.evidenceItems?.length > 0 && (
+                <div className="rounded-xl bg-white/70 border border-white/80 p-2">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Evidence Items</p>
+                  <ul className="mt-1 space-y-1">
+                    {contract.evidenceItems.slice(0, 8).map((item: string, index: number) => (
+                      <li key={`${action.id}-ev-${index}`} className="text-[9px] text-gray-700 truncate">{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {contract?.draftPreview && (
+                <div className="rounded-xl bg-white/70 border border-white/80 p-2">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Draft / Form Preview</p>
+                  <p className="text-[9px] text-gray-700 whitespace-pre-wrap line-clamp-6">{contract.draftPreview}</p>
+                </div>
+              )}
+              {(contract?.willDo?.length > 0 || contract?.willNotDo?.length > 0) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-green-50 border border-green-100 p-2">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-green-700">Will Do</p>
+                    {(contract?.willDo || []).slice(0, 5).map((item: string, index: number) => <p key={`${action.id}-do-${index}`} className="text-[8px] text-green-800 truncate">{item}</p>)}
+                  </div>
+                  <div className="rounded-xl bg-red-50 border border-red-100 p-2">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-red-700">Will Not Do</p>
+                    {(contract?.willNotDo || []).slice(0, 5).map((item: string, index: number) => <p key={`${action.id}-not-${index}`} className="text-[8px] text-red-800 truncate">{item}</p>)}
+                  </div>
                 </div>
               )}
               {(contract?.risk || contract?.missing || contract?.nextStep) && (

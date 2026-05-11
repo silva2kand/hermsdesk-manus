@@ -17,11 +17,23 @@ export interface SkillAction {
   status: 'pending' | 'approved' | 'denied' | 'executed';
   timestamp: number;
   approvalContract?: {
+    taskId?: string;
+    title?: string;
     domain?: string;
+    target?: string;
     action?: string;
+    why?: string;
     summary?: string;
     details?: string;
+    amount?: string;
+    term?: string;
+    apr?: string;
+    repayment?: string;
     evidence?: string;
+    evidenceItems?: string[];
+    draftPreview?: string;
+    willDo?: string[];
+    willNotDo?: string[];
     risk?: string;
     missing?: string;
     nextStep?: string;
@@ -92,6 +104,15 @@ export class SkillsEngineService {
     return allowed.some(pattern => pattern.test(cmd)) && !blocked.test(cmd);
   }
 
+  private splitApprovalList(value: any) {
+    if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean).slice(0, 20);
+    return String(value || '')
+      .split(/\s*(?:\||;|\n)\s*/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .slice(0, 20);
+  }
+
   getInstalledSkills() {
     const saved = this.store.get('installed_skills', this.defaultSkills) as string[];
     return Array.from(new Set([...this.defaultSkills, ...(Array.isArray(saved) ? saved : [])]));
@@ -115,7 +136,7 @@ export class SkillsEngineService {
 
     if (installed.includes('mythos-execution')) {
       rules.push('Mythos Execution: break complex work into concrete steps, execute available real tools, verify outcomes, and continue until done or blocked by missing permission.');
-      rules.push('Approval Contract: when a serious action is ready but needs Silva approval, create [TOOL: approval_request(domain="accounting|legal|funding|property|visa|business|whatsapp|pc|web", action="exact action awaiting approval", summary="short human summary", details="amounts, parties, dates, addresses, terms", evidence="what was checked", risk="main risk", missing="missing facts if any", nextStep="what happens after approval")]. Do not send/pay/submit/sign/delete/contact until that approval card is approved.');
+      rules.push('Approval Contract: when a serious action is ready but needs Silva approval, create [TOOL: approval_request(title="clear card title", domain="accounting|legal|funding|property|visa|business|whatsapp|pc|web", target="person/company/site/form/app", action="exact action awaiting approval", why="why this action matters", summary="short human summary", details="amounts, parties, dates, addresses, terms", amount="£...", term="...", apr="...", repayment="...", evidence="what was checked", evidenceItems="email A|PDF B|web page C", draftPreview="exact text/form/message preview", willDo="do this|attach that", willNotDo="no other lender|no delete|no payment", risk="main risk", missing="missing facts if any", nextStep="what happens after approval")]. Do not send/pay/submit/sign/delete/contact until that approval card is approved.');
     }
     if (installed.includes('mythos-recovery')) {
       rules.push('Mythos Recovery: when a tool/model/action fails, diagnose, retry with a smaller step, choose a fallback route, and report exactly what was recovered.');
@@ -240,11 +261,23 @@ export class SkillsEngineService {
       ...action,
       approvalContract: action.name === 'approval_request' || action.name === 'approval-request'
         ? {
+            taskId: params.taskId || params.task_id || '',
+            title: params.title || params.action || 'Approval requested',
             domain: params.domain || params.area || 'general',
+            target: params.target || params.to || params.provider || '',
             action: params.action || params.title || 'Approval requested',
+            why: params.why || '',
             summary: params.summary || params.reason || '',
             details: params.details || params.detail || '',
+            amount: params.amount || '',
+            term: params.term || '',
+            apr: params.apr || params.rate || '',
+            repayment: params.repayment || params.monthly || '',
             evidence: params.evidence || '',
+            evidenceItems: this.splitApprovalList(params.evidenceItems || params.evidence_items || params.sources),
+            draftPreview: params.draftPreview || params.draft_preview || params.preview || params.draft || '',
+            willDo: this.splitApprovalList(params.willDo || params.will_do || params.scope),
+            willNotDo: this.splitApprovalList(params.willNotDo || params.will_not_do || params.notScope),
             risk: params.risk || params.risks || '',
             missing: params.missing || '',
             nextStep: params.nextStep || params.next || '',
@@ -298,20 +331,42 @@ export class SkillsEngineService {
 
     if (name === 'approval_request' || name === 'approval-request') {
       const contract = action.approvalContract || {
+        taskId: params.taskId || '',
+        title: params.title || 'Approval requested',
         domain: params.domain || 'general',
+        target: params.target || '',
         action: params.action || 'Approval requested',
+        why: params.why || '',
         summary: params.summary || '',
         details: params.details || '',
+        amount: params.amount || '',
+        term: params.term || '',
+        apr: params.apr || '',
+        repayment: params.repayment || '',
         evidence: params.evidence || '',
+        evidenceItems: this.splitApprovalList(params.evidenceItems || params.sources),
+        draftPreview: params.draftPreview || params.preview || '',
+        willDo: this.splitApprovalList(params.willDo || params.scope),
+        willNotDo: this.splitApprovalList(params.willNotDo || params.notScope),
         risk: params.risk || '',
         missing: params.missing || '',
         nextStep: params.nextStep || ''
       };
       return [
-        `Approval recorded for ${contract.domain}: ${contract.action}`,
+        `Approval recorded for ${contract.domain}: ${contract.title || contract.action}`,
+        contract.target ? `Target: ${contract.target}` : '',
+        contract.why ? `Why: ${contract.why}` : '',
         contract.summary ? `Summary: ${contract.summary}` : '',
         contract.details ? `Details: ${contract.details}` : '',
+        contract.amount ? `Amount: ${contract.amount}` : '',
+        contract.term ? `Term: ${contract.term}` : '',
+        contract.apr ? `APR/rate: ${contract.apr}` : '',
+        contract.repayment ? `Repayment: ${contract.repayment}` : '',
         contract.evidence ? `Evidence: ${contract.evidence}` : '',
+        contract.evidenceItems?.length ? `Evidence items: ${contract.evidenceItems.join('; ')}` : '',
+        contract.draftPreview ? `Draft/preview: ${contract.draftPreview}` : '',
+        contract.willDo?.length ? `Will do: ${contract.willDo.join('; ')}` : '',
+        contract.willNotDo?.length ? `Will not do: ${contract.willNotDo.join('; ')}` : '',
         contract.risk ? `Risk: ${contract.risk}` : '',
         contract.missing ? `Missing: ${contract.missing}` : '',
         contract.nextStep ? `Next step after approval: ${contract.nextStep}` : '',
