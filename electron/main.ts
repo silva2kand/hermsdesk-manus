@@ -1089,7 +1089,6 @@ function createWindow() {
         (id === 'lm-studio' && Boolean(lm?.online || lm?.data)) ||
         (id === 'opencode' && Boolean(openCode?.online) && !openCode?.authRequired) ||
         (id === 'my-browser' && Boolean(browser?.online)) ||
-        (id === 'whatsapp' && Boolean(whatsappStatus?.ok)) ||
         tinyFishConfigured ||
         oauthConnected
       );
@@ -1107,7 +1106,7 @@ function createWindow() {
             : id === 'tinyfish'
               ? (tinyFishConfigured ? `TinyFish API key saved locally (${tinyFishStatus.keyPrefix || 'configured'})` : 'TinyFish API key missing')
             : id === 'whatsapp'
-              ? (whatsappStatus?.ok ? `WhatsApp channel active (${whatsappStatus.manualSendOnly ? 'manual send' : 'send route'})` : 'WhatsApp route enabled; open WhatsApp Desktop/Web')
+              ? 'Manual WhatsApp drafts only. No background read, monitoring, or auto-send in free local mode.'
             : id === 'my-browser'
               ? (browser?.online ? `Browser Operator open: ${browser.url || 'active session'}` : 'Browser Operator not opened yet')
               : apiKeyProvider[id]

@@ -212,6 +212,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [isTyping, setIsTyping] = useState(false);
   const [researchSteps, setResearchSteps] = useState<string[]>([]);
   const [liveTrace, setLiveTrace] = useState<any[]>([]);
+  const researchStepsRef = useRef<string[]>([]);
+  const liveTraceRef = useRef<any[]>([]);
+  const [thinkingReview, setThinkingReview] = useState<any | null>(null);
   const [provider, setProvider] = useState(initialModel?.provider || 'Auto');
   const [model, setModel] = useState(initialModel?.model || 'Auto mix');
   const [voicePreset, setVoicePreset] = useState('tamil-jaffna');
@@ -236,6 +239,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       window.ipcRenderer?.off?.('silva:event', onSilvaEvent);
     };
   }, []);
+
+  useEffect(() => {
+    researchStepsRef.current = researchSteps;
+  }, [researchSteps]);
+
+  useEffect(() => {
+    liveTraceRef.current = liveTrace;
+  }, [liveTrace]);
 
   useEffect(() => {
     try {
@@ -409,6 +420,19 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     ]
   });
 
+  const buildThinkingSnapshot = (fallbackSteps: string[] = []) => ({
+    createdAt: new Date().toISOString(),
+    steps: (researchStepsRef.current.length ? researchStepsRef.current : fallbackSteps).filter(Boolean),
+    events: liveTraceRef.current.slice(0, 12)
+  });
+
+  const assistantMessage = (content: string, engine?: string, fallbackSteps: string[] = []) => ({
+    role: 'assistant',
+    engine,
+    content,
+    thinking: buildThinkingSnapshot(fallbackSteps)
+  });
+
   const chatConnectorItems = [
     { name: 'LM Studio', icon: Monitor, color: 'bg-blue-700', desc: 'Local model server' },
     { name: 'Ollama', icon: Cpu, color: 'bg-gray-800', desc: 'Local inference engine' },
@@ -426,11 +450,11 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const toggleChatConnector = async (name: string) => {
     if (window.ipcRenderer) {
       const id = connectorId(name);
-      const currentState = chatConnectors[id] !== false;
+      const currentState = chatConnectors[id] === true;
       const newState = !currentState;
       const updated = await window.ipcRenderer.toggleConnector(id, newState);
       setChatConnectors(updated);
-      addNotice(`${name} route ${newState ? 'enabled' : 'disabled'} for this chat. Login/API access is separate where required.`);
+      addNotice(`${name} route ${newState ? 'shown' : 'hidden'} in chat. Real access still needs a live handler, login, API key, or local service.`);
     }
   };
 
@@ -1009,22 +1033,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     setInput('');
 
     if (isNumberSave && !/\bsend|message|notify\b/i.test(outgoing)) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        engine: 'WhatsApp ME',
-        content: `Saved your WhatsApp number locally: ${foundNumber}.\n\nI will use it for approval-first urgent notifications and manual WhatsApp composer drafts. I still will not silently send messages without your final WhatsApp Send press.`
-      }]);
+      setMessages(prev => [...prev, assistantMessage(`Saved your WhatsApp number locally: ${foundNumber}.\n\nI will use it for approval-first urgent notifications and manual WhatsApp composer drafts. I still will not silently send messages without your final WhatsApp Send press.`, 'WhatsApp ME', ['Saved WhatsApp number locally', 'Kept manual-send safety gate'])]);
       return true;
     }
 
     const phone = foundNumber || whatsAppNumber || window.localStorage.getItem(WHATSAPP_NUMBER_KEY) || '';
     const message = extractWhatsAppMessage(outgoing);
     if (!phone) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        engine: 'WhatsApp ME',
-        content: 'I can prepare the WhatsApp composer, but I do not have your WhatsApp number saved yet. Tell me the number once, then I can reuse it for urgent notification drafts.'
-      }]);
+      setMessages(prev => [...prev, assistantMessage('I can prepare the WhatsApp composer, but I do not have your WhatsApp number saved yet. Tell me the number once, then I can reuse it for urgent notification drafts.', 'WhatsApp ME', ['Checked WhatsApp draft request', 'Stopped before composer because no saved number'])]);
       return true;
     }
 
@@ -1038,13 +1054,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     const result = await window.ipcRenderer?.composeWhatsApp?.(message, phone).catch((error: any) => ({ ok: false, error: error?.message }));
     if (result?.ok && draft?.id) await window.ipcRenderer?.markWhatsAppOpened?.(draft.id).catch(() => null);
 
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      engine: 'WhatsApp ME',
-      content: result?.ok
+    setMessages(prev => [...prev, assistantMessage(result?.ok
         ? `Saved the WhatsApp draft, sent a desktop notification, and opened the real WhatsApp composer to ${phone}:\n\n${message}\n\nPlease review and press Send manually.`
-        : `I saved the WhatsApp draft and sent a desktop notification, but could not open the composer: ${(result as any)?.error || 'unknown error'}`
-    }]);
+        : `I saved the WhatsApp draft and sent a desktop notification, but could not open the composer: ${(result as any)?.error || 'unknown error'}`,
+      'WhatsApp ME',
+      ['Created local WhatsApp draft', 'Opened composer only for manual send']
+    )]);
     return true;
   };
 
@@ -1083,13 +1098,11 @@ Use the controlled browser session if available. Keep every step visible in Even
           'browser-automation-agent'
       ).catch((error: any) => ({ ok: false, error: error?.message }));
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        engine: 'Browser Automation Agent',
-        content: task?.id
+      setMessages(prev => [...prev, assistantMessage(task?.id
           ? `Browser Automation Agent started as task ${task.id}.\n\nIt will open one controlled browser computer, read result pages, extract evidence, compare candidates, and stream each step to Live Operations.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
-          : `Browser Automation could not start.\n\nAgent: ${task?.error || 'not queued'}`
-      }]);
+          : `Browser Automation could not start.\n\nAgent: ${task?.error || 'not queued'}`,
+        'Browser Automation Agent'
+      )]);
     } finally {
       setIsTyping(false);
       window.setTimeout(() => setResearchSteps([]), 6000);
@@ -1131,10 +1144,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       const finalTask = task?.id ? await waitForAgentTaskFinal(task.id, 18000) : null;
       const agentFinal = extractAgentFinal(finalTask);
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        engine: 'Real Web Research',
-        content: [
+      setMessages(prev => [...prev, assistantMessage([
           buildLiveResearchAnswer(outgoing, trace),
           '',
           browser?.ok ? 'Browser Operator opened for the live search.' : `Browser Operator issue: ${browser?.error || 'not opened'}`,
@@ -1143,8 +1153,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
             : task?.id
               ? `Research agent is still running in Live Operations: ${task.id}.`
               : `Research agent issue: ${task?.error || 'not queued'}`
-        ].join('\n')
-      }]);
+        ].join('\n'), 'Real Web Research')]);
     } finally {
       setIsTyping(false);
       window.setTimeout(() => setResearchSteps([]), 6000);
@@ -1197,7 +1206,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         '',
         'I can mark any item important/not important, draft a reply, prepare a WhatsApp notification, or route it to Solicitor/Accountant/Purchase Guardian. I will not send, pay, file, move, or delete without approval.'
       ].join('\n');
-      setMessages(prev => [...prev, { role: 'assistant', engine: 'Mythos Front Door', content }]);
+      setMessages(prev => [...prev, assistantMessage(content, 'Mythos Front Door')]);
       return true;
     } finally {
       setIsTyping(false);
@@ -1220,7 +1229,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         '',
         'Normal chat mode is active. Ask for updates, urgent items, emails, bills, legal, accounting, property, or funding when you want the full Mythos scan.'
       ].join('\n');
-      setMessages(prev => [...prev, { role: 'assistant', engine: 'Baba General Chat', content }]);
+      setMessages(prev => [...prev, assistantMessage(content, 'Baba General Chat')]);
       return true;
     } finally {
       setIsTyping(false);
@@ -1244,15 +1253,11 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       const memory = intel?.mailboxMemory || intel?.memory || null;
       const matches = await window.ipcRenderer?.searchIndexedEmails?.(outgoing).catch(() => []) || [];
       const answer = buildMailboxEvidenceAnswer(outgoing, memory, matches);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        engine: 'Mythos Domain Memory',
-        content: answer || [
+      setMessages(prev => [...prev, assistantMessage(answer || [
           'I checked Baba/Mythos domain memory, but I could not find a reliable indexed evidence item for that wording yet.',
           '',
           'The app should keep accounting, legal, property, funding, provider, insurance, and Z-report evidence saved for later review. I will not send, delete, pay, or file anything without approval.'
-        ].join('\n')
-      }]);
+        ].join('\n'), 'Mythos Domain Memory')]);
     } finally {
       setIsTyping(false);
       setResearchSteps([]);
@@ -1293,18 +1298,14 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         'general-agent'
       ).catch(() => null);
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        engine: 'Mythos Memory Trainer',
-        content: [
+      setMessages(prev => [...prev, assistantMessage([
           'Understood Syan. I saved this as Baba/Mythos preference training, not as an insurance/email search.',
           '',
           'Updated rules:',
           ...learnedRules.map(rule => `- ${rule}`),
           '',
           'Future morning updates and mailbox intelligence should use these filters before surfacing priorities. External actions still need approval.'
-        ].join('\n')
-      }]);
+        ].join('\n'), 'Mythos Memory Trainer')]);
     } finally {
       setIsTyping(false);
       setResearchSteps([]);
@@ -1331,10 +1332,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     const result = await window.ipcRenderer?.buildVoiceStack?.().catch((error: any) => ({ ok: false, error: error?.message }));
     if (result?.ok) {
       addNotice('Build Voice Stack opened. It will repair packages, check models, and restart the server.');
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Voice Stack self-build started.\n\nScript: ${(result as any).script || 'repair_voice_stack.ps1'}\n\nIt will repair the Python environment, install/refresh local TTS dependencies, check CUDA/Piper/TTS, list missing premium voice model files, and restart the server.`
-      }]);
+      setMessages(prev => [...prev, assistantMessage(`Voice Stack self-build started.\n\nScript: ${(result as any).script || 'repair_voice_stack.ps1'}\n\nIt will repair the Python environment, install/refresh local TTS dependencies, check CUDA/Piper/TTS, list missing premium voice model files, and restart the server.`, 'Voice Stack', ['Diagnosed voice stack', 'Opened repair workflow'])]);
     } else {
       addNotice(`Build Voice Stack failed: ${result?.error || 'unknown error'}`);
     }
@@ -1469,12 +1467,11 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       try {
         const diagnosis = await window.ipcRenderer?.diagnoseVoiceStack?.().catch(() => null);
         const result = await window.ipcRenderer?.buildVoiceStack?.().catch((error: any) => ({ ok: false, error: error?.message }));
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: result?.ok
+        setMessages(prev => [...prev, assistantMessage(result?.ok
             ? `I started the Silva Voice Stack self-build.\n\nWhat it does now:\n- Repairs/creates the Python 3.11 virtual environment.\n- Installs the local voice package.\n- Installs Piper TTS support.\n- Tries CUDA PyTorch for RTX acceleration.\n- Checks TTS/Piper/CUDA status.\n- Lists any missing premium model files.\n- Restarts the Voice Stack server.\n\nRepair script: ${(result as any).script}\n\nCurrent diagnosis before repair:\n${JSON.stringify(diagnosis, null, 2)}`
-            : `I could not start the Voice Stack self-build.\n\nError: ${result?.error || 'unknown error'}`
-        }]);
+            : `I could not start the Voice Stack self-build.\n\nError: ${result?.error || 'unknown error'}`,
+          'Voice Stack'
+        )]);
       } finally {
         setIsTyping(false);
         setResearchSteps([]);
@@ -1600,13 +1597,11 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
 
         if (assignedAgentId === 'browser-automation-agent') {
           const task = await launchedAgentTask;
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            engine: 'Browser Automation Agent',
-            content: task?.id
+          setMessages(prev => [...prev, assistantMessage(task?.id
               ? `Browser Automation Agent is running as task ${task.id}.\n\nI have routed this away from raw chat, so Jan will not answer with generic browsing text. Watch Live Operations for browser_open, browser_read, click/read/extract, screenshots, and verification events.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
-              : 'Browser Automation Agent could not be launched. Check Live Operations or the Event Bus for the launch error.'
-          }]);
+              : 'Browser Automation Agent could not be launched. Check Live Operations or the Event Bus for the launch error.',
+            'Browser Automation Agent'
+          )]);
           return;
         }
 
@@ -1676,9 +1671,9 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           } else if (engineText.includes('openrouter') || engineText.includes('nvidia')) {
             setEngineStatus(prev => ({ ...prev, Auto: 'online' }));
           }
-          setMessages(prev => [...prev, { role: 'assistant', content, engine }]);
+          setMessages(prev => [...prev, assistantMessage(content, engine)]);
         } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${provider} returned an empty response. Open Model Hub and refresh engine status before retrying.` }]);
+        setMessages(prev => [...prev, assistantMessage(`Error: ${provider} returned an empty response. Open Model Hub and refresh engine status before retrying.`, provider, ['Provider returned empty response', 'Stopped before inventing a reply'])]);
         }
       } else {
         // Fallback for non-electron environment
@@ -1688,7 +1683,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       }
     } catch (e: any) {
       console.error('Chat error:', e);
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.message || "Request timed out or failed."}` }]);
+      setMessages(prev => [...prev, assistantMessage(`Error: ${e.message || "Request timed out or failed."}`, 'Error', ['Caught runtime error', 'Stopped and reported failure'])]);
     } finally {
       setIsTyping(false);
       setResearchSteps([]);
@@ -1788,43 +1783,17 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
                 
               {msg.role === 'assistant' && (
                 <div className="ml-10 space-y-4 w-full max-w-[85%]">
-                  <div className="border border-gray-100 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50/50">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 rounded-full bg-blue-50 flex items-center justify-center">
-                          <Brain className="w-3 h-3 text-blue-500" />
-                        </div>
-                        <span className="text-xs font-medium text-gray-700">Thinking and research</span>
-                      </div>
-                      <button
-                        onClick={() => runFollowUp('Research web', idx)}
-                        className="flex items-center text-[10px] font-black text-blue-600 uppercase tracking-wider hover:underline"
-                      >
-                        <Search className="w-3 h-3 mr-1" />
-                        Web research
-                      </button>
-                    </div>
-                    <div className="px-4 py-2 bg-white space-y-1">
-                      <div className="flex items-center justify-between pb-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Real EventBus trace</span>
-                        <span className="text-[9px] font-black text-blue-500">{liveTrace.length} events</span>
-                      </div>
-                      {liveTrace.length === 0 ? (
-                        <ResearchStep label="No live tool/search events captured for this answer yet" done={false} />
-                      ) : liveTrace.slice(0, 6).map((event) => (
-                        <div key={`${msg.role}-${idx}-${event.id}`} className="flex items-start gap-2 rounded-lg border border-gray-100 bg-gray-50 px-2 py-1.5">
-                          <div className={`mt-0.5 h-2 w-2 rounded-full ${event.type?.startsWith('search.') ? 'bg-blue-500' : event.type?.startsWith('tool.') ? 'bg-purple-500' : event.type?.startsWith('session.') ? 'bg-green-500' : 'bg-gray-400'}`} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 truncate">{event.type}</span>
-                              <span className="text-[8px] text-gray-400 shrink-0">{new Date(event.createdAt).toLocaleTimeString()}</span>
-                            </div>
-                            <p className="text-[10px] font-semibold text-gray-700 truncate">{traceLine(event)}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => setThinkingReview({
+                      engine: msg.engine || 'Hermes ME',
+                      content: msg.content,
+                      thinking: msg.thinking || { steps: [], events: [] }
+                    })}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm hover:border-gray-300 hover:bg-gray-50"
+                  >
+                    See my thinking
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button onClick={() => copyMessage(msg.content)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Copy">
@@ -2120,7 +2089,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
             >
               <LayoutGrid className="w-4 h-4 text-gray-500" />
               <div className="flex items-center space-x-2">
-                {chatConnectorItems.filter(item => chatConnectors[connectorId(item.name)] !== false).slice(0, 8).map(item => (
+                {chatConnectorItems.filter(item => chatConnectors[connectorId(item.name)] === true).slice(0, 8).map(item => (
                   <ConnectorIcon key={item.name} icon={item.icon} label={item.name} color={item.color} />
                 ))}
               </div>
@@ -2138,7 +2107,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Per-chat tool permissions</h3>
-                    <p className="text-[10px] text-gray-500 mt-0.5">ON enables the route in this chat. OAuth/API login is still required for private data.</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">ON only shows a route in this chat. Real access still needs a live handler, login, API key, or local service.</p>
                   </div>
                   <button onClick={() => setShowConnectorPanel(false)} className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-lg">
                     <X className="w-4 h-4" />
@@ -2161,8 +2130,8 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
                           <p className="text-[9px] text-gray-500">{item.desc}</p>
                         </div>
                       </div>
-                      <div className={`w-9 h-5 rounded-full relative transition-all ${chatConnectors[connectorId(item.name)] !== false ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${chatConnectors[connectorId(item.name)] !== false ? 'left-4' : 'left-0.5'}`} />
+                      <div className={`w-9 h-5 rounded-full relative transition-all ${chatConnectors[connectorId(item.name)] === true ? 'bg-blue-600' : 'bg-gray-200'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${chatConnectors[connectorId(item.name)] === true ? 'left-4' : 'left-0.5'}`} />
                       </div>
                     </button>
                   ))}
@@ -2172,6 +2141,67 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           </div>
         </div>
       </div>
+      {thinkingReview && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/25 p-4">
+          <div className="w-full max-w-2xl min-h-[520px] rounded-[28px] bg-[#fbf7f3] shadow-2xl border border-white/70 p-6 relative">
+            <button
+              onClick={() => setThinkingReview(null)}
+              className="absolute right-5 top-5 rounded-full p-2 text-gray-500 hover:bg-black/5 hover:text-gray-900"
+              aria-label="Close thinking review"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-sm font-semibold text-gray-900 mb-8">See my thinking</h2>
+            <div className="space-y-6">
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="h-3 w-3 rounded-full bg-gray-600 mt-1" />
+                  <div className="w-px flex-1 bg-gray-300 mt-2" />
+                </div>
+                <div className="pb-2">
+                  <p className="text-sm font-semibold text-gray-800">Organising my thoughts and creating a plan</p>
+                  <p className="text-xs text-gray-500 mt-1">{thinkingReview.engine}</p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="h-3 w-3 rounded-full bg-gray-600 mt-1" />
+                  <div className="w-px flex-1 bg-gray-300 mt-2" />
+                </div>
+                <div className="pb-2">
+                  <p className="text-sm font-bold text-gray-900">Planning and tool trace</p>
+                  <div className="mt-3 space-y-2">
+                    {(thinkingReview.thinking?.steps || []).length === 0 ? (
+                      <p className="text-sm leading-6 text-gray-700">No explicit planning steps were recorded for this short response.</p>
+                    ) : thinkingReview.thinking.steps.map((step: string, i: number) => (
+                      <p key={`${step}-${i}`} className="text-sm leading-6 text-gray-700">{step}</p>
+                    ))}
+                  </div>
+                  <div className="mt-5 space-y-2">
+                    {(thinkingReview.thinking?.events || []).slice(0, 10).map((event: any) => (
+                      <div key={event.id || `${event.type}-${event.createdAt}`} className="rounded-2xl border border-gray-200 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{event.type || 'event'}</span>
+                          <span className="text-[10px] text-gray-400">{event.createdAt ? new Date(event.createdAt).toLocaleTimeString() : ''}</span>
+                        </div>
+                        <p className="text-xs font-medium text-gray-700 mt-1">{traceLine(event)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="h-4 w-4 rounded-full bg-black text-white flex items-center justify-center">
+                    <Search className="h-2.5 w-2.5" />
+                  </div>
+                </div>
+                <p className="text-sm font-bold text-gray-900">Done</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

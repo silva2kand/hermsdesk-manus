@@ -154,24 +154,20 @@ export class ToolRegistryService {
   }
 
   async getConnectors(): Promise<Record<string, boolean>> {
-    const connectors = this.store.get('connectors', {}) as Record<string, boolean>;
+    let connectors = this.store.get('connectors', {}) as Record<string, boolean>;
     const defaults: Record<string, boolean> = {
-      'my-browser': true, 'ollama': true, 'lm-studio': true, 'opencode': true, 'jan-turboquant': true,
-      'google-gemini': true, 'openrouter': true, 'instagram': true,
-      'meta-ads': true, 'gmail': true, 'google-calendar': true, 'google-drive': true,
-      'outlook-mail': true, 'outlook-calendar': true, 'github': true, 'slack': true,
-      'notion': true, 'zapier': true, 'asana': true, 'monday': true, 'make': true,
-      'linear': true, 'atlassian': true, 'clickup': true, 'supabase': true,
-      'vercel': true, 'neon': true, 'prisma': true, 'sentry': true, 'huggingface': true,
-      'hubspot': true, 'stripe': true, 'mcp-filesystem': true, 'mcp-windows-shell': true,
-      'intercom': true, 'paypal-business': true, 'revenuecat': true, 'close': true,
-      'xero': true, 'airtable': true, 'dify': true, 'cloudflare': true, 'posthog': true,
-      'playwright': true, 'jam': true, 'canva': true, 'webflow': true, 'wix': true,
-      'granola': true, 'fireflies': true, 'tldv': true, 'firecrawl': true,
-      'todoist': true, 'zoominfo': true, 'metabase': true, 'explorium': true, 'tinyfish': true,
-      'serena': true, 'heygen': true, 'context7': true, 'hume': true, 'line': true,
-      'jotform': true, 'pophive': true, 'minimax': true
+      'my-browser': true,
+      'jan-turboquant': true,
+      'outlook-mail': true,
+      'mcp-filesystem': true,
+      'mcp-windows-shell': true,
+      'whatsapp': false
     };
+    if (!this.store.get('connectorTruthResetV2')) {
+      connectors = { ...defaults };
+      this.store.set('connectors', connectors);
+      this.store.set('connectorTruthResetV2', true);
+    }
     return { ...defaults, ...connectors };
   }
 
