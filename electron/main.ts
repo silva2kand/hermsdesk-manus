@@ -649,7 +649,7 @@ function createWindow() {
     }
   }
 
-  schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); selfImprovementService?.setWindow(win); selfImprovementService?.start?.(); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.ensureActive?.().catch((error: any) => appLog('error', `WhatsApp always-active check failed: ${error?.message || error}`))
+  schedulerService?.setWindow(win); schedulerService?.start(); wideResearchService?.setWindow(win); automationService?.setWindow(win); browserOperator?.setWindow(win); eventBus?.setWindow(win); selfImprovementService?.setWindow(win); selfImprovementService?.start?.(); orchestrator?.setEventBus?.(eventBus); wideResearchService?.setEventBus?.(eventBus); automationService?.setEventBus?.(eventBus); browserOperator?.setEventBus?.(eventBus); whatsAppChannelService?.getStatus?.().catch((error: any) => appLog('error', `WhatsApp status check failed: ${error?.message || error}`))
 
   ipcMain.handle('ai:list-models', () => aiService.listOllamaModels())
   const isPersonalOrPrivatePrompt = (messages: any[]) => {

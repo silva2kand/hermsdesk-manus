@@ -104,7 +104,7 @@ export const WhatsAppMEView = () => {
   const keepActive = async () => {
     const status = await window.ipcRenderer?.ensureWhatsAppActive?.();
     setChannelStatus(status);
-    showNotice('WhatsApp channel active check ran. Web/Desktop composer routes opened where available.');
+    showNotice('WhatsApp status checked. Auto-open/auto-monitor is disabled for stability; use Compose when needed.');
   };
 
   const startLocalBridge = async () => {

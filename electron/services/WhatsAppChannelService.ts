@@ -47,11 +47,11 @@ export class WhatsAppChannelService {
 
   getSettings() {
     return this.store.get('whatsappChannelSettings', {
-      alwaysActive: true,
+      alwaysActive: false,
       defaultAgentId: 'general-agent',
       manualSendOnly: true,
       localBridgeEnabled: false,
-      localAutoReplyToOwner: true,
+      localAutoReplyToOwner: false,
       ownerPhone: '',
       broadcastMode: 'multi-section',
       enabled: true
@@ -89,8 +89,8 @@ export class WhatsAppChannelService {
       routes: ROUTES,
       drafts: drafts.length,
       limitation: settings.localBridgeEnabled
-        ? 'Free local bridge uses your signed-in WhatsApp Web session. It watches your own command chat and can auto-reply to you only. Messages to other people still stay draft-and-approve.'
-        : 'Uses your real WhatsApp Desktop/Web sessions. HermesDesk routes, drafts, audits, and opens both composer routes. Enable Local Bridge for away-from-PC owner commands.'
+        ? 'Local WhatsApp bridge is disabled for stability. Use manual routing/drafts until a safe connector is rebuilt.'
+        : 'Manual draft/composer mode only. HermesDesk can prepare replies and open the composer when you ask, but it does not monitor WhatsApp or auto-send.'
     };
     this.eventBus?.emit('channel.status', 'whatsapp', status);
     return status;
@@ -99,9 +99,13 @@ export class WhatsAppChannelService {
   async ensureActive() {
     const settings = this.getSettings();
     if (!settings.enabled || !settings.alwaysActive) return this.getStatus();
-    await this.integrationService.openApp('whatsapp web').catch(() => null);
-    await this.integrationService.openApp('whatsapp').catch(() => null);
-    return this.getStatus();
+    const status = await this.getStatus();
+    this.eventBus?.emit('channel.status', 'whatsapp', {
+      channel: 'whatsapp',
+      status: 'manual-only',
+      reason: 'Always-active WhatsApp opening is disabled for stability. Use Compose to open WhatsApp only when needed.'
+    });
+    return status;
   }
 
   async startLocalBridge(ownerPhone = '', win?: any) {

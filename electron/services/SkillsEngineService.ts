@@ -96,7 +96,7 @@ export class SkillsEngineService {
       rules.push('Browser Automation: for browser tasks use real tools, not explanations. For human-visible searching start with [TOOL: browser_search_visible(query="...")]. Before click/type work, scan controls with [TOOL: browser_ui_scan()], resolve targets with [TOOL: browser_ui_resolve(query="continue", role="button")], click natural targets with [TOOL: browser_ui_click(query="continue", role="button")], and type into natural targets with [TOOL: browser_ui_type(query="search", text="...")]. Use [TOOL: browser_read()], [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="...")], [TOOL: browser_click_text(text="...")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="...", text="...")], [TOOL: browser_press(key="Enter")], and verify after every action with [TOOL: browser_inspect()]. Do not click pay/submit/order/purchase without explicit approval.');
     }
     if (installed.includes('mythos-whatsapp-reply')) {
-      rules.push('Mythos WhatsApp Reply: draft professional, concise replies from user-provided message text; open the real WhatsApp composer; never claim background read/send access. Use [TOOL: whatsapp_inspect_ui()] to see current messages.');
+      rules.push('Mythos WhatsApp Reply: draft professional, concise replies from user-provided message text; open the real WhatsApp composer only when Silva asks; never claim background read/send access. Local WhatsApp Web inspection/auto-reply is disabled for stability.');
     }
     if (installed.includes('mythos-truthful-connectors')) {
       rules.push('Mythos Connector Truth: distinguish enabled routes from authenticated connections. Use [TOOL: outlook_list_accounts()] to see connected Outlook accounts.');
@@ -287,17 +287,7 @@ export class SkillsEngineService {
 
     // --- WHATSAPP TOOLS ---
     if (name === 'whatsapp_inspect_ui') {
-      if (!this.browserOperator) throw new Error('Browser operator not initialized');
-      const sessions = this.browserOperator.getSessions();
-      let waSession = sessions.find((s: any) => s.url.includes('web.whatsapp.com'));
-      
-      if (!waSession) {
-        await this.browserOperator.open('https://web.whatsapp.com/', 'whatsapp-vision', 'WhatsApp Web');
-        return 'WhatsApp Web was not open. I have opened it for you. Please wait a moment for it to load, then try this tool again.';
-      }
-
-      const inspection = await this.browserOperator.inspectScreen(waSession.id);
-      return `WhatsApp UI Inspection:\nURL: ${inspection.url}\nVisible Text: ${inspection.visibleText.slice(0, 2000)}\nNote: I have captured a screenshot for visual confirmation.`;
+      return 'WhatsApp UI inspection is disabled for stability. Paste the WhatsApp message into HermesDesk or use the manual draft/composer workflow. I will not monitor WhatsApp Web or auto-send replies.';
     }
 
     if (name === 'graphify') {
