@@ -101,9 +101,6 @@ export class WhatsAppChannelService {
     if (!settings.enabled || !settings.alwaysActive) return this.getStatus();
     await this.integrationService.openApp('whatsapp web').catch(() => null);
     await this.integrationService.openApp('whatsapp').catch(() => null);
-    if (settings.localBridgeEnabled) {
-      await this.startLocalBridge(settings.ownerPhone || '').catch(() => null);
-    }
     return this.getStatus();
   }
 
@@ -123,6 +120,10 @@ export class WhatsAppChannelService {
       : 'https://web.whatsapp.com/';
     await this.browserOperator.open(target, this.bridgeSessionId, 'WhatsApp Local Bridge');
 
+    if (this.bridgeTimer) {
+      clearInterval(this.bridgeTimer);
+      this.bridgeTimer = null;
+    }
     if (!this.bridgeTimer) {
       this.bridgeTimer = setInterval(() => {
         this.pollLocalBridge(win).catch((error: any) => {
@@ -132,7 +133,7 @@ export class WhatsAppChannelService {
             error: error?.message || String(error)
           });
         });
-      }, 7000);
+      }, 30000);
     }
 
     const status = await this.getStatus();
@@ -350,7 +351,7 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
     if (this.bridgeProcessing || !this.browserOperator?.evaluateJavaScript) return;
     this.bridgeProcessing = true;
     try {
-      const page = await this.browserOperator.evaluateJavaScript(`
+      const page: any = await this.withTimeout(this.browserOperator.evaluateJavaScript(`
 (() => {
   const text = document.body?.innerText || '';
   const loggedIn = !/scan.*qr|link a device|use whatsapp on your computer|log into whatsapp|download whatsapp/i.test(text);
@@ -375,9 +376,21 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
   }).filter(item => item.text && item.text.length > 2);
   return { ok: true, loggedIn, title: document.title, url: location.href, bodySample: text.slice(0, 500), messages };
 })()
-`, this.bridgeSessionId);
+`, this.bridgeSessionId), 6500, 'WhatsApp Web scan timed out');
 
-      if (!page?.ok) return;
+      if (!page?.ok) {
+        this.store.set('whatsappLocalBridgeLastState', {
+          checkedAt: new Date().toISOString(),
+          loggedIn: false,
+          title: 'WhatsApp bridge scan failed',
+          url: '',
+          messageCount: 0,
+          commandCount: 0,
+          lastMessages: [],
+          bodySample: page?.error || 'No WhatsApp bridge scan result.'
+        });
+        return;
+      }
       const now = Date.now();
       const commandPattern = /\b(baba|me|general|accountant|solicitor|property|funding|guardian|purchase|hermes|all|broadcast)\s*:/i;
       const extractCommand = (text: string) => {
@@ -431,7 +444,7 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
   private async sendLocalReply(message: string) {
     if (!this.browserOperator?.evaluateJavaScript) return { ok: false, error: 'Browser Operator bridge is not available.' };
     const safeMessage = `HermesDesk: ${String(message || '').slice(0, 3500)}`;
-    return this.browserOperator.evaluateJavaScript(`
+    return this.withTimeout(this.browserOperator.evaluateJavaScript(`
 (() => {
   const text = ${JSON.stringify(safeMessage)};
   const boxes = Array.from(document.querySelectorAll('footer [contenteditable="true"], [data-testid="conversation-compose-box-input"], div[contenteditable="true"][role="textbox"]'));
@@ -447,7 +460,21 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
   sendButton.click();
   return { ok: true };
 })()
-`, this.bridgeSessionId);
+`, this.bridgeSessionId), 6500, 'WhatsApp Web send timed out');
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T | { ok: false; error: string }> {
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<{ ok: false; error: string }>(resolve => {
+          timer = setTimeout(() => resolve({ ok: false, error: message }), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private async getProcessStatus() {

@@ -363,7 +363,7 @@ export const WhatsAppMEView = () => {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-black text-green-900 uppercase tracking-widest">Local Free Bridge</p>
-                    <p className="text-[10px] text-green-700 mt-1">Message your own WhatsApp with: baba: check urgent updates</p>
+                    <p className="text-[10px] text-green-700 mt-1">Experimental. Start only while testing: baba: check urgent updates</p>
                   </div>
                   <span className={`px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${channelStatus?.localBridgeRunning ? 'bg-green-600 text-white' : 'bg-white text-green-700 border border-green-200'}`}>
                     {channelStatus?.localBridgeRunning ? 'Running' : 'Stopped'}
@@ -392,7 +392,7 @@ export const WhatsAppMEView = () => {
                   </button>
                 </div>
                 <p className="text-[9px] text-green-700 leading-4">
-                  Free mode uses WhatsApp Web on this PC. It auto-replies only to your command chat; other contacts stay manual draft/approval.
+                  Free mode uses WhatsApp Web on this PC. It is experimental and does not auto-start on app launch, so the rest of HermesDesk stays responsive.
                 </p>
                 {channelStatus?.localBridgeLastState && (
                   <div className="p-2 bg-white border border-green-100 rounded-xl">
