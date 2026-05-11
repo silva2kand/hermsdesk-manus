@@ -379,8 +379,12 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
 
       if (!page?.ok) return;
       const now = Date.now();
-      const commandPattern = /^(baba|me|general|accountant|solicitor|property|funding|guardian|purchase|hermes|all|broadcast)\\s*:/i;
-      const commandCount = (page.messages || []).filter((item: any) => commandPattern.test(item.text)).length;
+      const commandPattern = /\b(baba|me|general|accountant|solicitor|property|funding|guardian|purchase|hermes|all|broadcast)\s*:/i;
+      const extractCommand = (text: string) => {
+        const match = String(text || '').match(/\b(baba|me|general|accountant|solicitor|property|funding|guardian|purchase|hermes|all|broadcast)\s*:\s*[\s\S]+$/i);
+        return match?.[0]?.trim() || '';
+      };
+      const commandCount = (page.messages || []).filter((item: any) => Boolean(extractCommand(item.text))).length;
       const lastState = {
         checkedAt: new Date(now).toISOString(),
         loggedIn: Boolean(page.loggedIn),
@@ -405,15 +409,16 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
       const seen = this.store.get('whatsappLocalBridgeSeen', {}) || {};
       const loopPattern = /^(hermesdesk|mythos|agent)\s*:/i;
       const candidates = (page.messages || [])
-        .filter((item: any) => commandPattern.test(item.text))
-        .filter((item: any) => !item.outgoing || !loopPattern.test(item.text.replace(commandPattern, '')))
+        .map((item: any) => ({ ...item, commandText: extractCommand(item.text) }))
+        .filter((item: any) => item.commandText)
+        .filter((item: any) => !loopPattern.test(item.commandText))
         .slice(-3);
 
       for (const item of candidates) {
-        const id = item.id || item.text;
+        const id = item.id || item.commandText || item.text;
         if (seen[id]) continue;
         seen[id] = now;
-        await this.routeIncoming(item.text, 'WhatsApp Local Bridge', win);
+        await this.routeIncoming(item.commandText, 'WhatsApp Local Bridge', win);
       }
 
       const freshSeen = Object.fromEntries(Object.entries(seen).filter((entry: any) => now - Number(entry[1] || 0) < 1000 * 60 * 60 * 24));
