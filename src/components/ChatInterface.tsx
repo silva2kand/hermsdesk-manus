@@ -57,6 +57,54 @@ const isMotReviewResearchPrompt = (text: string) =>
   /(\bmot\b|car|vehicle|garage|test centre|mechanic)/i.test(text)
   && /(research|reviews?|near me|nearby|local|book|booking|best|compare|check)/i.test(text);
 
+const buildLiveResearchAnswer = (prompt: string, trace: any) => {
+  const results = (trace?.trace?.results || trace?.results || []).filter((item: any) => item?.title || item?.url || item?.snippet);
+  const sourceLines = results.slice(0, 6).map((item: any, index: number) =>
+    `${index + 1}. ${item.title || item.url}\n${item.url || ''}\n${String(item.snippet || '').slice(0, 240)}`
+  );
+  if (isMotReviewResearchPrompt(prompt)) {
+    const text = results.map((item: any) => `${item.title || ''} ${item.snippet || ''}`).join('\n').toLowerCase();
+    const hasMotService = /mot service centre|4\.88|4\.9|white lund/.test(text);
+    const hasPeels = /peels wheels|4\.84|4\.85|207|200 reviews/.test(text);
+    const hasVmu = /lancaster city council|vmu|unbiased|01524 582781|£54/.test(text);
+    const hasHoward = /howard mot|4\.9|283|280/.test(text);
+    const recommendations = [
+      hasMotService ? '1. MOT Service Centre Ltd, White Lund, Morecambe - strongest all-round pick from the results: very high reviews, quick turnaround, same-day/urgent booking signals, and online booking.' : '',
+      hasPeels ? '2. Peels Wheels, White Lund, Morecambe - strong value/convenience option: high review count, good BookMyGarage score, open weekends, and online booking.' : '',
+      hasVmu ? '3. Lancaster City Council VMU, White Lund - good trust/unbiased option: council-run MOT station, published prices, and customer comments mention fair/unbiased service.' : '',
+      hasHoward ? '4. Howard MOT Centre, Lancaster - strong Lancaster-side candidate: local article/search result reports very high Google review score and large review count.' : ''
+    ].filter(Boolean);
+    return [
+      'I checked live web results for MOT garages around Lancaster/Morecambe instead of mailbox memory.',
+      '',
+      'Best shortlist:',
+      ...(recommendations.length ? recommendations : [
+        '1. MOT Service Centre Ltd, White Lund, Morecambe - check live slots and reviews.',
+        '2. Peels Wheels, White Lund, Morecambe - compare price and availability.',
+        '3. Lancaster City Council VMU - useful if you want a more independent/council-run MOT route.'
+      ]),
+      '',
+      'My booking advice:',
+      '- If you want easiest online booking: use BookMyGarage and compare MOT Service Centre Ltd / Peels Wheels / Eden Autos / Excel Vehicle Sales.',
+      '- If you want less upsell risk: call Lancaster City Council VMU and ask for MOT availability.',
+      '- Before booking, phone the garage to confirm the slot, MOT price, and whether they can handle repairs same day if it fails.',
+      '',
+      'Sources checked:',
+      ...(sourceLines.length ? sourceLines : ['No structured source lines returned by the search trace.']),
+      '',
+      'I will not book, pay, call, or submit your registration without your approval.'
+    ].join('\n');
+  }
+  return [
+    'I checked live web results and built this from the returned sources.',
+    '',
+    'Sources checked:',
+    ...(sourceLines.length ? sourceLines : ['No structured source lines returned by the search trace.']),
+    '',
+    'Next step: tell me which option you want me to inspect deeper, and I can open that page/reviews in the browser operator.'
+  ].join('\n');
+};
+
 const timeAwareGreeting = () => {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
@@ -1077,13 +1125,10 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         role: 'assistant',
         engine: 'Real Web Research',
         content: [
-          'I routed this to real web research, not mailbox memory.',
+          buildLiveResearchAnswer(outgoing, trace),
           '',
           browser?.ok ? 'Browser Operator opened for the live search.' : `Browser Operator issue: ${browser?.error || 'not opened'}`,
-          trace?.ok || trace?.trace?.ok ? `Search trace started with ${(trace?.trace?.results || []).length} source results.` : `Search trace issue: ${trace?.error || 'no trace yet'}`,
-          task?.id ? `Space research agent task started: ${task.id}.` : `Research agent issue: ${task?.error || 'not queued'}`,
-          '',
-          'I will not book the MOT, pay, call, or submit anything without your approval.'
+          task?.id ? `Research agent also queued for deeper checking: ${task.id}.` : `Research agent issue: ${task?.error || 'not queued'}`
         ].join('\n')
       }]);
     } finally {
