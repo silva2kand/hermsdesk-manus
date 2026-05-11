@@ -30,7 +30,7 @@ export interface Agent {
 export interface Task {
   id: string;
   input: string;
-  status: 'planning' | 'running' | 'done' | 'failed' | 'cancelled';
+  status: 'planning' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   assignedAgentId: string;
   manager?: {
     managerId: string;
@@ -309,6 +309,10 @@ export class MultiAgentOrchestrator {
   private tinyFishService: any = null;
   private cancelFlags: Map<string, boolean> = new Map();
   private taskOverrides: Map<string, string[]> = new Map();
+  private activeTaskCount = 0;
+  private pendingRunners: Array<() => void> = [];
+  private readonly maxConcurrentTasks = 3;
+  private readonly maxTaskRuntimeMs = 3 * 60 * 1000;
 
   private agents: Agent[] = [
     {
@@ -482,6 +486,10 @@ export class MultiAgentOrchestrator {
   private toolNeedsManualApproval(name: string, params: any = {}) {
     const normalized = String(name || '').toLowerCase().replace(/_/g, '-');
     const action = String(params?.action || '').toLowerCase();
+
+    if (normalized === 'approval-request') {
+      return true;
+    }
 
     if (['read-file', 'list-dir', 'list-directory', 'outlook-list-accounts', 'outlook-search-emails', 'outlook-get-email-details'].includes(normalized)) {
       return false;
@@ -907,6 +915,7 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
       agent.status = 'stopped';
       agent.currentTask = undefined;
     }
+    this.pendingRunners = [];
     this.store.set('agents_status', Object.fromEntries(this.agents.map(agent => [agent.id, { status: agent.status, background: false }])));
     this.eventBus?.emit('operator.stop', 'mythos-manager', { reason, stoppedAt: new Date().toISOString() });
     return { ok: true, reason, agents: this.getAgents() };
@@ -987,9 +996,70 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
       return task;
     }
 
-    // Run the agent loop asynchronously
-    this.runAgentLoop(agent, task, sendUpdate);
+    // Run through the orchestrator scheduler so agent work is bounded.
+    this.scheduleAgentLoop(agent, task, sendUpdate);
     return task;
+  }
+
+  private scheduleAgentLoop(
+    agent: Agent,
+    task: Task,
+    sendUpdate: (step: string, type: 'step' | 'thinking' | 'tool' | 'code' | 'info' | 'error' | 'result') => void
+  ) {
+    const runner = async () => {
+      this.activeTaskCount++;
+      task.status = 'running';
+      this.eventBus?.emit('agent.task.started', 'agent-orchestrator', {
+        taskId: task.id,
+        agentId: agent.id,
+        activeTaskCount: this.activeTaskCount,
+        maxConcurrentTasks: this.maxConcurrentTasks,
+        maxTaskRuntimeMs: this.maxTaskRuntimeMs
+      }, task.id);
+
+      const watchdog = setTimeout(() => {
+        this.cancelFlags.set(agent.id, true);
+        const message = `Task watchdog hit ${Math.round(this.maxTaskRuntimeMs / 1000)}s. Pausing agent to prevent freeze; Silva can resume or give a live instruction.`;
+        sendUpdate(message, 'error');
+        this.emitThought(task, agent, 'ERROR', message, {
+          timeoutMs: this.maxTaskRuntimeMs
+        });
+      }, this.maxTaskRuntimeMs);
+
+      try {
+        await this.runAgentLoop(agent, task, sendUpdate);
+      } finally {
+        clearTimeout(watchdog);
+        this.activeTaskCount = Math.max(0, this.activeTaskCount - 1);
+        this.eventBus?.emit('agent.task.finished', 'agent-orchestrator', {
+          taskId: task.id,
+          agentId: agent.id,
+          status: task.status,
+          activeTaskCount: this.activeTaskCount,
+          queuedTaskCount: this.pendingRunners.length
+        }, task.id);
+        const next = this.pendingRunners.shift();
+        if (next) setTimeout(next, 0);
+      }
+    };
+
+    if (this.activeTaskCount >= this.maxConcurrentTasks) {
+      task.status = 'queued';
+      task.steps = task.steps.map(step => step.label === 'Agent Loop Active' ? { ...step, status: 'pending' as const } : step);
+      this.pendingRunners.push(runner);
+      const message = `Queued by Mythos Orchestrator. ${this.activeTaskCount}/${this.maxConcurrentTasks} agent slots are busy.`;
+      sendUpdate(message, 'info');
+      this.eventBus?.emit('agent.task.queued', 'agent-orchestrator', {
+        taskId: task.id,
+        agentId: agent.id,
+        activeTaskCount: this.activeTaskCount,
+        queuedTaskCount: this.pendingRunners.length,
+        maxConcurrentTasks: this.maxConcurrentTasks
+      }, task.id);
+      return;
+    }
+
+    runner();
   }
 
   private async runAgentLoop(
@@ -1074,10 +1144,12 @@ ${JSON.stringify({
 - **AUTO-ORGANIZATION**: You are empowered to organize files, documents, and emails into their logical categories.
 - **NO DELETION**: You are NEVER allowed to delete, remove, or trash any email, file, or data. This is a strict constraint.
 - **APPROVAL FIRST**: Destructive actions, money transfers, or external communication require explicit user approval.
+- **APPROVAL CARDS**: When you have prepared a serious action for accounting, funding, legal, property, visa/sponsor, business, WhatsApp, PC, or web execution, create a real approval card using [TOOL: approval_request(domain="funding", action="Submit application to X", summary="...", details="amounts/parties/dates/terms", evidence="emails/documents/web/pages checked", risk="main risk", missing="missing facts", nextStep="what will happen after Silva approves")]. This parks the action in Approvals. Do not pretend approval happened.
 - **COLLABORATION**: Treat this as a shared HermesDesk task. Lead agent: ${agent.name}. Peer agents available for clarification/verification: ${collaborationPlan.length ? collaborationPlan.map(peer => `${peer.name} (${peer.role})`).join('; ') : 'none selected'}.
 - **TINYFISH WEB AGENT**: ${tinyFishStatus?.configured ? 'Available for real web automation on specific URLs. Use [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")] when a task needs live page inspection.' : 'Not available until a TinyFish API key is saved.'}
 - **BROWSER OPERATOR**: Available as a real controlled browser. Use [TOOL: browser_search_visible(query="search query")] for visible Google typing/searching, [TOOL: browser_open(target="URL")], [TOOL: browser_read()], [TOOL: browser_ui_scan()] to list visible controls, [TOOL: browser_ui_resolve(query="Continue", role="button")] to choose robust targets, [TOOL: browser_ui_click(query="Continue", role="button")] and [TOOL: browser_ui_type(query="Search", text="text")] for natural UI actions, [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="CSS selector")], [TOOL: browser_click_text(text="visible text")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="CSS selector", text="text")], [TOOL: browser_press(key="Enter")], [TOOL: browser_screenshot()], and [TOOL: browser_inspect()] for browser automation. Verify after each action. Do not click purchase/pay/submit/order/checkout without approval.
 - **PC UIA OPERATOR**: Available for real Windows app control. Use [TOOL: pc_window_list()] then [TOOL: pc_window_focus(id="...")] before acting. Use [TOOL: pc_ui_scan()] to list visible controls in the focused app, [TOOL: pc_ui_resolve(query="OK", role="Button")] to choose targets, [TOOL: pc_ui_click(query="OK", role="Button")] to click, and [TOOL: pc_ui_type(query="File name", text="...")] to type. Prefer semantic targets over coordinates. Verify after every action. Do not click or type into purchase/payment/password/system-destructive controls without approval.
+- **APPROVAL REQUEST TOOL**: [TOOL: approval_request(domain="accounting|legal|funding|property|visa|business|whatsapp|pc|web", action="exact action awaiting approval", summary="short summary", details="real details", evidence="checked evidence", risk="risk", missing="missing facts", nextStep="after approval")].
 
 ### TASTE ENGINE - REQUIRED BEHAVIOUR
 - **THOUGHTFULNESS**: infer the real goal, audience, context, risk, opportunity, and missing facts before acting.

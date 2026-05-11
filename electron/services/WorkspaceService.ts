@@ -36,6 +36,9 @@ Memory | Skills | Knowledges - Complete, additive, always updated.
 - Domain engine memory buckets: accountingEvidence, legalEvidence, businessResearchEvidence, propertyAnalysisEvidence, acquisitionEvidence, fundingEvidence, personalAdminEvidence, zReports, and knownProviderEvidence must be kept as history even when not urgent.
 - Marketing, newsletters, campaigns, junk, discounts, fashion, vouchers, and generic property alerts are background unless Silva marks them important.
 - Money, payments, legal submissions, external messages, installs, and destructive actions require approval.
+- Approval workflow: Baba/Mythos may gather, extract, organise, prepare packs, calculate options, draft messages/forms, compare funders, research properties, and build legal/accounting/visa/business action plans automatically. It must then create an approval card with real details, evidence, risks, missing facts, and next step before sending, paying, submitting, signing, applying, deleting, contacting, or changing external systems.
+- Privacy boundary: do not secretly share Silva's emails, files, legal/accounting data, personal data, or business data with external AI apps/services. ChatGPT, Copilot, DeepSeek, Qwen, Grok, Dola, or other AI apps may only be opened or used when Silva explicitly asks and approves what will be shared.
+- Daily improvement: learn locally from approvals, denials, edits, repeated questions, provider rules, and ignored/noisy items. Improve routing and memory without leaking data or silently performing external actions.
 
 ## BABA AGENT ROLES
 - Hermes Agent: architecture, coding, OS-safe automation.

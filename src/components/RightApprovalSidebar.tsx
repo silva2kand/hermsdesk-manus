@@ -23,6 +23,16 @@ const notificationIcons: Record<string, any> = {
   system: ShieldCheck
 };
 
+const approvalAccent = (domain = '') => {
+  const d = domain.toLowerCase();
+  if (/legal|visa|sponsor|council|land/.test(d)) return 'bg-purple-50 border-purple-100 text-purple-800';
+  if (/fund|account|tax|hmrc|payment|bank/.test(d)) return 'bg-emerald-50 border-emerald-100 text-emerald-800';
+  if (/property|business|buy/.test(d)) return 'bg-blue-50 border-blue-100 text-blue-800';
+  if (/whatsapp|message|contact/.test(d)) return 'bg-green-50 border-green-100 text-green-800';
+  if (/pc|web|browser/.test(d)) return 'bg-orange-50 border-orange-100 text-orange-800';
+  return 'bg-gray-50 border-gray-100 text-gray-800';
+};
+
 export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   const [pendingSkills, setPendingSkills] = useState<any[]>([]);
   const [emailIntel, setEmailIntel] = useState<any>({ folders: [], messages: [], summary: {} });
@@ -166,7 +176,28 @@ export const RightApprovalSidebar = ({ agents = [] }: { agents?: any[] }) => {
   };
 
   const approveSkill = async (id: string) => {
-    await window.ipcRenderer?.approveSkill?.(id);
+    const action = pendingSkills.find(item => item.id === id);
+    const result = await window.ipcRenderer?.approveSkill?.(id);
+    const contract = action?.approvalContract;
+    if (contract) {
+      await window.ipcRenderer?.createAgentTask?.(
+        `Silva approved this prepared approval card. Continue only inside this approved scope; do not exceed it.
+
+Domain: ${contract.domain || 'general'}
+Approved action: ${contract.action || action.name}
+Summary: ${contract.summary || ''}
+Details: ${contract.details || ''}
+Evidence checked: ${contract.evidence || ''}
+Risk Silva saw: ${contract.risk || ''}
+Missing facts: ${contract.missing || ''}
+Approved next step: ${contract.nextStep || ''}
+
+Now complete the next safe step using real tools where available. If the next step would send, pay, submit, sign, delete, or contact externally and no concrete execution approval/tool is available, prepare the final manual draft/composer/form and stop.`,
+        'general-agent'
+      );
+      setNotice(result?.ok ? 'Approval recorded and Mythos continuation task queued.' : `Approval failed: ${result?.error || 'unknown error'}`);
+      window.setTimeout(() => setNotice(''), 5000);
+    }
     refresh();
   };
 
@@ -415,16 +446,43 @@ Organize, summarize, and propose next actions. Do not send, delete, pay, submit,
         <section className="space-y-2">
           <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Skill Actions</h3>
           {pendingSkills.length === 0 && <p className="text-[10px] text-gray-400">No pending tool approvals.</p>}
-          {pendingSkills.map(action => (
-            <div key={action.id} className="p-3 bg-orange-50 border border-orange-100 rounded-2xl space-y-2">
-              <p className="text-[11px] font-black text-gray-900">{action.name}</p>
-              <p className="text-[9px] text-orange-700 line-clamp-2">{JSON.stringify(action.params || {})}</p>
+          {pendingSkills.map(action => {
+            const contract = action.approvalContract;
+            const domain = contract?.domain || action.params?.domain || action.type || 'Tool';
+            return (
+            <div key={action.id} className={`p-3 border rounded-2xl space-y-2 ${contract ? approvalAccent(domain) : 'bg-orange-50 border-orange-100 text-orange-800'}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[9px] font-black uppercase tracking-widest truncate">{domain}</p>
+                <span className="text-[8px] font-black uppercase opacity-70">{contract ? 'Approval card' : action.type}</span>
+              </div>
+              <p className="text-[11px] font-black text-gray-950">{contract?.action || action.name}</p>
+              {contract?.summary && <p className="text-[10px] font-bold text-gray-700">{contract.summary}</p>}
+              {contract?.details && (
+                <div className="rounded-xl bg-white/70 border border-white/80 p-2">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Details</p>
+                  <p className="text-[9px] text-gray-700 line-clamp-4">{contract.details}</p>
+                </div>
+              )}
+              {contract?.evidence && (
+                <div className="rounded-xl bg-white/70 border border-white/80 p-2">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Evidence Checked</p>
+                  <p className="text-[9px] text-gray-700 line-clamp-4">{contract.evidence}</p>
+                </div>
+              )}
+              {(contract?.risk || contract?.missing || contract?.nextStep) && (
+                <div className="space-y-1">
+                  {contract?.risk && <p className="text-[9px] text-red-700"><span className="font-black">Risk:</span> {contract.risk}</p>}
+                  {contract?.missing && <p className="text-[9px] text-amber-700"><span className="font-black">Missing:</span> {contract.missing}</p>}
+                  {contract?.nextStep && <p className="text-[9px] text-gray-700"><span className="font-black">After approval:</span> {contract.nextStep}</p>}
+                </div>
+              )}
+              {!contract && <p className="text-[9px] text-orange-700 line-clamp-2">{JSON.stringify(action.params || {})}</p>}
               <div className="flex items-center space-x-2">
                 <button onClick={() => approveSkill(action.id)} className="flex-1 py-1.5 bg-green-600 text-white rounded-xl text-[9px] font-black">Approve</button>
                 <button onClick={() => denySkill(action.id)} className="flex-1 py-1.5 bg-white text-red-600 border border-red-100 rounded-xl text-[9px] font-black">Deny</button>
               </div>
             </div>
-          ))}
+          )})}
         </section>
 
         <section className="space-y-2">

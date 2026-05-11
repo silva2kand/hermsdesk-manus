@@ -16,6 +16,17 @@ export interface SkillAction {
   params: any;
   status: 'pending' | 'approved' | 'denied' | 'executed';
   timestamp: number;
+  approvalContract?: {
+    domain?: string;
+    action?: string;
+    summary?: string;
+    details?: string;
+    evidence?: string;
+    risk?: string;
+    missing?: string;
+    nextStep?: string;
+    safeMode?: string;
+  };
 }
 
 export interface SkillPackage {
@@ -104,6 +115,7 @@ export class SkillsEngineService {
 
     if (installed.includes('mythos-execution')) {
       rules.push('Mythos Execution: break complex work into concrete steps, execute available real tools, verify outcomes, and continue until done or blocked by missing permission.');
+      rules.push('Approval Contract: when a serious action is ready but needs Silva approval, create [TOOL: approval_request(domain="accounting|legal|funding|property|visa|business|whatsapp|pc|web", action="exact action awaiting approval", summary="short human summary", details="amounts, parties, dates, addresses, terms", evidence="what was checked", risk="main risk", missing="missing facts if any", nextStep="what happens after approval")]. Do not send/pay/submit/sign/delete/contact until that approval card is approved.');
     }
     if (installed.includes('mythos-recovery')) {
       rules.push('Mythos Recovery: when a tool/model/action fails, diagnose, retry with a smaller step, choose a fallback route, and report exactly what was recovered.');
@@ -223,8 +235,22 @@ export class SkillsEngineService {
   }
 
   proposeAction(action: Omit<SkillAction, 'id' | 'status' | 'timestamp'>) {
+    const params = action.params || {};
     const newAction: SkillAction = {
       ...action,
+      approvalContract: action.name === 'approval_request' || action.name === 'approval-request'
+        ? {
+            domain: params.domain || params.area || 'general',
+            action: params.action || params.title || 'Approval requested',
+            summary: params.summary || params.reason || '',
+            details: params.details || params.detail || '',
+            evidence: params.evidence || '',
+            risk: params.risk || params.risks || '',
+            missing: params.missing || '',
+            nextStep: params.nextStep || params.next || '',
+            safeMode: 'prepared-only-no-external-action'
+          }
+        : undefined,
       id: Math.random().toString(36).substring(7),
       status: 'pending',
       timestamp: Date.now()
@@ -269,6 +295,29 @@ export class SkillsEngineService {
   private async executeAction(action: SkillAction) {
     const name = action.name;
     const params = action.params || {};
+
+    if (name === 'approval_request' || name === 'approval-request') {
+      const contract = action.approvalContract || {
+        domain: params.domain || 'general',
+        action: params.action || 'Approval requested',
+        summary: params.summary || '',
+        details: params.details || '',
+        evidence: params.evidence || '',
+        risk: params.risk || '',
+        missing: params.missing || '',
+        nextStep: params.nextStep || ''
+      };
+      return [
+        `Approval recorded for ${contract.domain}: ${contract.action}`,
+        contract.summary ? `Summary: ${contract.summary}` : '',
+        contract.details ? `Details: ${contract.details}` : '',
+        contract.evidence ? `Evidence: ${contract.evidence}` : '',
+        contract.risk ? `Risk: ${contract.risk}` : '',
+        contract.missing ? `Missing: ${contract.missing}` : '',
+        contract.nextStep ? `Next step after approval: ${contract.nextStep}` : '',
+        'No external send/pay/submit/delete/sign/contact action was executed by this approval card.'
+      ].filter(Boolean).join('\n');
+    }
 
     // --- OUTLOOK TOOLS ---
     if (name === 'outlook_list_accounts') {
