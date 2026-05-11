@@ -108,6 +108,8 @@ interface Window {
     getWhatsAppRoutes: () => Promise<any[]>;
     routeWhatsAppMessage: (text: string, from?: string) => Promise<any>;
     composeWhatsAppDraft: (draftId: string) => Promise<any>;
+    startWhatsAppLocalBridge?: (ownerPhone?: string) => Promise<any>;
+    stopWhatsAppLocalBridge?: () => Promise<any>;
     getScheduledTasks: () => Promise<any[]>;
     saveScheduledTasks: (tasks: any[]) => Promise<boolean>;
     runScheduledTask: (id: string) => Promise<any>;

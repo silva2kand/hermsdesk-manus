@@ -18,6 +18,9 @@ const ROUTES: Route[] = [
   { prefix: 'paperclip', agentId: 'paperclip-full', label: 'Paperclips' },
   { prefix: 'solicitor', agentId: 'solicitor-agent', label: 'Solicitor Agent' },
   { prefix: 'accountant', agentId: 'accountant-agent', label: 'Accountant Agent' },
+  { prefix: 'baba', agentId: 'general-agent', label: 'Baba Remote' },
+  { prefix: 'property', agentId: 'purchase-guardian-agent', label: 'Property / Acquisition' },
+  { prefix: 'funding', agentId: 'accountant-agent', label: 'Funding / Accountant' },
   { prefix: 'space', agentId: 'space-agent-full', label: 'Space Agent' },
   { prefix: 'openclaw', agentId: 'openclaw-full', label: 'OpenClaw' },
   { prefix: 'justice', agentId: 'justice-case-agent', label: 'Justice Case Builder' },
@@ -26,11 +29,16 @@ const ROUTES: Route[] = [
 ];
 
 export class WhatsAppChannelService {
+  private bridgeTimer: NodeJS.Timeout | null = null;
+  private bridgeProcessing = false;
+  private readonly bridgeSessionId = 'whatsapp-bridge';
+
   constructor(
     private store: any,
     private orchestrator: any,
     private integrationService: any,
-    private eventBus: any
+    private eventBus: any,
+    private browserOperator?: any
   ) {}
 
   getRoutes() {
@@ -42,6 +50,9 @@ export class WhatsAppChannelService {
       alwaysActive: true,
       defaultAgentId: 'general-agent',
       manualSendOnly: true,
+      localBridgeEnabled: false,
+      localAutoReplyToOwner: true,
+      ownerPhone: '',
       broadcastMode: 'multi-section',
       enabled: true
     });
@@ -65,14 +76,20 @@ export class WhatsAppChannelService {
     const status = {
       ok: Boolean(settings.enabled),
       channel: 'whatsapp',
-      mode: 'free-personal-manual-send',
+      mode: settings.localBridgeEnabled ? 'free-local-whatsapp-web-bridge' : 'free-personal-manual-send',
       alwaysActive: Boolean(settings.alwaysActive),
       manualSendOnly: true,
+      localBridgeEnabled: Boolean(settings.localBridgeEnabled),
+      localBridgeRunning: Boolean(this.bridgeTimer),
+      localAutoReplyToOwner: Boolean(settings.localAutoReplyToOwner),
+      ownerPhoneSaved: Boolean(settings.ownerPhone),
       desktopRunning: processStatus.desktopRunning,
       webLikelyOpen: processStatus.browserRunning,
       routes: ROUTES,
       drafts: drafts.length,
-      limitation: 'Uses your real WhatsApp Desktop/Web sessions. HermesDesk routes, drafts, audits, and opens both composer routes; automatic background read/send is not exposed by personal WhatsApp without UI automation approval.'
+      limitation: settings.localBridgeEnabled
+        ? 'Free local bridge uses your signed-in WhatsApp Web session. It watches your own command chat and can auto-reply to you only. Messages to other people still stay draft-and-approve.'
+        : 'Uses your real WhatsApp Desktop/Web sessions. HermesDesk routes, drafts, audits, and opens both composer routes. Enable Local Bridge for away-from-PC owner commands.'
     };
     this.eventBus?.emit('channel.status', 'whatsapp', status);
     return status;
@@ -83,7 +100,61 @@ export class WhatsAppChannelService {
     if (!settings.enabled || !settings.alwaysActive) return this.getStatus();
     await this.integrationService.openApp('whatsapp web').catch(() => null);
     await this.integrationService.openApp('whatsapp').catch(() => null);
+    if (settings.localBridgeEnabled) {
+      await this.startLocalBridge(settings.ownerPhone || '').catch(() => null);
+    }
     return this.getStatus();
+  }
+
+  async startLocalBridge(ownerPhone = '', win?: any) {
+    const settings = this.saveSettings({
+      localBridgeEnabled: true,
+      localAutoReplyToOwner: true,
+      ownerPhone: ownerPhone || this.getSettings().ownerPhone || ''
+    });
+    if (!this.browserOperator?.open || !this.browserOperator?.evaluateJavaScript) {
+      return { ok: false, error: 'Browser Operator bridge is not available in this build.' };
+    }
+
+    const cleanPhone = String(settings.ownerPhone || '').replace(/[^\d]/g, '');
+    const target = cleanPhone
+      ? `https://web.whatsapp.com/send?phone=${cleanPhone}`
+      : 'https://web.whatsapp.com/';
+    await this.browserOperator.open(target, this.bridgeSessionId, 'WhatsApp Local Bridge');
+
+    if (!this.bridgeTimer) {
+      this.bridgeTimer = setInterval(() => {
+        this.pollLocalBridge(win).catch((error: any) => {
+          this.eventBus?.emit('channel.status', 'whatsapp', {
+            channel: 'whatsapp',
+            status: 'bridge-poll-failed',
+            error: error?.message || String(error)
+          });
+        });
+      }, 7000);
+    }
+
+    const status = await this.getStatus();
+    this.eventBus?.emit('channel.status', 'whatsapp', {
+      channel: 'whatsapp',
+      status: 'local-bridge-started',
+      ownerPhoneSaved: Boolean(cleanPhone)
+    });
+    return { ok: true, status };
+  }
+
+  async stopLocalBridge() {
+    if (this.bridgeTimer) {
+      clearInterval(this.bridgeTimer);
+      this.bridgeTimer = null;
+    }
+    this.saveSettings({ localBridgeEnabled: false });
+    const status = await this.getStatus();
+    this.eventBus?.emit('channel.status', 'whatsapp', {
+      channel: 'whatsapp',
+      status: 'local-bridge-stopped'
+    });
+    return { ok: true, status };
   }
 
   resolveRoute(text: string, from = 'Silva') {
@@ -244,12 +315,114 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
           draft,
           status: finished.length === tasks.length ? 'ready' : 'partial'
         }, sessionId);
+
+        const settings = this.getSettings();
+        const shouldAutoReply = route?.from === 'WhatsApp Local Bridge' && settings.localBridgeEnabled && settings.localAutoReplyToOwner;
+        if (shouldAutoReply && finished.length === tasks.length && !draft?.localBridgeReplySent) {
+          this.sendLocalReply(message).then((result: any) => {
+            this.updateDraft(draftId, {
+              localBridgeReplySent: Boolean(result?.ok),
+              localBridgeReplyError: result?.ok ? '' : result?.error || 'WhatsApp Web send failed'
+            });
+            this.eventBus?.emit('channel.message.out', 'whatsapp', {
+              sessionId,
+              channel: 'whatsapp',
+              draftId,
+              manualSendOnly: false,
+              ownerAutoReplyOnly: true,
+              text: message,
+              result
+            }, sessionId);
+          }).catch((error: any) => {
+            this.updateDraft(draftId, { localBridgeReplyError: error?.message || String(error) });
+          });
+        }
       }
 
       if (finished.length === tasks.length || checks >= 36) {
         clearInterval(timer);
       }
     }, 5000);
+  }
+
+  private async pollLocalBridge(win?: any) {
+    if (this.bridgeProcessing || !this.browserOperator?.evaluateJavaScript) return;
+    this.bridgeProcessing = true;
+    try {
+      const page = await this.browserOperator.evaluateJavaScript(`
+(() => {
+  const text = document.body?.innerText || '';
+  const loggedIn = !/scan.*qr|link a device|use whatsapp on your computer/i.test(text);
+  const nodes = Array.from(document.querySelectorAll('[data-testid="msg-container"], div.message-in, div.message-out, [role="row"]')).slice(-80);
+  const messages = nodes.map((node, index) => {
+    const raw = (node.innerText || '').replace(/\\u200e|\\u200f/g, '').trim();
+    const lines = raw.split('\\n').map(line => line.trim()).filter(Boolean);
+    const cleaned = lines.filter(line => !/^\\d{1,2}:\\d{2}(\\s?[AP]M)?$/i.test(line)).join(' ').replace(/\\s+/g, ' ').trim();
+    const cls = node.getAttribute('class') || '';
+    return {
+      id: String(index) + ':' + cleaned.slice(0, 160),
+      text: cleaned,
+      outgoing: /message-out|outgoing/i.test(cls)
+    };
+  }).filter(item => item.text && item.text.length > 2);
+  return { ok: true, loggedIn, title: document.title, url: location.href, messages };
+})()
+`, this.bridgeSessionId);
+
+      if (!page?.ok) return;
+      if (!page.loggedIn) {
+        this.eventBus?.emit('channel.status', 'whatsapp', {
+          channel: 'whatsapp',
+          status: 'local-bridge-waiting-login',
+          title: page.title,
+          url: page.url
+        });
+        return;
+      }
+
+      const seen = this.store.get('whatsappLocalBridgeSeen', {}) || {};
+      const now = Date.now();
+      const commandPattern = /^(baba|me|general|accountant|solicitor|property|funding|guardian|purchase|hermes|all|broadcast)\s*:/i;
+      const loopPattern = /^(baba|hermesdesk|mythos|agent|me)\s*:/i;
+      const candidates = (page.messages || [])
+        .filter((item: any) => commandPattern.test(item.text))
+        .filter((item: any) => !item.outgoing || !loopPattern.test(item.text.replace(commandPattern, '')))
+        .slice(-3);
+
+      for (const item of candidates) {
+        const id = item.id || item.text;
+        if (seen[id]) continue;
+        seen[id] = now;
+        await this.routeIncoming(item.text, 'WhatsApp Local Bridge', win);
+      }
+
+      const freshSeen = Object.fromEntries(Object.entries(seen).filter((entry: any) => now - Number(entry[1] || 0) < 1000 * 60 * 60 * 24));
+      this.store.set('whatsappLocalBridgeSeen', freshSeen);
+    } finally {
+      this.bridgeProcessing = false;
+    }
+  }
+
+  private async sendLocalReply(message: string) {
+    if (!this.browserOperator?.evaluateJavaScript) return { ok: false, error: 'Browser Operator bridge is not available.' };
+    const safeMessage = `HermesDesk: ${String(message || '').slice(0, 3500)}`;
+    return this.browserOperator.evaluateJavaScript(`
+(() => {
+  const text = ${JSON.stringify(safeMessage)};
+  const boxes = Array.from(document.querySelectorAll('footer [contenteditable="true"], [data-testid="conversation-compose-box-input"], div[contenteditable="true"][role="textbox"]'));
+  const box = boxes[boxes.length - 1];
+  if (!box) return { ok: false, error: 'WhatsApp message box not found. Open your own chat in WhatsApp Web.' };
+  box.focus();
+  document.execCommand('selectAll', false, null);
+  document.execCommand('insertText', false, text);
+  box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+  const sendIcon = document.querySelector('span[data-icon="send"]');
+  const sendButton = sendIcon?.closest('button') || document.querySelector('button[aria-label="Send"], button[aria-label="Send message"]');
+  if (!sendButton) return { ok: false, error: 'WhatsApp send button not found.' };
+  sendButton.click();
+  return { ok: true };
+})()
+`, this.bridgeSessionId);
   }
 
   private async getProcessStatus() {

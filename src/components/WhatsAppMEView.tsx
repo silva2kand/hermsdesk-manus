@@ -33,6 +33,8 @@ export const WhatsAppMEView = () => {
   const [routes, setRoutes] = useState<any[]>([]);
   const [routerInput, setRouterInput] = useState('');
   const [routing, setRouting] = useState(false);
+  const [ownerPhone, setOwnerPhone] = useState('');
+  const [bridgeLoading, setBridgeLoading] = useState(false);
 
   const showNotice = (text: string) => {
     setNotice(text);
@@ -40,14 +42,16 @@ export const WhatsAppMEView = () => {
   };
 
   const refresh = async () => {
-    const [data, status, routeList] = await Promise.all([
+    const [data, status, routeList, settings] = await Promise.all([
       window.ipcRenderer?.getWhatsAppDrafts?.().catch(() => []),
       window.ipcRenderer?.getWhatsAppChannelStatus?.().catch(() => null),
-      window.ipcRenderer?.getWhatsAppRoutes?.().catch(() => [])
+      window.ipcRenderer?.getWhatsAppRoutes?.().catch(() => []),
+      window.ipcRenderer?.getWhatsAppChannelSettings?.().catch(() => null)
     ]);
     setDrafts(data || []);
     setChannelStatus(status);
     setRoutes(routeList || []);
+    if (settings?.ownerPhone) setOwnerPhone(settings.ownerPhone);
   };
 
   useEffect(() => {
@@ -101,6 +105,33 @@ export const WhatsAppMEView = () => {
     const status = await window.ipcRenderer?.ensureWhatsAppActive?.();
     setChannelStatus(status);
     showNotice('WhatsApp channel active check ran. Web/Desktop composer routes opened where available.');
+  };
+
+  const startLocalBridge = async () => {
+    setBridgeLoading(true);
+    try {
+      await window.ipcRenderer?.saveWhatsAppChannelSettings?.({
+        ownerPhone,
+        localBridgeEnabled: true,
+        localAutoReplyToOwner: true
+      });
+      const result = await window.ipcRenderer?.startWhatsAppLocalBridge?.(ownerPhone);
+      await refresh();
+      showNotice(result?.ok ? 'Local WhatsApp bridge started. Keep WhatsApp Web signed in.' : result?.error || 'Could not start local WhatsApp bridge.');
+    } finally {
+      setBridgeLoading(false);
+    }
+  };
+
+  const stopLocalBridge = async () => {
+    setBridgeLoading(true);
+    try {
+      const result = await window.ipcRenderer?.stopWhatsAppLocalBridge?.();
+      await refresh();
+      showNotice(result?.ok ? 'Local WhatsApp bridge stopped.' : 'Could not stop local WhatsApp bridge.');
+    } finally {
+      setBridgeLoading(false);
+    }
   };
 
   const routeMessage = async () => {
@@ -328,10 +359,46 @@ export const WhatsAppMEView = () => {
                   <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Drafts</p>
                 </div>
               </div>
+              <div className="mb-4 p-3 bg-green-50 border border-green-100 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black text-green-900 uppercase tracking-widest">Local Free Bridge</p>
+                    <p className="text-[10px] text-green-700 mt-1">Message your own WhatsApp with: baba: check urgent updates</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${channelStatus?.localBridgeRunning ? 'bg-green-600 text-white' : 'bg-white text-green-700 border border-green-200'}`}>
+                    {channelStatus?.localBridgeRunning ? 'Running' : 'Stopped'}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={ownerPhone}
+                    onChange={e => setOwnerPhone(e.target.value)}
+                    placeholder="Your WhatsApp number, e.g. 447..."
+                    className="flex-1 px-3 py-2 bg-white border border-green-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-100"
+                  />
+                  <button
+                    onClick={startLocalBridge}
+                    disabled={bridgeLoading}
+                    className="px-3 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black hover:bg-green-700 disabled:opacity-60"
+                  >
+                    Start
+                  </button>
+                  <button
+                    onClick={stopLocalBridge}
+                    disabled={bridgeLoading}
+                    className="px-3 py-2 bg-white text-green-700 border border-green-100 rounded-xl text-[10px] font-black hover:bg-green-100 disabled:opacity-60"
+                  >
+                    Stop
+                  </button>
+                </div>
+                <p className="text-[9px] text-green-700 leading-4">
+                  Free mode uses WhatsApp Web on this PC. It auto-replies only to your command chat; other contacts stay manual draft/approval.
+                </p>
+              </div>
               <textarea
                 value={routerInput}
                 onChange={e => setRouterInput(e.target.value)}
-                placeholder="Try: solicitor: draft a reply... or all: analyse this issue..."
+                placeholder="Try: baba: any important updates? or accountant: unpaid bills?"
                 className="w-full h-24 px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-green-50 resize-none"
               />
               <div className="flex gap-2 mt-3">
@@ -371,7 +438,7 @@ export const WhatsAppMEView = () => {
                 <h2 className="text-xs font-black uppercase tracking-widest">Real Safety</h2>
               </div>
               <p className="text-xs text-gray-300 leading-6">
-                WhatsApp personal/free does not provide an official background read/send API. ME keeps the channel active, routes pasted/commanded messages to agents, records everything in Silva EventBus, drafts replies, and opens the real composer. Sending stays manual so it is safe and compliant.
+                WhatsApp personal/free has no official background API. Local Bridge uses your signed-in WhatsApp Web session, watches your own command chat, routes commands to agents, and can reply only back to you. Sending to customers, suppliers, solicitors, banks, or anyone else stays manual approval.
               </p>
             </div>
 

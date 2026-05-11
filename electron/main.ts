@@ -110,7 +110,7 @@ function initializeStoreAndServices() {
   artifactService = new ArtifactService()
   eventBus = new EventBusService(store)
   webResearchService = new SilvaWebResearchService(eventBus)
-  whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus)
+  whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus, browserOperator)
   tinyFish = new TinyFishService(store)
   orchestrator.setTinyFishService?.(tinyFish)
   wideResearchService.setTinyFishService?.(tinyFish)
@@ -144,7 +144,7 @@ function initializeStoreAndServices() {
      artifactService = new ArtifactService();
      eventBus = new EventBusService(store);
      webResearchService = new SilvaWebResearchService(eventBus);
-     whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus);
+     whatsAppChannelService = new WhatsAppChannelService(store, orchestrator, integrationService, eventBus, browserOperator);
      tinyFish = new TinyFishService(store);
      orchestrator.setTinyFishService?.(tinyFish);
      wideResearchService.setTinyFishService?.(tinyFish);
@@ -827,6 +827,8 @@ function createWindow() {
   ipcMain.handle('whatsapp:routes', () => whatsAppChannelService.getRoutes())
   ipcMain.handle('whatsapp:route-message', (_, { text, from }) => whatsAppChannelService.routeIncoming(text, from || 'User', win))
   ipcMain.handle('whatsapp:compose-draft', (_, id) => whatsAppChannelService.composeDraft(id))
+  ipcMain.handle('whatsapp:start-local-bridge', (_, { ownerPhone } = {}) => whatsAppChannelService.startLocalBridge(ownerPhone || '', win))
+  ipcMain.handle('whatsapp:stop-local-bridge', () => whatsAppChannelService.stopLocalBridge())
   ipcMain.handle('desktop:voice-stack-status', () => integrationService.getVoiceStackStatus())
   ipcMain.handle('desktop:voice-stack-speak', (_, { text, options }) => integrationService.speakWithVoiceStack(text, options))
   ipcMain.handle('desktop:voice-stack-diagnose', () => integrationService.diagnoseVoiceStack())

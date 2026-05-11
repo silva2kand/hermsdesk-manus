@@ -101,6 +101,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getWhatsAppRoutes: () => ipcRenderer.invoke('whatsapp:routes'),
   routeWhatsAppMessage: (text: string, from: any) => ipcRenderer.invoke('whatsapp:route-message', { text, from }),
   composeWhatsAppDraft: (draftId: string) => ipcRenderer.invoke('whatsapp:compose-draft', draftId),
+  startWhatsAppLocalBridge: (ownerPhone?: string) => ipcRenderer.invoke('whatsapp:start-local-bridge', { ownerPhone }),
+  stopWhatsAppLocalBridge: () => ipcRenderer.invoke('whatsapp:stop-local-bridge'),
   getScheduledTasks: () => ipcRenderer.invoke('workspace:get-tasks'),
   saveScheduledTasks: (tasks: any) => ipcRenderer.invoke('workspace:save-tasks', tasks),
   runScheduledTask: (id: string) => ipcRenderer.invoke('workspace:run-scheduled-task', id),

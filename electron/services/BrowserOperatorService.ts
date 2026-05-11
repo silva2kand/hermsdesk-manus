@@ -350,6 +350,17 @@ export class BrowserOperatorService {
     }
   }
 
+  async evaluateJavaScript(script: string, sessionId = 'main') {
+    this.assertNotStopped(sessionId);
+    const win = this.ensureWindow(sessionId);
+    try {
+      return await win.webContents.executeJavaScript(script);
+    } catch (error: any) {
+      this.push({ type: 'error', status: 'error', detail: `Browser script failed: ${error?.message || error}`, sessionId });
+      return { ok: false, error: error?.message || String(error) };
+    }
+  }
+
   async scanUi(sessionId = 'main'): Promise<BrowserUiScan | { ok: false; error: string }> {
     this.assertNotStopped(sessionId);
     const win = this.ensureWindow(sessionId);
