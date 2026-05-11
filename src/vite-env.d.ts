@@ -155,6 +155,7 @@ interface Window {
     getAgents: () => Promise<any[]>;
     updateAgentStatus: (id: string, status: string, background: boolean) => Promise<boolean>;
     createAgentTask: (input: string, agentId?: string) => Promise<any>;
+    previewAgentRoute: (input: string, agentId?: string) => Promise<any>;
     getAgentTasks: () => Promise<any[]>;
     stopOperatorMode?: (reason?: string) => Promise<any>;
     injectOperatorInstruction?: (agentId: string, instruction: string) => Promise<any>;

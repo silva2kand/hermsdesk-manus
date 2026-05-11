@@ -28,33 +28,21 @@ export interface Connector {
 
 // Which tools each agent is allowed to use
 const AGENT_TOOL_MAP: Record<string, string[]> = {
-  'general-agent':    ['jan-turboquant', 'outlook-mail', 'google-search', 'tinyfish', 'file-system'],
-  'hermes-full':      ['jan-turboquant', 'file-system', 'os-control', 'github', 'terminal', 'google-search', 'tinyfish'],
-  'paperclip-full':   ['jan-turboquant', 'file-system', 'outlook-mail', 'gmail', 'google-drive', 'tinyfish'],
-  'solicitor-agent':  ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search', 'tinyfish'],
-  'accountant-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'stripe', 'xero', 'tinyfish'],
-  'space-agent-full': ['jan-turboquant', 'os-control', 'google-search', 'terminal', 'tinyfish'],
-  'openclaw-full':    ['jan-turboquant', 'os-control', 'terminal', 'file-system', 'tinyfish'],
-  'justice-case-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search', 'tinyfish', 'graphify'],
-  'purchase-guardian-agent': ['jan-turboquant', 'file-system', 'outlook-mail', 'google-search', 'tinyfish', 'graphify']
+  'general-agent': ['file-system'],
+  'hermes-full': ['file-system'],
+  'paperclip-full': ['file-system'],
+  'solicitor-agent': ['file-system'],
+  'accountant-agent': ['file-system'],
+  'space-agent-full': ['file-system'],
+  'openclaw-full': ['file-system'],
+  'justice-case-agent': ['file-system'],
+  'purchase-guardian-agent': ['file-system']
 };
 
 export class ToolRegistryService {
   private store: any;
   private tools: Tool[] = [
-    { id: 'ollama', name: 'Ollama', category: 'llm', description: 'Optional external LLM engine (port 11434)' },
-    { id: 'lm-studio', name: 'LM Studio', category: 'llm', description: 'Optional external model server (port 1234)' },
-    { id: 'jan-turboquant', name: 'Jan + TurboQuant', category: 'llm', description: 'Built-in primary engine (port 6767; 1337 compatibility)' },
-    { id: 'opencode', name: 'OpenCode', category: 'llm', description: 'Optional external OpenAI-compatible local route (ports 4096/3456)' },
-    { id: 'gmail', name: 'Gmail', category: 'email', description: 'Email access and drafts' },
-    { id: 'outlook-mail', name: 'Outlook Mail', category: 'email', description: 'Microsoft Graph and Classic Outlook mail indexing, drafts, and approval-gated actions' },
-    { id: 'graphify', name: 'Graphify', category: 'research', description: 'Local relationship graph builder for agents, tasks, mail intelligence, cases, and evidence' },
-    { id: 'tinyfish', name: 'TinyFish Web Agent', category: 'research', description: 'Real external web automation for inspecting specific pages when a TinyFish API key is saved' },
-    { id: 'github', name: 'GitHub', category: 'custom_api', description: 'Repo and code management' },
-    { id: 'file-system', name: 'File System', category: 'storage', description: 'Local file operations (read, write, list)' },
-    { id: 'os-control', name: 'OS Control', category: 'os', description: 'Open apps, URLs, and system commands' },
-    { id: 'terminal', name: 'Terminal', category: 'os', description: 'PowerShell command execution' },
-    { id: 'google-search', name: 'Web Search', category: 'research', description: 'Web research tool' }
+    { id: 'file-system', name: 'File System', category: 'storage', description: 'Direct executable local file operations: read_file, list_directory, write_file with approval.' }
   ];
 
   constructor(sharedStore?: any) {

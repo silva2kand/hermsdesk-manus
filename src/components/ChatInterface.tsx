@@ -214,6 +214,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const [liveTrace, setLiveTrace] = useState<any[]>([]);
   const researchStepsRef = useRef<string[]>([]);
   const liveTraceRef = useRef<any[]>([]);
+  const lastRoutePreviewRef = useRef<any>(null);
   const [thinkingReview, setThinkingReview] = useState<any | null>(null);
   const [provider, setProvider] = useState(initialModel?.provider || 'Auto');
   const [model, setModel] = useState(initialModel?.model || 'Auto mix');
@@ -422,7 +423,15 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
 
   const buildThinkingSnapshot = (fallbackSteps: string[] = []) => ({
     createdAt: new Date().toISOString(),
-    steps: (researchStepsRef.current.length ? researchStepsRef.current : fallbackSteps).filter(Boolean),
+    steps: [
+      ...(lastRoutePreviewRef.current?.ok ? [
+        'Mythos Manager received the message first',
+        `Route decision: ${lastRoutePreviewRef.current.assignedAgentId || 'general-agent'}`,
+        `Priority: ${lastRoutePreviewRef.current.priority || 'normal'}`,
+        `Approval gates: ${(lastRoutePreviewRef.current.approvalGates || []).join(', ') || 'standard safety'}`
+      ] : []),
+      ...(researchStepsRef.current.length ? researchStepsRef.current : fallbackSteps)
+    ].filter(Boolean),
     events: liveTraceRef.current.slice(0, 12)
   });
 
@@ -1449,6 +1458,17 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
+
+    const routePreview = await window.ipcRenderer?.previewAgentRoute?.(outgoing).catch(() => null);
+    lastRoutePreviewRef.current = routePreview;
+    if (routePreview?.ok) {
+      setResearchSteps([
+        'Mythos Manager received the message first',
+        `Intent route preview: ${routePreview.assignedAgentId || 'general-agent'}`,
+        `Priority: ${routePreview.priority || 'normal'}`,
+        `Approval gates: ${(routePreview.approvalGates || []).join(', ') || 'standard safety'}`
+      ]);
+    }
 
     if (await handleWhatsAppIntent(outgoing)) return;
     if (await handleBrowserAutomationIntent(outgoing)) return;

@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getAgents: () => ipcRenderer.invoke('agents:get-all'),
   updateAgentStatus: (id: string, status: string, background: boolean) => ipcRenderer.invoke('agents:update-status', { id, status, background }),
   createAgentTask: (input: any, agentId: any) => ipcRenderer.invoke('agents:create-task', { input, agentId }),
+  previewAgentRoute: (input: any, agentId?: any) => ipcRenderer.invoke('agents:preview-route', { input, agentId }),
   getAgentTasks: () => ipcRenderer.invoke('agents:get-tasks'),
   stopOperatorMode: (reason?: string) => ipcRenderer.invoke('operator:stop-all', reason),
   injectOperatorInstruction: (agentId: string, instruction: string) => ipcRenderer.invoke('operator:inject', { agentId, instruction }),

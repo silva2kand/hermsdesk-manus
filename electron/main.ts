@@ -1133,6 +1133,7 @@ function createWindow() {
   ipcMain.handle('self-improvement:get-state', () => selfImprovementService.getState())
   ipcMain.handle('self-improvement:run-now', (_, reason) => selfImprovementService.runAudit(reason || 'Manual self-improvement check'))
   ipcMain.handle('agents:get-all', () => orchestrator.getAgents())
+  ipcMain.handle('agents:preview-route', async (_, { input, agentId }) => orchestrator.previewRoute(input, agentId))
   ipcMain.handle('agents:update-status', (_, { id, status, background }) => orchestrator.updateAgentStatus(id, status, background))
   ipcMain.handle('agents:create-task', async (_, { input, agentId }) => orchestrator.createTask(input, agentId, win))
   ipcMain.handle('agents:get-tasks', () => orchestrator.getTasks())

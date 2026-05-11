@@ -608,6 +608,21 @@ export class MultiAgentOrchestrator {
     };
   }
 
+  previewRoute(input: string, requestedAgentId?: string) {
+    const decision = this.decideWithManager(input, requestedAgentId);
+    const previewId = `route-preview-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.eventBus?.emit('manager.decision', 'mythos-manager', {
+      preview: true,
+      previewId,
+      ...decision
+    }, previewId);
+    return {
+      ok: true,
+      previewId,
+      ...decision
+    };
+  }
+
   private async peerVerifyFinal(agent: Agent, task: Task, answer: string, engine: string) {
     const verifier = this.pickVerifier(agent, task);
     if (!verifier || !this.aiService?.chatWithBestAvailable) return '';
