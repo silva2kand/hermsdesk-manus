@@ -376,7 +376,23 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   };
 
   const focusChatInput = () => {
-    window.setTimeout(() => inputRef.current?.focus(), 0);
+    window.setTimeout(() => {
+      inputRef.current?.removeAttribute('disabled');
+      inputRef.current?.focus();
+    }, 0);
+  };
+
+  const resetComposerState = () => {
+    setInput('');
+    setIsTyping(false);
+    setResearchSteps([]);
+    setShowUploadOptions(false);
+    setLiveTrace([]);
+    try {
+      recognitionRef.current?.stop?.();
+    } catch {}
+    recognitionRef.current = null;
+    setIsRecording(false);
   };
 
   const startNewChat = () => {
@@ -386,7 +402,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     setChatSessions(prev => [fresh, ...prev].slice(0, 50));
     setActiveChatId(id);
     setMessages([]);
-    setInput('');
+    resetComposerState();
     setShowHistory(false);
     focusChatInput();
     addNotice('Started a new chat. Previous chat is saved in history.');
@@ -395,7 +411,9 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const openChatSession = (session: ChatSession) => {
     setActiveChatId(session.id);
     setMessages(session.messages || []);
+    resetComposerState();
     setShowHistory(false);
+    focusChatInput();
     addNotice(`Opened chat: ${session.title || 'Untitled'}`);
   };
 
@@ -415,11 +433,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         setChatSessions([fresh]);
         setActiveChatId(fresh.id);
         setMessages([]);
-        setInput('');
+        resetComposerState();
         window.localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify([fresh]));
         window.localStorage.setItem('hermsdesk.chat.activeId', fresh.id);
       }
     }
+    resetComposerState();
     setShowHistory(false);
     focusChatInput();
     addNotice('Chat deleted from local history.');
