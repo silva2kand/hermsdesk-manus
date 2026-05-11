@@ -268,11 +268,15 @@ export class BrowserOperatorService {
       title: `HermesDesk ME Computer - ${label}`,
       show: true,
       webPreferences: {
+        partition: sessionId === 'whatsapp-bridge' ? 'persist:hermes-whatsapp-bridge' : undefined,
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false
       }
     });
+    if (sessionId === 'whatsapp-bridge') {
+      created.webContents.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+    }
     created.on('closed', () => {
       this.operatorWindows.delete(sessionId);
       if (this.operatorWindow === created) this.operatorWindow = null;

@@ -394,6 +394,16 @@ export const WhatsAppMEView = () => {
                 <p className="text-[9px] text-green-700 leading-4">
                   Free mode uses WhatsApp Web on this PC. It auto-replies only to your command chat; other contacts stay manual draft/approval.
                 </p>
+                {channelStatus?.localBridgeLastState && (
+                  <div className="p-2 bg-white border border-green-100 rounded-xl">
+                    <p className="text-[9px] font-black text-green-900">
+                      Last scan: {channelStatus.localBridgeLastState.loggedIn ? 'logged in' : 'needs login'} · {channelStatus.localBridgeLastState.messageCount || 0} messages · {channelStatus.localBridgeLastState.commandCount || 0} commands
+                    </p>
+                    <p className="text-[9px] text-green-700 truncate mt-1">
+                      {channelStatus.localBridgeLastState.lastMessages?.slice(-1)?.[0] || channelStatus.localBridgeLastState.bodySample || 'No readable WhatsApp message yet.'}
+                    </p>
+                  </div>
+                )}
               </div>
               <textarea
                 value={routerInput}

@@ -83,6 +83,7 @@ export class WhatsAppChannelService {
       localBridgeRunning: Boolean(this.bridgeTimer),
       localAutoReplyToOwner: Boolean(settings.localAutoReplyToOwner),
       ownerPhoneSaved: Boolean(settings.ownerPhone),
+      localBridgeLastState: this.store.get('whatsappLocalBridgeLastState', null),
       desktopRunning: processStatus.desktopRunning,
       webLikelyOpen: processStatus.browserRunning,
       routes: ROUTES,
@@ -352,24 +353,45 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
       const page = await this.browserOperator.evaluateJavaScript(`
 (() => {
   const text = document.body?.innerText || '';
-  const loggedIn = !/scan.*qr|link a device|use whatsapp on your computer/i.test(text);
-  const nodes = Array.from(document.querySelectorAll('[data-testid="msg-container"], div.message-in, div.message-out, [role="row"]')).slice(-80);
+  const loggedIn = !/scan.*qr|link a device|use whatsapp on your computer|log into whatsapp|download whatsapp/i.test(text);
+  const nodes = Array.from(document.querySelectorAll('[data-testid="msg-container"], div.message-in, div.message-out, [data-pre-plain-text], div.copyable-text, [role="row"]')).slice(-120);
   const messages = nodes.map((node, index) => {
     const raw = (node.innerText || '').replace(/\\u200e|\\u200f/g, '').trim();
     const lines = raw.split('\\n').map(line => line.trim()).filter(Boolean);
-    const cleaned = lines.filter(line => !/^\\d{1,2}:\\d{2}(\\s?[AP]M)?$/i.test(line)).join(' ').replace(/\\s+/g, ' ').trim();
+    const cleaned = lines
+      .filter(line => !/^\\d{1,2}:\\d{2}(\\s?[AP]M)?$/i.test(line))
+      .filter(line => !/^(sent|delivered|read)$/i.test(line))
+      .join(' ')
+      .replace(/\\s+/g, ' ')
+      .trim();
     const cls = node.getAttribute('class') || '';
+    const meta = node.getAttribute('data-pre-plain-text') || '';
     return {
-      id: String(index) + ':' + cleaned.slice(0, 160),
+      id: (meta || String(index)) + ':' + cleaned.slice(0, 180),
       text: cleaned,
-      outgoing: /message-out|outgoing/i.test(cls)
+      outgoing: /message-out|outgoing/i.test(cls),
+      meta
     };
   }).filter(item => item.text && item.text.length > 2);
-  return { ok: true, loggedIn, title: document.title, url: location.href, messages };
+  return { ok: true, loggedIn, title: document.title, url: location.href, bodySample: text.slice(0, 500), messages };
 })()
 `, this.bridgeSessionId);
 
       if (!page?.ok) return;
+      const now = Date.now();
+      const commandPattern = /^(baba|me|general|accountant|solicitor|property|funding|guardian|purchase|hermes|all|broadcast)\\s*:/i;
+      const commandCount = (page.messages || []).filter((item: any) => commandPattern.test(item.text)).length;
+      const lastState = {
+        checkedAt: new Date(now).toISOString(),
+        loggedIn: Boolean(page.loggedIn),
+        title: page.title,
+        url: page.url,
+        messageCount: (page.messages || []).length,
+        commandCount,
+        lastMessages: (page.messages || []).slice(-5).map((item: any) => item.text).filter(Boolean),
+        bodySample: page.bodySample
+      };
+      this.store.set('whatsappLocalBridgeLastState', lastState);
       if (!page.loggedIn) {
         this.eventBus?.emit('channel.status', 'whatsapp', {
           channel: 'whatsapp',
@@ -381,9 +403,7 @@ Rules: draft replies and actions only. Do not send WhatsApp messages, contact an
       }
 
       const seen = this.store.get('whatsappLocalBridgeSeen', {}) || {};
-      const now = Date.now();
-      const commandPattern = /^(baba|me|general|accountant|solicitor|property|funding|guardian|purchase|hermes|all|broadcast)\s*:/i;
-      const loopPattern = /^(baba|hermesdesk|mythos|agent|me)\s*:/i;
+      const loopPattern = /^(hermesdesk|mythos|agent)\s*:/i;
       const candidates = (page.messages || [])
         .filter((item: any) => commandPattern.test(item.text))
         .filter((item: any) => !item.outgoing || !loopPattern.test(item.text.replace(commandPattern, '')))
