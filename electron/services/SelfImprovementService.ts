@@ -20,6 +20,10 @@ type DoctorRun = {
 export class SelfImprovementService {
   private timer: NodeJS.Timeout | null = null;
   private win: any = null;
+  private running = false;
+  private lastStartedAt = 0;
+  private readonly minRunIntervalMs = 10 * 60 * 1000;
+  private readonly checkTimeoutMs = 5000;
 
   constructor(
     private store: any = new Store({ name: 'self-improvement', atomically: false, watch: false }),
@@ -63,28 +67,55 @@ export class SelfImprovementService {
     if (this.store.get('selfImprovement.enabled', true) === false) {
       return { ok: false, error: 'Self-improvement doctor is disabled.' };
     }
+    const now = Date.now();
+    if (this.running) {
+      return { ok: false, error: 'Self-improvement doctor is already running.' };
+    }
+    if (!/^Manual/i.test(reason) && now - this.lastStartedAt < this.minRunIntervalMs) {
+      return { ok: false, error: 'Self-improvement doctor skipped by rate limit.' };
+    }
 
-    const checks = await this.collectChecks();
-    const weaknesses = this.detectWeaknesses(checks);
-    const run: DoctorRun = {
-      id: `doctor-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      reason,
-      startedAt: new Date().toISOString(),
-      weaknesses,
-      checks
-    };
+    this.running = true;
+    this.lastStartedAt = now;
+    try {
+      const checks = await this.collectChecks();
+      const weaknesses = this.detectWeaknesses(checks);
+      const run: DoctorRun = {
+        id: `doctor-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        reason,
+        startedAt: new Date().toISOString(),
+        weaknesses,
+        checks: {
+          ...checks,
+          safety: {
+            aiCalls: 0,
+            maxTokens: 0,
+            maxIterations: 1,
+            recursiveSelfCalls: false,
+            agentSpawning: false,
+            timeoutMsPerCheck: this.checkTimeoutMs
+          }
+        }
+      };
 
-    this.store.set('selfImprovement.lastRun', run);
-    this.saveProposals(weaknesses);
-    this.emit(run);
-    return { ok: true, run };
+      this.store.set('selfImprovement.lastRun', run);
+      this.saveProposals(weaknesses);
+      this.emit(run);
+      return { ok: true, run };
+    } finally {
+      this.running = false;
+    }
   }
 
   private async collectChecks() {
+    const withTimeout = async (promise: Promise<any>) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('check timeout')), this.checkTimeoutMs))
+    ]);
     const settle = async (label: string, task: () => Promise<any>) => {
       const startedAt = Date.now();
       try {
-        return { ok: true, durationMs: Date.now() - startedAt, value: await task() };
+        return { ok: true, durationMs: Date.now() - startedAt, value: await withTimeout(Promise.resolve(task())) };
       } catch (error: any) {
         return { ok: false, durationMs: Date.now() - startedAt, error: error?.message || String(error) };
       }
@@ -106,7 +137,7 @@ export class SelfImprovementService {
       settle('jan', () => this.deps.aiService?.getJanEngineStatus?.()),
       settle('emailStats', async () => this.deps.emailIndexService?.getGlobalStats?.()),
       settle('emailMemory', async () => this.deps.workspaceService?.getEmailIntelligenceSummary?.()),
-      settle('events', async () => this.deps.eventBus?.getEvents?.(200) || []),
+      settle('events', async () => this.deps.eventBus?.getEvents?.(80) || []),
       settle('tinyFish', async () => this.deps.tinyFish?.getApiStatus?.()),
       settle('whatsapp', () => this.deps.whatsAppChannelService?.getStatus?.()),
       settle('browser', async () => this.deps.browserOperator?.getState?.()),

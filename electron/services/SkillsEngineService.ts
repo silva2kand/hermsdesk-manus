@@ -62,6 +62,25 @@ export class SkillsEngineService {
     this.desktopIntegration = desktopIntegration;
   }
 
+  private isAllowedShellCommand(command: string) {
+    const cmd = String(command || '').trim();
+    if (!cmd || cmd.length > 500) return false;
+    if (/[;&|><`$]/.test(cmd)) return false;
+    const allowed = [
+      /^Get-Process(?:\s|$)/i,
+      /^Get-Service(?:\s|$)/i,
+      /^Get-ChildItem(?:\s|$)/i,
+      /^Select-String(?:\s|$)/i,
+      /^Get-Content(?:\s|$)/i,
+      /^Test-Path(?:\s|$)/i,
+      /^Resolve-Path(?:\s|$)/i,
+      /^Get-Location(?:\s|$)/i,
+      /^npm\s+run\s+(build|dev|preview)(?:\s|$)/i
+    ];
+    const blocked = /\b(Remove-Item|Move-Item|Copy-Item|Set-Content|Add-Content|New-Item|Invoke-WebRequest|Invoke-RestMethod|Start-Process|Stop-Process|schtasks|reg|netsh|curl|wget|irm|iwr|del|erase|rd|rmdir|format|shutdown|restart-computer)\b/i;
+    return allowed.some(pattern => pattern.test(cmd)) && !blocked.test(cmd);
+  }
+
   getInstalledSkills() {
     const saved = this.store.get('installed_skills', this.defaultSkills) as string[];
     return Array.from(new Set([...this.defaultSkills, ...(Array.isArray(saved) ? saved : [])]));
@@ -563,6 +582,9 @@ export class SkillsEngineService {
     if (name === 'run_powershell' || name === 'run-powershell') {
       const cmd = params.command;
       if (!cmd) throw new Error('No command provided');
+      if (!this.isAllowedShellCommand(cmd)) {
+        throw new Error('Shell command blocked by whitelist. Allowed examples: Get-Process, Get-Service, Get-ChildItem, Select-String, Get-Content, Test-Path, Resolve-Path, npm run build/dev/preview. Destructive, network, process-control, and shell-composed commands are blocked.');
+      }
       const b64 = Buffer.from(cmd, 'utf16le').toString('base64');
       const { stdout, stderr } = await execAsync(`powershell -EncodedCommand ${b64}`, { timeout: 30000 });
       if (stderr && !stdout) throw new Error(stderr);
@@ -572,6 +594,9 @@ export class SkillsEngineService {
     if (name === 'run_command' || name === 'run-command' || name === 'execute-command') {
       const cmd = params.command;
       if (!cmd) throw new Error('No command provided');
+      if (!this.isAllowedShellCommand(cmd)) {
+        throw new Error('Shell command blocked by whitelist. Allowed examples: Get-Process, Get-Service, Get-ChildItem, Select-String, Get-Content, Test-Path, Resolve-Path, npm run build/dev/preview. Destructive, network, process-control, and shell-composed commands are blocked.');
+      }
       const { stdout, stderr } = await execAsync(cmd, { timeout: 30000 });
       return (stdout || stderr || 'Command completed with no output.').slice(0, 4000);
     }

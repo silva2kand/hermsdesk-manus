@@ -49,6 +49,10 @@ type BrowserUiScan = {
 };
 
 const MAX_EVENTS = 100;
+const MAX_SESSION_ACTIONS = 80;
+const MAX_SESSION_NAVIGATIONS = 12;
+const MAX_SCROLL_AMOUNT = 2000;
+const PAGE_LOAD_TIMEOUT_MS = 20000;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class BrowserOperatorService {
@@ -58,6 +62,8 @@ export class BrowserOperatorService {
   private appWindow: BrowserWindowType | null = null;
   private screenshotDir: string;
   private eventBus: any = null;
+  private sessionActionCounts: Map<string, number> = new Map();
+  private sessionNavigationCounts: Map<string, number> = new Map();
 
   constructor(private store: any) {
     this.screenshotDir = path.join(app.getPath('userData'), 'browser-operator');
@@ -141,6 +147,37 @@ export class BrowserOperatorService {
     if (this.stopRequested) {
       this.push({ type: 'error', status: 'error', detail: 'Browser Operator stopped by user.', sessionId });
       throw new Error('Browser Operator stopped by user.');
+    }
+  }
+
+  private assertSessionBudget(sessionId = 'main', action: 'action' | 'navigation' = 'action') {
+    const actionCount = (this.sessionActionCounts.get(sessionId) || 0) + 1;
+    this.sessionActionCounts.set(sessionId, actionCount);
+    if (actionCount > MAX_SESSION_ACTIONS) {
+      this.push({ type: 'error', status: 'error', detail: `Browser session action cap reached (${MAX_SESSION_ACTIONS}).`, sessionId });
+      throw new Error(`Browser session action cap reached (${MAX_SESSION_ACTIONS}).`);
+    }
+    if (action === 'navigation') {
+      const navigationCount = (this.sessionNavigationCounts.get(sessionId) || 0) + 1;
+      this.sessionNavigationCounts.set(sessionId, navigationCount);
+      if (navigationCount > MAX_SESSION_NAVIGATIONS) {
+        this.push({ type: 'error', status: 'error', detail: `Browser session page/depth cap reached (${MAX_SESSION_NAVIGATIONS}).`, sessionId });
+        throw new Error(`Browser session page/depth cap reached (${MAX_SESSION_NAVIGATIONS}).`);
+      }
+    }
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+    let timer: NodeJS.Timeout | null = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -303,10 +340,11 @@ export class BrowserOperatorService {
 
   async open(target?: string, sessionId = 'main', label = 'Main Computer') {
     this.stopRequested = false;
+    this.assertSessionBudget(sessionId, 'navigation');
     const url = this.normalizeTarget(target);
     try {
       const win = this.ensureWindow(sessionId, label);
-      await win.loadURL(url);
+      await this.withTimeout(win.loadURL(url), PAGE_LOAD_TIMEOUT_MS, `Opening ${url}`);
       win.show();
       await wait(700);
       await this.dismissCookieOverlays(sessionId).catch(() => null);
@@ -333,6 +371,7 @@ export class BrowserOperatorService {
 
   async readPage(sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
@@ -356,6 +395,10 @@ export class BrowserOperatorService {
 
   async evaluateJavaScript(script: string, sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
+    if (sessionId === 'whatsapp-bridge') {
+      return { ok: false, error: 'WhatsApp bridge JavaScript execution is disabled for stability.' };
+    }
     const win = this.ensureWindow(sessionId);
     try {
       return await win.webContents.executeJavaScript(script);
@@ -367,6 +410,7 @@ export class BrowserOperatorService {
 
   async scanUi(sessionId = 'main'): Promise<BrowserUiScan | { ok: false; error: string }> {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       await this.dismissCookieOverlays(sessionId).catch(() => null);
@@ -496,6 +540,7 @@ export class BrowserOperatorService {
 
   async clickUi(target: string, sessionId = 'main', role?: string) {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
     const raw = String(target || '').trim();
     if (!raw) return { ok: false, error: 'UI click needs an element id, text, or natural language target.' };
@@ -528,6 +573,7 @@ export class BrowserOperatorService {
 
   async typeUi(target: string, text: string, sessionId = 'main', role = 'input') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const raw = String(target || '').trim();
     if (!raw) return { ok: false, error: 'UI type needs an element id, label, placeholder, or natural language target.' };
     let element: BrowserUiElement | null = null;
@@ -563,6 +609,7 @@ export class BrowserOperatorService {
 
   async click(selector: string, sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       const result = await win.webContents.executeJavaScript(`
@@ -583,6 +630,7 @@ export class BrowserOperatorService {
 
   async clickText(text: string, sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
     const needle = String(text || '').trim().toLowerCase();
     if (!needle) return { ok: false, error: 'No visible text provided' };
@@ -615,6 +663,7 @@ export class BrowserOperatorService {
 
   async clickHref(href: string, sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId, 'navigation');
     const win = this.ensureWindow(sessionId);
     const target = String(href || '').trim();
     if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'A real http/https href is required.' };
@@ -643,6 +692,7 @@ export class BrowserOperatorService {
 
   async type(selector: string, text: string, sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
     try {
       const focused = await win.webContents.executeJavaScript(`
@@ -695,6 +745,7 @@ export class BrowserOperatorService {
 
   async press(key: string, sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
     const keyCode = String(key || 'Enter');
     try {
@@ -712,8 +763,10 @@ export class BrowserOperatorService {
 
   async scroll(amount = 700, sessionId = 'main') {
     this.assertNotStopped(sessionId);
+    this.assertSessionBudget(sessionId);
     const win = this.ensureWindow(sessionId);
-    const delta = Number(amount) || 700;
+    const rawDelta = Number(amount) || 700;
+    const delta = Math.max(-MAX_SCROLL_AMOUNT, Math.min(MAX_SCROLL_AMOUNT, rawDelta));
     try {
       const result = await win.webContents.executeJavaScript(`
         (() => {
