@@ -112,12 +112,12 @@ export const WhatsAppMEView = () => {
     try {
       await window.ipcRenderer?.saveWhatsAppChannelSettings?.({
         ownerPhone,
-        localBridgeEnabled: true,
-        localAutoReplyToOwner: true
+        localBridgeEnabled: false,
+        localAutoReplyToOwner: false
       });
       const result = await window.ipcRenderer?.startWhatsAppLocalBridge?.(ownerPhone);
       await refresh();
-      showNotice(result?.ok ? 'Local WhatsApp bridge started. Keep WhatsApp Web signed in.' : result?.error || 'Could not start local WhatsApp bridge.');
+      showNotice(result?.error || 'Local WhatsApp Web bridge is disabled for stability. Use drafts/composer.');
     } finally {
       setBridgeLoading(false);
     }
@@ -363,7 +363,7 @@ export const WhatsAppMEView = () => {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-black text-green-900 uppercase tracking-widest">Local Free Bridge</p>
-                    <p className="text-[10px] text-green-700 mt-1">Experimental. Start only while testing: baba: check urgent updates</p>
+                    <p className="text-[10px] text-green-700 mt-1">Disabled for stability. Use manual drafts/composer.</p>
                   </div>
                   <span className={`px-2 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${channelStatus?.localBridgeRunning ? 'bg-green-600 text-white' : 'bg-white text-green-700 border border-green-200'}`}>
                     {channelStatus?.localBridgeRunning ? 'Running' : 'Stopped'}
@@ -378,10 +378,10 @@ export const WhatsAppMEView = () => {
                   />
                   <button
                     onClick={startLocalBridge}
-                    disabled={bridgeLoading}
-                    className="px-3 py-2 bg-green-600 text-white rounded-xl text-[10px] font-black hover:bg-green-700 disabled:opacity-60"
+                    disabled={true}
+                    className="px-3 py-2 bg-gray-200 text-gray-500 rounded-xl text-[10px] font-black cursor-not-allowed"
                   >
-                    Start
+                    Disabled
                   </button>
                   <button
                     onClick={stopLocalBridge}
@@ -392,7 +392,7 @@ export const WhatsAppMEView = () => {
                   </button>
                 </div>
                 <p className="text-[9px] text-green-700 leading-4">
-                  Free mode uses WhatsApp Web on this PC. It is experimental and does not auto-start on app launch, so the rest of HermesDesk stays responsive.
+                  The live Web bridge is turned off because it froze HermesDesk. WhatsApp ME still saves drafts, opens WhatsApp, and lets you approve sends manually.
                 </p>
                 {channelStatus?.localBridgeLastState && (
                   <div className="p-2 bg-white border border-green-100 rounded-xl">

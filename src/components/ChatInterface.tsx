@@ -49,6 +49,14 @@ const isStatusOrUpdatesPrompt = (text: string) =>
 const isPreferenceTrainingPrompt = (text: string) =>
   /(remember|from now on|you must|must|don't show|do not show|not interested|only show|treat this|mark this|ignore this|my preference|i prefer|i want you to|when you analyse|when you analyze|always|never|training|learn this|thanks? yes|thank yes|i have booked|i booked|gather all|filter|prioriti[sz]e)/i.test(text);
 
+const isLiveWebResearchPrompt = (text: string) =>
+  /(research|web|internet|online|google|reviews?|review score|near me|nearby|local|book|booking|where should i|best|compare|check.*reviews?|make sure.*reviews?)/i.test(text)
+  && !/(email|mailbox|inbox|outlook|gmail|indexed mail|my emails?)/i.test(text);
+
+const isMotReviewResearchPrompt = (text: string) =>
+  /(\bmot\b|car|vehicle|garage|test centre|mechanic)/i.test(text)
+  && /(research|reviews?|near me|nearby|local|book|booking|best|compare|check)/i.test(text);
+
 const timeAwareGreeting = () => {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
@@ -1033,6 +1041,58 @@ Use the controlled browser session if available. Keep every step visible in Even
     return true;
   };
 
+  const handleLiveWebResearchIntent = async (outgoing: string) => {
+    if (!isLiveWebResearchPrompt(outgoing) && !isMotReviewResearchPrompt(outgoing)) return false;
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps([
+      'Routing to real web research',
+      'Opening browser/search route',
+      'Checking live sources and reviews',
+      'Preparing evidence-led next steps'
+    ]);
+
+    try {
+      const query = isMotReviewResearchPrompt(outgoing)
+        ? `${outgoing} Lancaster Morecambe garage MOT reviews`
+        : outgoing;
+      const [browser, traceRaw, task] = await Promise.all([
+        window.ipcRenderer?.openBrowserOperator?.(query).catch((error: any) => ({ ok: false, error: error?.message })),
+        window.ipcRenderer?.researchWebAutomation?.(query).catch((error: any) => ({ ok: false, error: error?.message })),
+        window.ipcRenderer?.createAgentTask?.(
+          `Live web research task from chat.
+
+User request:
+${outgoing}
+
+This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT/garage requests, focus on Lancaster, Morecambe, Heysham and nearby areas, compare reviews, risks, opening/booking clues, and produce exact next steps. Do not book, pay, call, or submit anything without Silva approval.`,
+          'space-agent-full'
+        ).catch((error: any) => ({ ok: false, error: error?.message }))
+      ]);
+      const trace: any = traceRaw;
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        engine: 'Real Web Research',
+        content: [
+          'I routed this to real web research, not mailbox memory.',
+          '',
+          browser?.ok ? 'Browser Operator opened for the live search.' : `Browser Operator issue: ${browser?.error || 'not opened'}`,
+          trace?.ok || trace?.trace?.ok ? `Search trace started with ${(trace?.trace?.results || []).length} source results.` : `Search trace issue: ${trace?.error || 'no trace yet'}`,
+          task?.id ? `Space research agent task started: ${task.id}.` : `Research agent issue: ${task?.error || 'not queued'}`,
+          '',
+          'I will not book the MOT, pay, call, or submit anything without your approval.'
+        ].join('\n')
+      }]);
+    } finally {
+      setIsTyping(false);
+      window.setTimeout(() => setResearchSteps([]), 6000);
+    }
+    return true;
+  };
+
   const handleFrontDoorStatusIntent = async (outgoing: string) => {
     if (!isStatusOrUpdatesPrompt(outgoing)) return false;
     const userMessage = { role: 'user', content: outgoing };
@@ -1110,6 +1170,7 @@ Use the controlled browser session if available. Keep every step visible in Even
   };
 
   const handleDomainMemoryIntent = async (outgoing: string) => {
+    if (isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing)) return false;
     const domainQuestion = /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider|legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|funding|funder|lender|loan|overdraft|cashflow|iwoca|funding circle|tide|anna|loqbox|capital one|car insurance|vehicle insurance|motor insurance|mot|road tax|policy renewal)/i.test(outgoing);
     if (!domainQuestion || isStatusOrUpdatesPrompt(outgoing) && !/(accounting|legal|property|funding|insurance|mot|tax|vat|hmrc|bill|statement|solicitor|premises|funder)/i.test(outgoing)) return false;
 
@@ -1322,6 +1383,7 @@ Use the controlled browser session if available. Keep every step visible in Even
 
     if (await handleWhatsAppIntent(outgoing)) return;
     if (await handleBrowserAutomationIntent(outgoing)) return;
+    if (await handleLiveWebResearchIntent(outgoing)) return;
     if (await handleCasualChatIntent(outgoing)) return;
     if (await handlePreferenceTrainingIntent(outgoing)) return;
     if (await handleDomainMemoryIntent(outgoing)) return;
@@ -1364,8 +1426,8 @@ Use the controlled browser session if available. Keep every step visible in Even
     }
 
     const userMessage = { role: 'user', content: outgoing };
-    const needsMailMemory = !isPreferenceTrainingPrompt(outgoing) && /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|importon|iporton|updates?|need looking|what needs)/i.test(outgoing);
-    const wantsLiveWeb = !needsMailMemory && /(research|web|internet|latest|current|today|news|official|source|cite|verify online|search online|browser)/i.test(outgoing);
+    const wantsLiveWeb = isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing) || /(research|web|internet|latest|current|today|news|official|source|cite|verify online|search online|browser)/i.test(outgoing);
+    const needsMailMemory = !wantsLiveWeb && !isPreferenceTrainingPrompt(outgoing) && /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|importon|iporton|updates?|need looking|what needs)/i.test(outgoing);
     let memoryContext: any = null;
     let matchingEmails: any[] = [];
     if (needsMailMemory && window.ipcRenderer?.getEmailIntelligence) {

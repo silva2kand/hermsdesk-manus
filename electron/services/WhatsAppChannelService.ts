@@ -105,44 +105,22 @@ export class WhatsAppChannelService {
   }
 
   async startLocalBridge(ownerPhone = '', win?: any) {
-    const settings = this.saveSettings({
-      localBridgeEnabled: true,
-      localAutoReplyToOwner: true,
-      ownerPhone: ownerPhone || this.getSettings().ownerPhone || ''
-    });
-    if (!this.browserOperator?.open || !this.browserOperator?.evaluateJavaScript) {
-      return { ok: false, error: 'Browser Operator bridge is not available in this build.' };
-    }
-
-    const cleanPhone = String(settings.ownerPhone || '').replace(/[^\d]/g, '');
-    const target = cleanPhone
-      ? `https://web.whatsapp.com/send?phone=${cleanPhone}`
-      : 'https://web.whatsapp.com/';
-    await this.browserOperator.open(target, this.bridgeSessionId, 'WhatsApp Local Bridge');
-
     if (this.bridgeTimer) {
       clearInterval(this.bridgeTimer);
       this.bridgeTimer = null;
     }
-    if (!this.bridgeTimer) {
-      this.bridgeTimer = setInterval(() => {
-        this.pollLocalBridge(win).catch((error: any) => {
-          this.eventBus?.emit('channel.status', 'whatsapp', {
-            channel: 'whatsapp',
-            status: 'bridge-poll-failed',
-            error: error?.message || String(error)
-          });
-        });
-      }, 30000);
-    }
-
+    this.saveSettings({
+      localBridgeEnabled: false,
+      localAutoReplyToOwner: false,
+      ownerPhone: ownerPhone || this.getSettings().ownerPhone || ''
+    });
     const status = await this.getStatus();
     this.eventBus?.emit('channel.status', 'whatsapp', {
       channel: 'whatsapp',
-      status: 'local-bridge-started',
-      ownerPhoneSaved: Boolean(cleanPhone)
+      status: 'local-bridge-disabled',
+      reason: 'Disabled for stability. Use manual WhatsApp drafts/composer only.'
     });
-    return { ok: true, status };
+    return { ok: false, status, error: 'Local WhatsApp Web bridge is disabled for stability. Manual WhatsApp drafts still work.' };
   }
 
   async stopLocalBridge() {
