@@ -105,6 +105,14 @@ const buildLiveResearchAnswer = (prompt: string, trace: any) => {
   ].join('\n');
 };
 
+const extractAgentFinal = (task: any) => {
+  if (!task) return '';
+  const final = [...(task.history || [])].reverse().find((item: any) => item.role === 'assistant')?.content;
+  if (final && String(final).trim()) return String(final).trim();
+  if (task.status === 'failed') return 'Agent task failed. Check Live Operations for the error trace.';
+  return '';
+};
+
 const timeAwareGreeting = () => {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
@@ -1120,6 +1128,8 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         ).catch((error: any) => ({ ok: false, error: error?.message }))
       ]);
       const trace: any = traceRaw;
+      const finalTask = task?.id ? await waitForAgentTaskFinal(task.id, 18000) : null;
+      const agentFinal = extractAgentFinal(finalTask);
 
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -1128,7 +1138,11 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           buildLiveResearchAnswer(outgoing, trace),
           '',
           browser?.ok ? 'Browser Operator opened for the live search.' : `Browser Operator issue: ${browser?.error || 'not opened'}`,
-          task?.id ? `Research agent also queued for deeper checking: ${task.id}.` : `Research agent issue: ${task?.error || 'not queued'}`
+          agentFinal
+            ? `Agent result:\n${agentFinal}`
+            : task?.id
+              ? `Research agent is still running in Live Operations: ${task.id}.`
+              : `Research agent issue: ${task?.error || 'not queued'}`
         ].join('\n')
       }]);
     } finally {
@@ -1422,6 +1436,18 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     addNotice(result?.ok ? 'Purchase Protection Pack created and seller/product research opened.' : 'Could not create Purchase Protection Pack.');
   };
 
+  const waitForAgentTaskFinal = async (taskId?: string, timeoutMs = 24000) => {
+    if (!taskId || !window.ipcRenderer?.getAgentTasks) return null;
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const tasks = await window.ipcRenderer.getAgentTasks().catch(() => []);
+      const task = (tasks || []).find((item: any) => item.id === taskId);
+      if (task && ['done', 'failed', 'cancelled'].includes(task.status)) return task;
+      await new Promise(resolve => window.setTimeout(resolve, 1600));
+    }
+    return null;
+  };
+
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
@@ -1624,6 +1650,12 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         if (response) {
           let content = response.content || response.message?.content || (response.choices && response.choices[0]?.message?.content) || "No response content received.";
           const engine = response.engine || provider;
+          const launchedTask = await launchedAgentTask;
+          const finalTask = launchedTask?.id ? await waitForAgentTaskFinal(launchedTask.id, 16000) : null;
+          const agentFinal = extractAgentFinal(finalTask);
+          if (agentFinal && !/no response content received|please tell me more|how can i assist|i can help/i.test(agentFinal)) {
+            content = `${agentFinal}\n\nManager route: ${assignedAgentId}${launchedTask?.id ? ` (${launchedTask.id})` : ''}.`;
+          }
           const mailboxEvidenceAnswer = needsMailMemory ? buildMailboxEvidenceAnswer(outgoing, memoryContext, matchingEmails) : '';
           if (mailboxEvidenceAnswer && (/no local ai engine is available|no response content|please tell me more|what information you'd like|no immediate urgent|no immediate/i.test(content) || matchingEmails.length > 0 || /urgent|important|need looking|car|vehicle|insurance|renewal/i.test(outgoing))) {
             content = mailboxEvidenceAnswer;
