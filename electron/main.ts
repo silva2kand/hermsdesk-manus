@@ -266,9 +266,9 @@ function createWindow() {
       legal: /(rc\.legal|holdenslaw\.com|williamharrissolicitors@gmail\.com|eppcs\.co\.uk)/i,
       councilProperty: /(lancaster\.gov\.uk|amcsurveyors\.co\.uk|bpauctions\.co\.uk|auctioneers\.co\.uk)/i,
       paymentProvider: /(elavon\.com|elavonsecuritymanager\.com|paypoint\.co\.uk|fiserv\.com|clover\.com|vivawallet\.com|paymentsave\.co\.uk|paypal\.co\.uk)/i,
-      businessBankingFunding: /(mail\.tide\.co|info\.tide\.co|anna\.money|nationwide\.co\.uk|nationwidefinance\.co\.uk|loqbox\.com|iwoca\.co\.uk|fundingcircle\.com|capitalone\.co\.uk|notification\.capitalone\.co\.uk)/i,
+      businessBankingFunding: /(mail\.tide\.co|info\.tide\.co|anna\.money|halifax\.co\.uk|nationwide\.co\.uk|communications\.nationwide\.co\.uk|nationwidefinance\.co\.uk|loqbox\.com|iwoca\.co\.uk|fundingcircle\.com|capitalone\.co\.uk|notification\.capitalone\.co\.uk)/i,
       insurance: /(simplybusiness\.co\.uk|darwin-insurance\.com|igo4\.com|vavista\.com|insurancefactory\.co\.uk)/i,
-      storeOps: /(visualbusinessretail\.co\.uk|jti360\.co\.uk|jti\.com|parcelly\.com|sysco\.com|deliveroo\.co\.uk|loyalty\.snackdisplay\.co\.uk)/i,
+      storeOps: /(visualbusinessretail\.co\.uk|parfetts\.co\.uk|jti360\.co\.uk|jti\.com|parcelly\.com|sysco\.com|deliveroo\.co\.uk|loyalty\.snackdisplay\.co\.uk)/i,
       utilitiesTelecom: /(telecom-service\.co\.uk|mails\.three\.co\.uk|contact\.sky|inform\.bt\.com)/i,
       documentSigning: /(docusign\.net)/i
     }

@@ -446,7 +446,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const buildMailboxEvidenceAnswer = (prompt: string, mailboxMemory: any, matches: any[]) => {
     const lower = prompt.toLowerCase();
     if (isPreferenceTrainingPrompt(prompt)) return '';
-    const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking)/i.test(prompt);
+    const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking|accounting|accountant|legal|solicitor|land registry|property|premises|funding|funder|loan|supplier|provider)/i.test(prompt);
     if (!isMailQuestion) return '';
 
     const total = mailboxMemory?.totalIndexed?.toLocaleString?.() || mailboxMemory?.totalIndexed || 'indexed';
@@ -454,6 +454,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     const wantsUrgents = /urgent|important|need looking|look at|priority|top\s*3|3 urgents/i.test(lower);
     const wantsVehicleInsurance = /car|vehicle|motor|mot|insurance|renewal|policy|premium/i.test(lower);
     const wantsCarInsuranceDue = /(car|vehicle|motor|van).{0,30}(insurance|policy|renewal|renew|due|expire|expiry|expires)|insurance.{0,30}(car|vehicle|motor|van|due|renewal|renew|expire|expiry|expires)/i.test(lower);
+    const wantsAccounting = /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider)/i.test(lower);
+    const wantsLegal = /(legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|fraud report|actionfraud)/i.test(lower);
+    const wantsProperty = /(property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|shop premises|commercial premises)/i.test(lower);
+    const wantsFunding = /(funding|funder|lender|loan|overdraft|cashflow|cash flow|iwoca|funding circle|tide|anna|loqbox|capital one|nationwide finance|bank statement)/i.test(lower);
     const vehiclePolicyEvidence = (email: any) => {
       const raw = `${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''}`.toLowerCase();
       const hasVehicle = /(car|vehicle|motor|van|driver|yk13wnz|sva23|admiral|aviva|direct line|churchill|hastings|1st central|tesco bank|esure|swinton|lv=|rac|the aa|aa insurance|saga)/i.test(raw);
@@ -474,6 +478,34 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
             ...(mailboxMemory?.insuranceRenewals || []).filter(vehiclePolicyEvidence),
             ...matches.filter(vehiclePolicyEvidence)
           ]
+      : wantsFunding
+        ? [
+            ...matches,
+            ...(mailboxMemory?.fundingEvidence || []),
+            ...(mailboxMemory?.accountingEvidence || []),
+            ...(mailboxMemory?.knownProviderEvidence || [])
+          ]
+      : wantsLegal
+        ? [
+            ...matches,
+            ...(mailboxMemory?.legalEvidence || []),
+            ...(mailboxMemory?.deadlines || [])
+          ]
+      : wantsProperty
+        ? [
+            ...matches,
+            ...(mailboxMemory?.propertyAnalysisEvidence || []),
+            ...(mailboxMemory?.acquisitionEvidence || []),
+            ...(mailboxMemory?.legalEvidence || [])
+          ]
+      : wantsAccounting
+        ? [
+            ...matches,
+            ...(mailboxMemory?.billsToPay || []),
+            ...(mailboxMemory?.accountingEvidence || []),
+            ...(mailboxMemory?.knownProviderEvidence || []),
+            ...(mailboxMemory?.supplierUpdates || [])
+          ]
         : matches;
     const seen = new Set<string>();
     const evidence = curated.filter((email: any) => {
@@ -488,6 +520,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       ? 'Here are the top 3 urgent or important items I found in your indexed mailbox memory'
       : wantsVehicleInsurance
       ? 'Here is the strongest vehicle/insurance evidence I found in your indexed mailbox memory'
+      : wantsFunding
+      ? 'Here is the strongest funding and lender-pack evidence I found in your indexed mailbox memory'
+      : wantsLegal
+      ? 'Here is the strongest legal/solicitor/property-case evidence I found in your indexed mailbox memory'
+      : wantsProperty
+      ? 'Here is the strongest property/acquisition evidence I found in your indexed mailbox memory'
+      : wantsAccounting
+      ? 'Here is the strongest accounting/tax/bills/provider evidence I found in your indexed mailbox memory'
       : /bill|payment|pay|invoice|deadline|due/i.test(lower)
         ? 'Here are the strongest bill/payment/deadline items I found in your indexed mailbox memory'
         : 'Here are the strongest email matches I found in your indexed mailbox memory';
@@ -531,6 +571,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         ? 'Current read: these are priority candidates from local memory. I can mark any as important/not important, draft a reply, or prepare a WhatsApp notification, but external actions need your approval.'
         : wantsVehicleInsurance
         ? 'Current read: I found renewal/insurance evidence, but I do not see a confirmed future due date in the indexed preview text. The safest next step is to open the matching insurer/comparison email or policy attachment before relying on the date.'
+        : wantsAccounting
+        ? 'Current read: these are accounting/provider evidence items kept for bills, tax, VAT, payroll, statements, funding packs, and later review. Z-reports stay lower priority unless abnormal, but remain saved as evidence.'
+        : wantsLegal
+        ? 'Current read: these are legal/property-case evidence items. I can prepare solicitor notes or a WhatsApp-style summary, but I will not send or file anything without approval.'
+        : wantsProperty
+        ? 'Current read: these are property/acquisition evidence items. Local closed-shop/corner-shop style premises should outrank distant marketing unless you ask otherwise.'
+        : wantsFunding
+        ? 'Current read: these are funding evidence items. Baba should use accounting, bank statements, bills, provider records, and lender emails to prepare funding packs when needed.'
         : 'Current read: these are evidence matches from the local index. I can draft replies, reminders, or folder actions, but approval is required before anything external changes.',
       'I will not move, delete, send, unsubscribe, pay, or contact anyone without your approval.'
     ].join('\n');
@@ -1042,6 +1090,37 @@ Use the controlled browser session if available. Keep every step visible in Even
     }
   };
 
+  const handleDomainMemoryIntent = async (outgoing: string) => {
+    const domainQuestion = /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider|legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|funding|funder|lender|loan|overdraft|cashflow|iwoca|funding circle|tide|anna|loqbox|capital one|car insurance|vehicle insurance|motor insurance|mot|road tax|policy renewal)/i.test(outgoing);
+    if (!domainQuestion || isStatusOrUpdatesPrompt(outgoing) && !/(accounting|legal|property|funding|insurance|mot|tax|vat|hmrc|bill|statement|solicitor|premises|funder)/i.test(outgoing)) return false;
+
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps(['Routing to Mythos domain memory', 'Checking indexed email evidence', 'Using saved priority buckets']);
+
+    try {
+      const intel = await window.ipcRenderer?.getEmailIntelligence?.().catch(() => null);
+      const memory = intel?.mailboxMemory || intel?.memory || null;
+      const matches = await window.ipcRenderer?.searchIndexedEmails?.(outgoing).catch(() => []) || [];
+      const answer = buildMailboxEvidenceAnswer(outgoing, memory, matches);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        engine: 'Mythos Domain Memory',
+        content: answer || [
+          'I checked Baba/Mythos domain memory, but I could not find a reliable indexed evidence item for that wording yet.',
+          '',
+          'The app should keep accounting, legal, property, funding, provider, insurance, and Z-report evidence saved for later review. I will not send, delete, pay, or file anything without approval.'
+        ].join('\n')
+      }]);
+    } finally {
+      setIsTyping(false);
+      setResearchSteps([]);
+    }
+    return true;
+  };
+
   const handlePreferenceTrainingIntent = async (outgoing: string) => {
     if (!isPreferenceTrainingPrompt(outgoing)) return false;
     const userMessage = { role: 'user', content: outgoing };
@@ -1225,8 +1304,9 @@ Use the controlled browser session if available. Keep every step visible in Even
     if (await handleWhatsAppIntent(outgoing)) return;
     if (await handleBrowserAutomationIntent(outgoing)) return;
     if (await handleCasualChatIntent(outgoing)) return;
-    if (await handleFrontDoorStatusIntent(outgoing)) return;
     if (await handlePreferenceTrainingIntent(outgoing)) return;
+    if (await handleDomainMemoryIntent(outgoing)) return;
+    if (await handleFrontDoorStatusIntent(outgoing)) return;
 
     if (/(build|repair|fix|install|setup|self[-\s]?build).*(voice|tts|speech|silva voice)|voice.*(build|repair|fix|install|setup|self[-\s]?build)/i.test(outgoing)) {
       const userMessage = { role: 'user', content: outgoing };
