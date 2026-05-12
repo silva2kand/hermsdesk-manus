@@ -278,6 +278,8 @@ Your purpose is to operate both the Windows host computer and the real controlle
 Rules:
 - Use real PC and browser tools, not instructions, when the user asks you to open apps, run commands, browse, click, type, compare, extract, navigate, or operate windows.
 - After every action, verify with pc_ui_scan or browser_read/browser_inspect.
+- If a task contains USER_REQUEST_ONLY, treat that as the only user request. Do not paste system instructions, numbered rules, or safety text into search boxes.
+- For search tools, use a short cleaned query containing only the real target, location, product, app, or question.
 - Never click pay, buy, submit, checkout, order, confirm, sign, book, or purchase controls without explicit Silva approval.
 - Never enter passwords, payment details, bank details, or legal/accounting submissions without approval.
 - For shopping/research, open result pages, extract prices/specs/risks/reviews, compare evidence, and stop before purchase/checkout.
@@ -747,14 +749,30 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     this.emitThought(task, agent, 'TOOL_CALL', 'Automation Agent bootstrapping visible browser search and browser_read before model planning.', {
       sessionId
     });
+    const cleanQuery = this.extractSearchQueryFromTask(task.input);
     const opened = await runTool('browser_search_visible', {
-      query: task.input,
+      query: cleanQuery,
       sessionId,
       label: 'Automation Agent'
     });
     await runTool('browser_scroll', { amount: 650, sessionId });
     const page = await runTool('browser_read', { sessionId });
     return `Browser bootstrap completed.\nSession: ${sessionId}\n\n${opened}\n\n${page}`;
+  }
+
+  private extractSearchQueryFromTask(input: string) {
+    const raw = String(input || '').trim();
+    const explicitSearch = raw.match(/Search query:\s*([\s\S]*?)(?:\n\n[A-Z_ ]+:|\n\nThis is|\n\nDo not|\n\nRequired|$)/i)?.[1]?.trim();
+    const userOnly = raw.match(/USER_REQUEST_ONLY:\s*([\s\S]*?)(?:\n\n[A-Z_ ]+:|\n\nDo not|\n\nRequired|$)/i)?.[1]?.trim();
+    const userRequest = raw.match(/User request:\s*([\s\S]*?)(?:\n\n[A-Z_ ]+:|\n\nDo not|\n\nRequired|$)/i)?.[1]?.trim();
+    const query = explicitSearch || userOnly || userRequest || raw;
+    return query
+      .replace(/^(?:\s*(?:hi|hey|hello|good\s*morning|goodmorning|good\s*afternoon|good\s*evening)[\s,.:;-]*)+/i, '')
+      .replace(/\breserch\b/ig, 'research')
+      .replace(/\bmakesure\b/ig, 'make sure')
+      .replace(/\s+/g, ' ')
+      .slice(0, 220)
+      .trim();
   }
 
   private isShoppingComparisonTask(input: string) {
@@ -1341,8 +1359,8 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
           }
         } else {
           // No tool calls — this is the agent's final response
-          if (agent.id === 'browser-automation-agent' && /cannot browse|can't browse|do not have the ability to browse|not able to browse|as an ai language model/i.test(content) && iterations < maxIterations) {
-            const correction = 'Automation Agent correction: you do have real browser tools. Continue by calling [TOOL: browser_read()] or [TOOL: browser_inspect()], then choose result/product links with browser_click_text or browser_click. Do not provide a generic inability answer.';
+          if (agent.id === 'browser-automation-agent' && /cannot browse|can't browse|do not have the ability to browse|not able to browse|as an ai language model|do not have access|unable to access|unable to perform that action|cannot access your desktop|cannot open/i.test(content) && iterations < maxIterations) {
+            const correction = 'Automation Agent correction: you do have real PC and browser tools. For app/desktop tasks, call [TOOL: open_app(app="...")] then [TOOL: pc_window_list()] and [TOOL: pc_ui_scan()]. For web tasks, call [TOOL: browser_search_visible(query="short cleaned query")] then browser_read/browser_inspect. Do not provide a generic inability answer.';
             sendUpdate(correction, 'error');
             this.emitThought(task, agent, 'REVISE', correction, { outputPreview: content.slice(0, 600) });
             messages.push({ role: 'assistant', content });

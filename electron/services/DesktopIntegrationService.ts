@@ -553,6 +553,14 @@ public class Win32PcClick {
           child.unref();
           resolve(true);
         });
+      case 'notepad':
+        return this.spawnWindowsApp('notepad.exe');
+      case 'calculator':
+      case 'calc':
+        return shell.openExternal('calculator://').catch(() => this.spawnWindowsApp('calc.exe'));
+      case 'paint':
+      case 'mspaint':
+        return this.spawnWindowsApp('mspaint.exe');
       case 'gmail':
         return shell.openExternal('https://mail.google.com');
       case 'terminal':
@@ -572,6 +580,15 @@ public class Win32PcClick {
 
   async openApp(appName: string) {
     return this.openExternalApp(appName);
+  }
+
+  private async spawnWindowsApp(exe: string) {
+    return new Promise((resolve) => {
+      const child = spawn(exe, [], { detached: true, stdio: 'ignore', windowsHide: false });
+      child.on('error', (error) => resolve({ ok: false, error: error.message, app: exe }));
+      child.unref();
+      resolve({ ok: true, app: exe });
+    });
   }
 
   private async startVoiceStackServer() {

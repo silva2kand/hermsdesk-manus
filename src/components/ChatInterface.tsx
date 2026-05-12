@@ -179,6 +179,19 @@ const buildMotResearchQuery = () => [
   'Lancaster City Council VMU White Lund'
 ].join(' ');
 
+const getSimpleOpenAppName = (value: string) => {
+  const text = String(value || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!/\b(open|launch|run|start)\b/.test(text)) return '';
+  if (/\bnotepad\b/.test(text)) return 'notepad';
+  if (/\b(calc|calculator)\b/.test(text)) return 'calculator';
+  if (/\bpaint\b/.test(text)) return 'paint';
+  if (/\bclassic outlook\b/.test(text)) return 'classic outlook';
+  if (/\boutlook\b/.test(text)) return 'outlook';
+  if (/\bwhatsapp web\b/.test(text)) return 'whatsapp web';
+  if (/\bwhatsapp\b/.test(text)) return 'whatsapp';
+  return '';
+};
+
 const extractAgentFinal = (task: any) => {
   if (!task) return '';
   const final = [...(task.history || [])].reverse().find((item: any) => item.role === 'assistant')?.content;
@@ -1238,13 +1251,36 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     ]);
 
     try {
+      const appName = getSimpleOpenAppName(outgoing);
+      if (appName) {
+        const opened: any = await window.ipcRenderer?.openApp?.(appName).catch((error: any) => ({ ok: false, error: error?.message || String(error) }));
+        const windows = await window.ipcRenderer?.listPcWindows?.().catch((error: any) => ({ ok: false, error: error?.message || String(error) }));
+        setMessages(prev => [...prev, assistantMessage([
+          opened === true || opened?.ok || opened?.success
+            ? `Opened ${appName}.`
+            : `Tried to open ${appName}, but Windows returned: ${opened?.error || opened || 'unknown result'}`,
+          '',
+          windows?.ok
+            ? `PC verification: ${windows.windows?.length || 0} windows detected.`
+            : `PC verification issue: ${windows?.error || 'window list not available'}`,
+          '',
+          'I did not click, type, submit, or change anything else.'
+        ].join('\n'), 'Automation Agent', [
+          `Opened app request: ${appName}`,
+          'Verified Windows state with window list'
+        ])]);
+        return true;
+      }
+
+      const cleanTask = cleanResearchQuery(outgoing);
       const task = await window.ipcRenderer?.createAgentTask?.(
           `Automation task from chat.
 
-User request:
-${outgoing}
+USER_REQUEST_ONLY:
+${cleanTask}
 
 Do not answer as a generic language model. Use real PC and browser tools.
+When calling browser_search_visible, use only USER_REQUEST_ONLY or a shorter cleaned search query. Never paste this instruction block into Google, Maps, or any search box.
 Required first loop:
 1. If an app is named, use [TOOL: open_app(app="name")] then [TOOL: pc_window_list()].
 2. If it's a web task, use [TOOL: browser_search_visible(query="...")] or [TOOL: browser_open(target="...")].
@@ -1675,7 +1711,12 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
 
-    // ABSOLUTE TOP PRIORITY: Intercept PC automation tasks
+    if (isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing)) {
+      if (await handleLiveWebResearchIntent(outgoing)) return;
+    }
+
+    // PC/app automation is next. Web research above keeps MOT/review booking from
+    // being swallowed by the broad PC operator route.
     if (await handleBrowserAutomationIntent(outgoing)) {
       addNotice('Mythos: Routing to PC Operator Agent...');
       return;
