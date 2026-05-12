@@ -303,6 +303,7 @@ export const MyComputer = () => {
             {directory?.entries?.length ? directory.entries.map((entry) => (
               <button
                 key={entry.path}
+                onClick={() => entry.type === 'folder' ? openDirectory(entry.path) : window.ipcRenderer?.openPath(entry.path)}
                 onDoubleClick={() => entry.type === 'folder' ? openDirectory(entry.path) : window.ipcRenderer?.openPath(entry.path)}
                 className="w-full px-6 py-3 flex items-center justify-between hover:bg-blue-50/40 transition-all text-left"
               >
@@ -316,7 +317,7 @@ export const MyComputer = () => {
               <div className="h-full p-8 flex flex-col items-center justify-center text-center">
                 <Folder className="w-16 h-16 text-gray-200 mb-4" />
                 <p className="text-sm font-bold text-gray-900">{loading ? 'Loading workspace files' : 'No files found'}</p>
-                <p className="text-xs text-gray-500 mt-1 max-w-sm">Double-click folders to browse and files to open them with the system default app.</p>
+                <p className="text-xs text-gray-500 mt-1 max-w-sm">Click folders to browse and files to open them with the system default app.</p>
               </div>
             )}
           </div>

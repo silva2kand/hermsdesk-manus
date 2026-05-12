@@ -567,15 +567,15 @@ function App() {
           {visitedViews.has('plugins') && <div className={view === 'plugins' ? 'block h-full' : 'hidden'}><Plugins /></div>}
           {visitedViews.has('computer') && <div className={view === 'computer' ? 'block h-full' : 'hidden'}><MyComputer /></div>}
           {visitedViews.has('agents') && <div className={view === 'agents' ? 'block h-full' : 'hidden'}><AgentsMonitor agents={agents} onAgentAction={handleAgentAction} /></div>}
-          {view === 'settings' && <SettingsPage />}
-          {view === 'profile' && <SettingsPage />}
+          {view === 'settings' && <SettingsPage initialTab="General" />}
+          {view === 'profile' && <SettingsPage initialTab="General" />}
           {view === 'usage' && <SettingsShell title="Usage" desc="Local usage, engine activity, and workspace metrics." />}
           {view === 'tasks' && <SettingsSurface><ScheduledTasksView /></SettingsSurface>}
           {visitedViews.has('mail') && <div className={view === 'mail' ? 'block h-full' : 'hidden'}><SettingsSurface><MailMEView /></SettingsSurface></div>}
           {visitedViews.has('whatsapp') && <div className={view === 'whatsapp' ? 'block h-full' : 'hidden'}><WhatsAppMEView /></div>}
           {view === 'data' && <SettingsSurface><DataControlsView /></SettingsSurface>}
           {view === 'browser' && <SettingsSurface><DataControlsView mode="cloud" /></SettingsSurface>}
-          {view === 'personalization' && <SettingsPage />}
+          {view === 'personalization' && <SettingsPage initialTab="Personalization" />}
           {visitedViews.has('projects') && <div className={view === 'projects' ? 'block h-full' : 'hidden'}><ProjectsView /></div>}
           {visitedViews.has('wide-research') && <div className={view === 'wide-research' ? 'block h-full' : 'hidden'}><WideResearchView /></div>}
           {visitedViews.has('graphify') && <div className={view === 'graphify' ? 'block h-full' : 'hidden'}><GraphifyView /></div>}

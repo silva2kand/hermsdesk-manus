@@ -9,6 +9,23 @@ export const MyComputerSettings = () => {
     { path: 'C:\\Users\\Silva\\WorkSpace', name: 'WorkSpace', size: '1.2 GB' },
     { path: 'C:\\Users\\Silva\\Downloads\\ME_Exports', name: 'Exports', size: '240 MB' }
   ]);
+  const [notice, setNotice] = useState('');
+
+  const showNotice = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 3000);
+  };
+
+  const addLocalFolder = async () => {
+    const folder = await window.ipcRenderer?.selectFolder?.().catch(() => null);
+    if (!folder) return;
+    setLocalFolders(prev => [{
+      path: folder,
+      name: folder.split(/[\\/]/).pop() || folder,
+      size: 'local'
+    }, ...prev]);
+    showNotice('Local folder added.');
+  };
 
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-2 duration-300">
@@ -22,6 +39,7 @@ export const MyComputerSettings = () => {
           System Connected
         </div>
       </div>
+      {notice && <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">{notice}</div>}
 
       {/* Local User Profile */}
       <div className="p-6 bg-gray-900 rounded-[32px] text-white flex items-center justify-between shadow-xl shadow-gray-200">
@@ -41,7 +59,7 @@ export const MyComputerSettings = () => {
             </div>
           </div>
         </div>
-        <button className="flex items-center space-x-2 px-6 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-xs font-black transition-all border border-white/10">
+        <button onClick={() => showNotice('Disconnect is approval-gated and not executed from this panel.')} className="flex items-center space-x-2 px-6 py-2.5 bg-white/10 hover:bg-white/20 rounded-2xl text-xs font-black transition-all border border-white/10">
           <Power className="w-4 h-4 text-red-400" />
           <span>Disconnect</span>
         </button>
@@ -54,7 +72,7 @@ export const MyComputerSettings = () => {
             <HardDrive className="w-3.5 h-3.5 mr-2" />
             File System Access
           </h3>
-          <button className="flex items-center text-xs font-bold text-blue-600 hover:text-blue-700">
+          <button onClick={addLocalFolder} className="flex items-center text-xs font-bold text-blue-600 hover:text-blue-700">
             <Plus className="w-3.5 h-3.5 mr-1" />
             Add local folder
           </button>
@@ -73,7 +91,7 @@ export const MyComputerSettings = () => {
               </div>
               <div className="flex items-center space-x-4">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{folder.size}</span>
-                <button className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                <button onClick={() => setLocalFolders(prev => prev.filter((_, index) => index !== idx))} className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

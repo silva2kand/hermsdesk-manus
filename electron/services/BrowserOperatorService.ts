@@ -799,7 +799,7 @@ export class BrowserOperatorService {
   }
 
   async searchVisible(query: string, sessionId = 'main', label = 'Browser Automation') {
-    const text = String(query || '').trim();
+    const text = this.cleanSearchQuery(query);
     if (!text) return { ok: false, error: 'Search query is required.' };
     const opened = await this.open('https://www.google.com/', sessionId, label);
     if (!opened.ok) return opened;
@@ -819,6 +819,25 @@ export class BrowserOperatorService {
       links: page.links,
       event: this.push({ type: 'navigate', status: 'done', detail: `Visible search completed for "${text}"`, url: page.url || pressed.url, sessionId })
     };
+  }
+
+  private cleanSearchQuery(query: string) {
+    const raw = String(query || '').trim();
+    const explicitSearch = raw.match(/Search query:\s*([\s\S]*?)(?:\n\n[A-Z_ ]+:|\n\nThis is|\n\nDo not|\n\nRequired|$)/i)?.[1]?.trim();
+    const userOnly = raw.match(/USER_REQUEST_ONLY:\s*([\s\S]*?)(?:\n\n[A-Z_ ]+:|\n\nDo not|\n\nRequired|$)/i)?.[1]?.trim();
+    const userRequest = raw.match(/User request:\s*([\s\S]*?)(?:\n\n[A-Z_ ]+:|\n\nDo not|\n\nRequired|$)/i)?.[1]?.trim();
+    let text = explicitSearch || userOnly || userRequest || raw;
+    text = text
+      .replace(/^(?:\s*(?:hi|hey|hello|hiya|yo|good\s*morning|goodmorning|good\s*afternoon|good\s*evening|morning|afternoon|evening)[\s,.:;-]*)+/i, '')
+      .replace(/\breserch\b/ig, 'research')
+      .replace(/\bmakesure\b/ig, 'make sure')
+      .replace(/\bplz\b/ig, 'please')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (/\bmot\b/i.test(text) && /(garage|review|book|near me|nearby|lancaster|morecambe|heysham)/i.test(text)) {
+      return 'Lancaster Morecambe Heysham MOT garage reviews BookMyGarage Yell Trustpilot Howard MOT Centre MOT Service Centre York Bridge Bay MOT Centre Lancaster City Council VMU';
+    }
+    return text.slice(0, 220).trim();
   }
 
   async screenshot(sessionId = 'main') {

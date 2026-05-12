@@ -56,8 +56,8 @@ const SettingTab = ({
   </button>
 );
 
-export const Settings = () => {
-  const [activeTab, setActiveTab] = useState('General');
+export const Settings = ({ initialTab = 'General' }: { initialTab?: string }) => {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState('');
   const [settings, setSettings] = useState<any>({
@@ -90,6 +90,10 @@ export const Settings = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
   const saveAPIKey = async (provider: string, key: string) => {
     if (window.ipcRenderer) {
       await (window.ipcRenderer as any).saveAPIKey(provider, key);
@@ -121,11 +125,40 @@ export const Settings = () => {
     if (window.ipcRenderer) {
       const result = await (window.ipcRenderer as any).createShortcut();
       if (result.success) {
-        alert('Desktop shortcut created successfully!');
+        setNotice('Desktop shortcut created successfully.');
       } else {
-        alert('Failed to create shortcut: ' + result.error);
+        setNotice('Failed to create shortcut: ' + result.error);
       }
+      window.setTimeout(() => setNotice(''), 3000);
     }
+  };
+
+  const copyJson = async (label: string, value: any) => {
+    await navigator.clipboard?.writeText(JSON.stringify(value, null, 2));
+    setNotice(`${label} copied to clipboard.`);
+    window.setTimeout(() => setNotice(''), 2500);
+  };
+
+  const openMemoryManager = async () => {
+    const memory = await window.ipcRenderer?.getSilvaMemory?.().catch(() => '');
+    await navigator.clipboard?.writeText(memory || '');
+    setNotice(memory ? 'Baba memory copied. Open Memory Base from the sidebar to edit it.' : 'No Baba memory text found yet.');
+    window.setTimeout(() => setNotice(''), 3000);
+  };
+
+  const runTaskDoctor = async () => {
+    const result = await window.ipcRenderer?.runSelfImprovementCheck?.('Settings task doctor').catch((error: any) => ({ ok: false, error: error?.message }));
+    await copyJson('Task doctor result', result);
+  };
+
+  const checkIntegration = async (id: string, label: string) => {
+    const statuses = await window.ipcRenderer?.getConnectorStatuses?.().catch(() => ({})) as Record<string, any>;
+    setEngineStatuses(statuses || {});
+    const status = statuses?.[id];
+    setNotice(status?.liveVerified
+      ? `${label} is live verified.`
+      : `${label} is not live-authenticated yet. No fake connection was made.`);
+    window.setTimeout(() => setNotice(''), 3500);
   };
 
   const themes = [
@@ -417,7 +450,7 @@ export const Settings = () => {
               <section className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-900">User persona</h3>
-                  <button className="text-xs text-blue-600 font-medium hover:underline">Edit</button>
+                  <button onClick={() => saveSettings({ persona: 'Professional User' })} className="text-xs text-blue-600 font-medium hover:underline">Edit</button>
                 </div>
                 <div className="p-4 rounded-xl border border-gray-100 bg-white space-y-3">
                   <div className="flex items-center space-x-3">
@@ -436,7 +469,7 @@ export const Settings = () => {
               <section className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-900">ME memory</h3>
-                  <button className="text-xs text-blue-600 font-medium hover:underline">Manage</button>
+                  <button onClick={openMemoryManager} className="text-xs text-blue-600 font-medium hover:underline">Manage</button>
                 </div>
                 <p className="text-xs text-gray-500 leading-relaxed">
                   ME can remember information across conversations to provide more relevant responses. 
@@ -447,9 +480,12 @@ export const Settings = () => {
                     <span className="text-sm font-medium text-gray-900">Enable memory</span>
                     <span className="text-xs text-gray-500">Keep context across different chats</span>
                   </div>
-                  <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-pointer">
-                    <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm" />
-                  </div>
+                  <button
+                    onClick={() => saveSettings({ memoryEnabled: !(settings.memoryEnabled ?? true) })}
+                    className={`w-10 h-5 rounded-full relative cursor-pointer transition-all ${(settings.memoryEnabled ?? true) ? 'bg-blue-600' : 'bg-gray-200'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${(settings.memoryEnabled ?? true) ? 'right-0.5' : 'left-0.5'}`} />
+                  </button>
                 </div>
               </section>
 
@@ -457,17 +493,17 @@ export const Settings = () => {
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold text-gray-900">Appearance</h3>
                 <div className="grid grid-cols-3 gap-4">
-                  <button className="flex flex-col items-center space-y-2 p-3 rounded-xl border-2 border-blue-600 bg-white">
+                  <button onClick={() => saveSettings({ appearance: 'Follow System' })} className={`flex flex-col items-center space-y-2 p-3 rounded-xl border-2 ${settings.appearance === 'Follow System' ? 'border-blue-600 bg-white' : 'border-gray-100 bg-white'} hover:border-gray-200`}>
                     <div className="w-full h-16 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-center">
                        <div className="w-8 h-8 rounded-full border border-gray-200" />
                     </div>
                     <span className="text-xs font-medium text-gray-900">System</span>
                   </button>
-                  <button className="flex flex-col items-center space-y-2 p-3 rounded-xl border border-gray-100 bg-white hover:border-gray-200 transition-colors">
+                  <button onClick={() => saveSettings({ appearance: 'Light' })} className={`flex flex-col items-center space-y-2 p-3 rounded-xl border ${settings.appearance === 'Light' ? 'border-blue-600' : 'border-gray-100'} bg-white hover:border-gray-200 transition-colors`}>
                     <div className="w-full h-16 bg-white rounded-lg border border-gray-100" />
                     <span className="text-xs font-medium text-gray-500">Light</span>
                   </button>
-                  <button className="flex flex-col items-center space-y-2 p-3 rounded-xl border border-gray-100 bg-gray-900">
+                  <button onClick={() => saveSettings({ appearance: 'Dark' })} className={`flex flex-col items-center space-y-2 p-3 rounded-xl border ${settings.appearance === 'Dark' ? 'border-blue-600' : 'border-gray-100'} bg-gray-900`}>
                     <div className="w-full h-16 bg-gray-800 rounded-lg" />
                     <span className="text-xs font-medium text-gray-400">Dark</span>
                   </button>
@@ -488,9 +524,74 @@ export const Settings = () => {
                       <p className="text-xs text-gray-500">Connect to your Telegram account</p>
                     </div>
                   </div>
-                  <button className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50">Connect</button>
+                  <button onClick={() => checkIntegration('telegram', 'Telegram')} className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50">Check route</button>
                </div>
                {/* More integrations... */}
+            </div>
+          )}
+
+          {activeTab === 'Data control' && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl border border-gray-100 bg-white flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Baba memory export</p>
+                  <p className="text-xs text-gray-500">Copies the current local memory text. Nothing is uploaded.</p>
+                </div>
+                <button onClick={openMemoryManager} className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg hover:bg-gray-50">Copy memory</button>
+              </div>
+              <div className="p-4 rounded-xl border border-gray-100 bg-white flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Email intelligence snapshot</p>
+                  <p className="text-xs text-gray-500">Copies indexed mailbox counts, evidence buckets, and current important items.</p>
+                </div>
+                <button
+                  onClick={async () => copyJson('Email intelligence', await window.ipcRenderer?.getEmailIntelligence?.().catch((error: any) => ({ ok: false, error: error?.message })))}
+                  className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Copy snapshot
+                </button>
+              </div>
+              <div className="p-4 rounded-xl border border-amber-100 bg-amber-50">
+                <p className="text-xs font-bold text-amber-900">Safety</p>
+                <p className="text-xs text-amber-800 mt-1">Delete/clear actions are intentionally not exposed here. They must go through an approval card.</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'Task' && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl border border-gray-100 bg-white flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Scheduled task list</p>
+                  <p className="text-xs text-gray-500">Copies the real scheduler state for inspection.</p>
+                </div>
+                <button
+                  onClick={async () => copyJson('Scheduled tasks', await window.ipcRenderer?.getScheduledTasks?.().catch((error: any) => ({ ok: false, error: error?.message })))}
+                  className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Copy tasks
+                </button>
+              </div>
+              <div className="p-4 rounded-xl border border-gray-100 bg-white flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Self-improvement doctor</p>
+                  <p className="text-xs text-gray-500">Runs the bounded local audit. It does not edit code by itself.</p>
+                </div>
+                <button onClick={runTaskDoctor} className="px-3 py-1.5 text-xs font-bold bg-gray-900 text-white rounded-lg hover:bg-black">Run check</button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'About ME' && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl border border-gray-100 bg-white">
+                <p className="text-sm font-bold text-gray-900">HermesDesk ME</p>
+                <p className="text-xs text-gray-500 mt-1">Local-first operator cockpit with Mythos routing, approval gates, browser operator, mail memory, and live task evidence.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button onClick={() => checkIntegration('jan-turboquant', 'Jan + TurboQuant')} className="p-4 rounded-xl border border-gray-100 bg-white text-left text-xs font-bold hover:bg-gray-50">Check local AI</button>
+                <button onClick={() => window.ipcRenderer?.openPath?.('OS_EVOLUTION_LOG.md')} className="p-4 rounded-xl border border-gray-100 bg-white text-left text-xs font-bold hover:bg-gray-50">Open OS ledger</button>
+              </div>
             </div>
           )}
         </div>

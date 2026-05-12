@@ -2534,22 +2534,26 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/25 p-3 sm:p-4"
           onClick={() => setThinkingReview(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="See my thinking"
         >
           <div
-            className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-[#fbf7f3] shadow-2xl"
+            className="flex h-[min(760px,calc(100vh-2rem))] w-full max-w-2xl min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/70 bg-[#fbf7f3] shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black/5 bg-[#fbf7f3]/95 px-6 py-4">
+            <div className="shrink-0 flex items-center justify-between border-b border-black/5 bg-[#fbf7f3]/95 px-6 py-4">
               <h2 className="text-sm font-semibold text-gray-900">See my thinking</h2>
               <button
                 onClick={() => setThinkingReview(null)}
-                className="rounded-full p-2 text-gray-600 hover:bg-black/5 hover:text-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                className="rounded-full p-2 text-gray-700 hover:bg-black/10 hover:text-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-400"
                 aria-label="Close thinking review"
+                title="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5">
               <div className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div className="h-3 w-3 rounded-full bg-gray-600 mt-1" />

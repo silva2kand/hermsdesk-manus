@@ -9,6 +9,12 @@ export const KnowledgeView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [knowledgeData, setKnowledgeData] = useState<any[]>([]);
+  const [quickPrefs, setQuickPrefs] = useState<Record<string, boolean>>({
+    Professional: true,
+    Technical: true,
+    Creative: false,
+    'Privacy-First': true
+  });
 
   React.useEffect(() => {
     const fetchKnowledge = async () => {
@@ -22,8 +28,8 @@ export const KnowledgeView = () => {
 
   const filteredKnowledge = useMemo(() => {
     return (knowledgeData || []).filter(k => 
-      k.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      k.desc.toLowerCase().includes(searchQuery.toLowerCase())
+      String(k.title || k.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+      String(k.desc || k.rules || k.path || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [searchQuery, knowledgeData]);
 
@@ -177,19 +183,19 @@ export const KnowledgeView = () => {
           >
             <div className="flex items-start justify-between">
               <div className="flex items-start space-x-4">
-                <div className={`w-12 h-12 ${item.color} rounded-2xl flex items-center justify-center text-white shadow-lg`}>
+                <div className={`w-12 h-12 ${item.color || 'bg-blue-600'} rounded-2xl flex items-center justify-center text-white shadow-lg`}>
                   <BookOpen className="w-6 h-6" />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center space-x-3">
-                    <h3 className="text-base font-bold text-gray-900">{item.title}</h3>
-                    <span className="px-2 py-0.5 bg-gray-50 text-gray-400 text-[9px] font-black uppercase rounded-full border border-gray-100">{item.type}</span>
+                    <h3 className="text-base font-bold text-gray-900">{item.title || item.name || 'Knowledge source'}</h3>
+                    <span className="px-2 py-0.5 bg-gray-50 text-gray-400 text-[9px] font-black uppercase rounded-full border border-gray-100">{item.type || 'Custom'}</span>
                   </div>
-                  <p className="text-sm text-gray-500 leading-relaxed max-w-2xl">{item.desc}</p>
+                  <p className="text-sm text-gray-500 leading-relaxed max-w-2xl">{item.desc || item.path || item.rules || 'No description yet.'}</p>
                   <div className="flex items-center space-x-4 pt-2">
                     <span className="flex items-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                       <Clock className="w-3 h-3 mr-1.5" />
-                      Created {item.created}
+                      Created {item.created || item.date || 'today'}
                     </span>
                     <span className="flex items-center text-[10px] font-bold text-blue-500 uppercase tracking-widest hover:underline">
                       <Edit3 className="w-3 h-3 mr-1.5" />
@@ -221,18 +227,18 @@ export const KnowledgeView = () => {
       <div className="pt-6">
         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6">Quick Preferences</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StylePill icon={Palette} label="Professional" active />
-          <StylePill icon={Code} label="Technical" active />
-          <StylePill icon={Sparkles} label="Creative" />
-          <StylePill icon={Shield} label="Privacy-First" active />
+          <StylePill icon={Palette} label="Professional" active={quickPrefs.Professional} onClick={() => setQuickPrefs(prev => ({ ...prev, Professional: !prev.Professional }))} />
+          <StylePill icon={Code} label="Technical" active={quickPrefs.Technical} onClick={() => setQuickPrefs(prev => ({ ...prev, Technical: !prev.Technical }))} />
+          <StylePill icon={Sparkles} label="Creative" active={quickPrefs.Creative} onClick={() => setQuickPrefs(prev => ({ ...prev, Creative: !prev.Creative }))} />
+          <StylePill icon={Shield} label="Privacy-First" active={quickPrefs['Privacy-First']} onClick={() => setQuickPrefs(prev => ({ ...prev, 'Privacy-First': !prev['Privacy-First'] }))} />
         </div>
       </div>
     </div>
   );
 };
 
-const StylePill = ({ icon: Icon, label, active }: any) => (
-  <button className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-2xl text-xs font-bold border transition-all ${
+const StylePill = ({ icon: Icon, label, active, onClick }: any) => (
+  <button onClick={onClick} className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-2xl text-xs font-bold border transition-all ${
     active 
       ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' 
       : 'bg-white border-gray-100 text-gray-500 hover:bg-gray-50'

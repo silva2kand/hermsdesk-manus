@@ -209,7 +209,23 @@ export const ConnectorsManager = ({ onAddCustomAPI, onAddCustomMCP }: Connectors
             />
           </div>
           <div className="flex items-center space-x-3">
-             <button className="p-2.5 bg-gray-50 text-gray-400 hover:text-gray-900 rounded-xl border border-gray-100 transition-all">
+             <button
+               onClick={() => {
+                 const needsSetup = connectorsData.find(c => {
+                   const status = connectorStatuses[c.id];
+                   return (connectorsState[c.id] !== false) && !status?.liveVerified && ['gmail', 'google-calendar', 'google-drive', 'outlook-mail', 'outlook-calendar', 'github', 'slack', 'notion', 'stripe', 'xero', 'whatsapp', 'opencode'].includes(c.id);
+                 });
+                 if (needsSetup) {
+                   setSearchQuery(needsSetup.title);
+                   setNotice(`Showing ${needsSetup.title}: route is enabled but needs login/API/local service before it is truly live.`);
+                 } else {
+                   setSearchQuery('');
+                   setNotice('All visible connector routes are listed. Live status badges show what is actually authenticated.');
+                 }
+               }}
+               title="Find enabled connectors that still need login, API keys, or a local service"
+               className="p-2.5 bg-gray-50 text-gray-400 hover:text-gray-900 rounded-xl border border-gray-100 transition-all"
+             >
                <Filter className="w-4 h-4" />
              </button>
           </div>

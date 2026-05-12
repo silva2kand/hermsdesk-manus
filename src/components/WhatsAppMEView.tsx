@@ -377,11 +377,10 @@ export const WhatsAppMEView = () => {
                     className="flex-1 px-3 py-2 bg-white border border-green-100 rounded-xl text-xs outline-none focus:ring-2 focus:ring-green-100"
                   />
                   <button
-                    onClick={startLocalBridge}
-                    disabled={true}
-                    className="px-3 py-2 bg-gray-200 text-gray-500 rounded-xl text-[10px] font-black cursor-not-allowed"
+                    onClick={() => showNotice('Local WhatsApp auto-reply bridge is disabled because it froze HermesDesk. Use Draft Pro Reply or Open Composer for safe manual WhatsApp.')}
+                    className="px-3 py-2 bg-white text-green-700 border border-green-100 rounded-xl text-[10px] font-black hover:bg-green-100"
                   >
-                    Disabled
+                    Why off?
                   </button>
                   <button
                     onClick={stopLocalBridge}

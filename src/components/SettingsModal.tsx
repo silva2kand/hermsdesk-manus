@@ -43,7 +43,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
   </button>
 );
 
-const ConnectorCard = ({ icon: Icon, title, desc, connected, color }: any) => (
+const ConnectorCard = ({ icon: Icon, title, desc, connected, color, onAction }: any) => (
   <div className="p-4 bg-white border border-gray-100 rounded-xl flex items-center justify-between hover:shadow-sm transition-shadow">
     <div className="flex items-center space-x-3">
       <div className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center text-white`}>
@@ -54,7 +54,7 @@ const ConnectorCard = ({ icon: Icon, title, desc, connected, color }: any) => (
         <p className="text-[10px] text-gray-500 leading-tight mt-0.5">{desc}</p>
       </div>
     </div>
-    <button className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+    <button onClick={onAction} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
       connected ? 'bg-gray-100 text-gray-400' : 'bg-gray-900 text-white hover:bg-gray-800'
     }`}>
       {connected ? 'Route On' : 'Enable Route'}
@@ -284,7 +284,7 @@ export const SettingsModal = ({ isOpen, onClose, initialTab }: SettingsModalProp
                       <div className="space-y-1">
                         <h3 className="text-lg font-bold text-gray-900">SILVA</h3>
                         <p className="text-sm text-gray-500">Independent AI Systems Architect</p>
-                        <button className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline mt-2">Change Avatar</button>
+                        <button onClick={() => showSettingsNotice('Avatar picker is not connected yet. No fake upload route was started.')} className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline mt-2">Change Avatar</button>
                       </div>
                     </div>
 

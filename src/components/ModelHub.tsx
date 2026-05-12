@@ -340,7 +340,7 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
         }, 3000);
       } catch (e) {
         console.error('Download failed:', e);
-        alert(e instanceof Error ? e.message : 'Download failed. Search for the model first, then try again.');
+        setEngineMessage(e instanceof Error ? e.message : 'Download failed. Search for the model first, then try again.');
         setActiveDownloads(prev => {
           const next = { ...prev };
           delete next[targetId];

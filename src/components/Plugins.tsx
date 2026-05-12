@@ -35,6 +35,20 @@ export const Plugins = () => {
     window.setTimeout(() => setNotice(''), 3000);
   };
 
+  const showPluginDetails = async (plugin: any) => {
+    const details = [
+      `${plugin.name} v${plugin.version}`,
+      `Author: ${plugin.author}`,
+      '',
+      plugin.description,
+      '',
+      `Installed: ${plugin.installed ? 'yes' : installedSkills.includes(plugin.id) ? 'enabled as skill channel' : 'no'}`
+    ].join('\n');
+    await navigator.clipboard?.writeText(details);
+    setNotice(`${plugin.name} details copied.`);
+    window.setTimeout(() => setNotice(''), 3000);
+  };
+
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8">
       <div>
@@ -79,7 +93,7 @@ export const Plugins = () => {
                     Installed
                   </span>
                 ) : (
-                  <button className="flex items-center text-[10px] font-bold text-blue-600 uppercase bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors">
+                  <button onClick={() => toggleSkill(plugin.id)} className="flex items-center text-[10px] font-bold text-blue-600 uppercase bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors">
                     <Download className="w-3 h-3 mr-1" />
                     Install
                   </button>
@@ -97,7 +111,7 @@ export const Plugins = () => {
                 <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                 <span className="text-xs font-bold text-gray-700">4.9</span>
               </div>
-              <button className="text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors">View details</button>
+              <button onClick={() => showPluginDetails(plugin)} className="text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors">View details</button>
             </div>
           </div>
         ))}
