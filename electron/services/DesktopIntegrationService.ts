@@ -563,6 +563,27 @@ public class Win32PcClick {
         return this.spawnWindowsApp('mspaint.exe');
       case 'gmail':
         return shell.openExternal('https://mail.google.com');
+      case 'chatgpt':
+      case 'openai chatgpt':
+        return shell.openExternal('https://chatgpt.com/');
+      case 'copilot':
+      case 'microsoft copilot':
+        return shell.openExternal('https://copilot.microsoft.com/');
+      case 'qwen':
+      case 'qwen chat':
+        return shell.openExternal('https://chat.qwen.ai/');
+      case 'deepseek':
+      case 'deepseek chat':
+        return shell.openExternal('https://chat.deepseek.com/');
+      case 'grok':
+      case 'x grok':
+        return shell.openExternal('https://grok.com/');
+      case 'manus':
+      case 'manus ai':
+        return shell.openExternal('https://manus.im/');
+      case 'minimax':
+      case 'minimax ai':
+        return shell.openExternal('https://www.minimax.io/');
       case 'terminal':
       case 'powershell':
         return this.openTerminal();

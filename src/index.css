@@ -11,6 +11,72 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root {
+  --hermes-accent: #2563eb;
+  --hermes-accent-soft: #dbeafe;
+}
+
+:root[data-theme="cyber-neon"] {
+  --hermes-accent: #16a34a;
+  --hermes-accent-soft: #dcfce7;
+}
+
+:root[data-theme="eco-fusion"] {
+  --hermes-accent: #059669;
+  --hermes-accent-soft: #d1fae5;
+}
+
+:root[data-theme="solar-flare"] {
+  --hermes-accent: #ea580c;
+  --hermes-accent-soft: #ffedd5;
+}
+
+:root[data-appearance="dark"] body {
+  background-color: #0f172a;
+}
+
+:root[data-appearance="dark"] .bg-\[\#fafafa\],
+:root[data-appearance="dark"] .bg-white {
+  background-color: #111827 !important;
+}
+
+:root[data-appearance="dark"] .text-gray-900 {
+  color: #f8fafc !important;
+}
+
+:root[data-appearance="dark"] .text-gray-700,
+:root[data-appearance="dark"] .text-gray-600,
+:root[data-appearance="dark"] .text-gray-500 {
+  color: #cbd5e1 !important;
+}
+
+:root[data-appearance="dark"] .border-gray-100,
+:root[data-appearance="dark"] .border-gray-200 {
+  border-color: #1f2937 !important;
+}
+
+:root[data-appearance="dark"] .bg-gray-50,
+:root[data-appearance="dark"] .bg-gray-50\/50,
+:root[data-appearance="dark"] .bg-gray-100 {
+  background-color: #1f2937 !important;
+}
+
+:root[data-theme] .bg-blue-600 {
+  background-color: var(--hermes-accent) !important;
+}
+
+:root[data-theme] .border-blue-600 {
+  border-color: var(--hermes-accent) !important;
+}
+
+:root[data-theme] .text-blue-600 {
+  color: var(--hermes-accent) !important;
+}
+
+:root[data-theme] .bg-blue-50 {
+  background-color: var(--hermes-accent-soft) !important;
+}
+
 body {
   margin: 0;
   overflow: hidden;

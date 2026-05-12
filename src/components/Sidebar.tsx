@@ -229,7 +229,7 @@ export const Sidebar = ({
 }: { 
   currentView: string, 
   onViewChange: (view: string) => void,
-  onOpenSettings: () => void,
+  onOpenSettings: (tab?: string) => void,
   onAgentAction: (agentId: string, action: string) => void,
   agents?: any[]
 }) => {
@@ -288,7 +288,7 @@ export const Sidebar = ({
       <div className="flex-1 overflow-y-auto px-3 space-y-6 py-4 scrollbar-hide">
         <SidebarSection title="USER" isCollapsed={isSidebarCollapsed} defaultExpanded>
           <SidebarItem icon={User} label="Profile & Account" active={currentView === 'profile'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('profile')} />
-          <SidebarItem icon={Settings} label="General Settings" active={currentView === 'settings'} isCollapsed={isSidebarCollapsed} onClick={onOpenSettings} />
+          <SidebarItem icon={Settings} label="General Settings" active={currentView === 'settings'} isCollapsed={isSidebarCollapsed} onClick={() => onOpenSettings('General')} />
           <SidebarItem icon={Activity} label="Usage & Billing" active={currentView === 'usage'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('usage')} />
           <SidebarItem icon={FileText} label="Scheduled Tasks" active={currentView === 'tasks'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('tasks')} />
           <SidebarItem icon={Mail} label="Mail ME" active={currentView === 'mail'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('mail')} />
@@ -302,7 +302,7 @@ export const Sidebar = ({
           <SidebarItem icon={Shield} label="Data Controls" active={currentView === 'data'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('data')} />
           <SidebarItem icon={Globe} label="Cloud Browser" active={currentView === 'browser'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('browser')} />
           <SidebarItem icon={Monitor} label="My Computer" active={currentView === 'computer'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('computer')} />
-          <SidebarItem icon={Palette} label="Personalization" active={currentView === 'personalization'} isCollapsed={isSidebarCollapsed} onClick={() => onOpenSettings()} />
+          <SidebarItem icon={Palette} label="Personalization" active={currentView === 'personalization'} isCollapsed={isSidebarCollapsed} onClick={() => onOpenSettings('Personalization')} />
           <SidebarItem icon={Brain} label="Knowledge" active={currentView === 'knowledge'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('knowledge')} />
           <SidebarItem icon={Database} label="Memory Base" active={currentView === 'memory'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('memory')} />
           <SidebarItem icon={Search} label="Wide Research" active={currentView === 'wide-research'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('wide-research')} />
@@ -310,7 +310,7 @@ export const Sidebar = ({
           <SidebarItem icon={Zap} label="Mythos Skills" active={currentView === 'skills'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('skills')} />
         </SidebarSection>
 
-        <SidebarSection title="WORKSPACE" isCollapsed={isSidebarCollapsed}>
+        <SidebarSection title="WORKSPACE" isCollapsed={isSidebarCollapsed} defaultExpanded>
           <SidebarItem icon={Folder} label="Projects" active={currentView === 'projects'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('projects')} />
           <SidebarItem icon={Users} label="Shared Tasks" active={currentView === 'shared-tasks'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('shared-tasks')} />
           <SidebarItem icon={Folder} label="Shared Files" active={currentView === 'shared-files'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('shared-files')} />
@@ -319,7 +319,7 @@ export const Sidebar = ({
           <SidebarItem icon={Cloud} label="Domains" active={currentView === 'domains'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('domains')} />
         </SidebarSection>
 
-        <SidebarSection title="INTEGRATIONS" isCollapsed={isSidebarCollapsed}>
+        <SidebarSection title="INTEGRATIONS" isCollapsed={isSidebarCollapsed} defaultExpanded>
           <SidebarItem icon={Share2} label="Connectors" active={currentView === 'connectors'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('connectors')} />
           <SidebarItem icon={Puzzle} label="Plugin Channels" active={currentView === 'plugins'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('plugins')} />
           <SidebarItem icon={Wrench} label="API Keys" active={currentView === 'api-keys'} isCollapsed={isSidebarCollapsed} onClick={() => onViewChange('api-keys')} />

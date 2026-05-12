@@ -192,6 +192,31 @@ const getSimpleOpenAppName = (value: string) => {
   return '';
 };
 
+const getExternalAiStudyTarget = (value: string) => {
+  const text = String(value || '').toLowerCase();
+  const wantsStudy = /(study|learn|remember|analyse|analyze|check|read|inspect|look|what.*discuss|what.*talk|chat.*history|history|get to know|self study|import)/i.test(text);
+  const apps = [
+    { id: 'qwen', label: 'Qwen', app: /qwen/ },
+    { id: 'copilot', label: 'Microsoft Copilot', app: /copilot/ },
+    { id: 'chatgpt', label: 'ChatGPT', app: /chatgpt|openai/ },
+    { id: 'manus', label: 'Manus', app: /manus/ },
+    { id: 'minimax', label: 'Minimax', app: /minimax/ },
+    { id: 'deepseek', label: 'DeepSeek', app: /deepseek/ },
+    { id: 'grok', label: 'Grok', app: /grok/ }
+  ];
+  const target = apps.find(item => item.app.test(text));
+  return wantsStudy && target ? target : null;
+};
+
+const compactUiText = (scan: any) => {
+  const seen = new Set<string>();
+  return (scan?.elements || [])
+    .map((element: any) => String(element.name || element.automationId || '').replace(/\s+/g, ' ').trim())
+    .filter((name: string) => name.length > 2 && !seen.has(name) && seen.add(name))
+    .slice(0, 120)
+    .join('\n');
+};
+
 const extractAgentFinal = (task: any) => {
   if (!task) return '';
   const final = [...(task.history || [])].reverse().find((item: any) => item.role === 'assistant')?.content;
@@ -1303,6 +1328,81 @@ Keep every step visible in EventBus/Live Operations.`,
     return true;
   };
 
+  const handleExternalAiStudyIntent = async (outgoing: string) => {
+    const target = getExternalAiStudyTarget(outgoing);
+    if (!target) return false;
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps([
+      `Looking for ${target.label} on this Windows desktop`,
+      'Focusing the real app/window if visible',
+      'Reading visible UI text only',
+      'Saving a local memory note with source and timestamp'
+    ]);
+
+    try {
+      const windows = await window.ipcRenderer?.listPcWindows?.().catch((error: any) => ({ ok: false, error: error?.message }));
+      const candidates = (windows?.windows || []).filter((item: any) =>
+        target.app.test(`${item.title || ''} ${item.app || ''}`.toLowerCase())
+      );
+
+      let opened: any = null;
+      let selected = candidates[0];
+      if (!selected) {
+        opened = await window.ipcRenderer?.openApp?.(target.id).catch((error: any) => ({ ok: false, error: error?.message }));
+        await new Promise(resolve => window.setTimeout(resolve, 1800));
+        const retry = await window.ipcRenderer?.listPcWindows?.().catch(() => null);
+        selected = (retry?.windows || []).find((item: any) => target.app.test(`${item.title || ''} ${item.app || ''}`.toLowerCase()));
+      }
+
+      if (selected?.id) {
+        await window.ipcRenderer?.focusPcWindow?.(selected.id).catch(() => null);
+      }
+      const scan = selected?.id
+        ? await window.ipcRenderer?.scanPcUi?.(selected.id).catch((error: any) => ({ ok: false, error: error?.message }))
+        : { ok: false, error: 'No matching window found.' };
+      const visibleText = compactUiText(scan);
+      const memoryNote = [
+        `## AI APP VISIBLE STUDY - ${target.label} - ${new Date().toISOString()}`,
+        `Source: visible Windows UI scan. No data was sent to ${target.label} by HermesDesk.`,
+        `Window: ${selected?.title || 'not found'} (${selected?.app || 'unknown app'})`,
+        '',
+        visibleText ? visibleText.slice(0, 4000) : `No readable visible text extracted. ${scan?.error || opened?.error || ''}`.trim()
+      ].join('\n');
+
+      if (visibleText) {
+        const existing = await window.ipcRenderer?.getSilvaMemory?.().catch(() => '');
+        await window.ipcRenderer?.saveSilvaMemory?.(`${existing || ''}\n\n${memoryNote}`.trim()).catch(() => null);
+      }
+
+      setMessages(prev => [...prev, assistantMessage([
+        `AI app study ran for ${target.label}.`,
+        '',
+        selected
+          ? `Window checked: ${selected.title || target.label} (${selected.app || 'app'})`
+          : `I could not find an open ${target.label} window.${opened ? ` Tried to open it: ${opened?.ok || opened === true ? 'started/opened' : opened?.error || 'unknown result'}.` : ''}`,
+        scan?.ok ? `Visible UI elements read: ${(scan.elements || []).length}` : `UI scan issue: ${scan?.error || 'not available'}`,
+        '',
+        visibleText
+          ? `Saved a local memory note from visible text. Preview:\n${visibleText.slice(0, 1200)}`
+          : 'Nothing useful was saved because no readable chat text was visible.',
+        '',
+        'Safety boundary: I did not send prompts, click submit, copy passwords, or share your data with the external AI app.'
+      ].join('\n'), 'AI App Study', [
+        `Detected app target: ${target.label}`,
+        selected ? `Focused window: ${selected.title}` : 'No matching window found',
+        scan?.ok ? `Scanned ${scan.elements?.length || 0} UI elements` : 'UI scan failed',
+        visibleText ? 'Saved local memory note' : 'No memory saved'
+      ])]);
+    } finally {
+      setIsTyping(false);
+      setResearchSteps([]);
+    }
+    return true;
+  };
+
   const handleLiveWebResearchIntent = async (outgoing: string) => {
     if (!isLiveWebResearchPrompt(outgoing) && !isMotReviewResearchPrompt(outgoing)) return false;
     const userMessage = { role: 'user', content: outgoing };
@@ -1710,6 +1810,8 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
+
+    if (await handleExternalAiStudyIntent(outgoing)) return;
 
     if (isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing)) {
       if (await handleLiveWebResearchIntent(outgoing)) return;

@@ -175,6 +175,14 @@ const SettingsShell = ({ title, desc }: { title: string, desc: string }) => {
   );
 };
 
+const applyVisualSettings = (settings: any = {}) => {
+  const root = document.documentElement;
+  const appearance = String(settings.appearance || 'Light').toLowerCase().replace(/\s+/g, '-');
+  const theme = String(settings.theme || 'Quantum Blue').toLowerCase().replace(/\s+/g, '-');
+  root.dataset.appearance = appearance;
+  root.dataset.theme = theme;
+};
+
 class MainErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: string }> {
   state = { error: '' };
 
@@ -274,6 +282,12 @@ function App() {
         if (isMounted) setSelectedModel({ provider: 'Jan', model: 'Auto local model' });
       });
     return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
+    (window.ipcRenderer as any)?.getGeneralSettings?.()
+      .then((settings: any) => applyVisualSettings(settings || {}))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {

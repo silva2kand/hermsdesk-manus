@@ -24,6 +24,14 @@ import {
   Code
 } from 'lucide-react';
 
+const applyVisualSettings = (settings: any = {}) => {
+  const root = document.documentElement;
+  const appearance = String(settings.appearance || 'Light').toLowerCase().replace(/\s+/g, '-');
+  const theme = String(settings.theme || 'Quantum Blue').toLowerCase().replace(/\s+/g, '-');
+  root.dataset.appearance = appearance;
+  root.dataset.theme = theme;
+};
+
 const SettingTab = ({ 
   icon: Icon, 
   label, 
@@ -51,6 +59,7 @@ const SettingTab = ({
 export const Settings = () => {
   const [activeTab, setActiveTab] = useState('General');
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState('');
   const [settings, setSettings] = useState<any>({
     language: 'English',
     theme: 'Quantum Blue',
@@ -67,7 +76,11 @@ export const Settings = () => {
     const fetchData = async () => {
       if (window.ipcRenderer) {
         const savedSettings = await (window.ipcRenderer as any).getGeneralSettings();
-        if (savedSettings) setSettings((prev: any) => ({ ...prev, ...savedSettings, notifications: { ...prev.notifications, ...(savedSettings.notifications || {}) } }));
+        if (savedSettings) {
+          const mergedSettings = { ...settings, ...savedSettings, notifications: { ...settings.notifications, ...(savedSettings.notifications || {}) } };
+          setSettings(mergedSettings);
+          applyVisualSettings(mergedSettings);
+        }
         const keys = await (window.ipcRenderer as any).getAPIKeys();
         setApiKeys(keys);
         const statuses = await (window.ipcRenderer as any).getConnectorStatuses?.();
@@ -88,7 +101,10 @@ export const Settings = () => {
     if (window.ipcRenderer) {
       const next = { ...settings, ...updates };
       setSettings(next);
+      applyVisualSettings(next);
       await (window.ipcRenderer as any).saveGeneralSettings(next);
+      setNotice('Settings saved and applied.');
+      window.setTimeout(() => setNotice(''), 2500);
     }
   };
 
@@ -147,6 +163,7 @@ export const Settings = () => {
       <div className="flex-1 overflow-y-auto p-8">
         <div className="max-w-2xl mx-auto space-y-8">
           <h1 className="text-xl font-bold text-gray-900">{activeTab}</h1>
+          {notice && <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs font-bold text-blue-700">{notice}</div>}
 
           {activeTab === 'API & Connections' && (
             <div className="space-y-6">
