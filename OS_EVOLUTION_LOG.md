@@ -12,7 +12,63 @@ Last updated: 2026-05-12
 - No fake work: UI surfaces must show real tool events, real evidence, real tasks, or clearly say no real data is available.
 - No hidden data sharing: private data must not be sent to external AI apps or cloud tools unless Silva approves exact content and destination.
 
-## 2. Shipped Core Capabilities
+## 2. ProOperatorProfile
+
+Status: global behavior contract. All agents, domain engines, skills, and surfaces should inherit this profile.
+
+Identity and stance:
+
+- Act as a senior operator, not a learner or generic assistant.
+- No "I am just an AI" framing inside task execution.
+- Communicate with clarity, precision, and operational intent.
+
+Task pattern:
+
+- State the goal in one sentence when useful.
+- Use a concrete 2-5 step plan for non-trivial work.
+- Execute with real tools where available.
+- Back non-trivial claims with evidence: URL, email id, file path, snippet, extracted field, or event.
+
+Safety:
+
+- Anticipate approval gates before serious actions.
+- Create an approval card before send, submit, pay, sign, delete, upload, apply, file, contact, or system modification.
+- Read-only actions may run but must be logged.
+- Never run silent actions without a task, trace, event, and approval when required.
+
+Browser discipline:
+
+- One clear intent per browser session.
+- Prefer precise queries and authoritative sources.
+- Extract URL, title, snippet, and structured fields from useful pages.
+- Respect caps: max 80 actions, max 12 pages, timeout, and scroll limits.
+- Never claim browsing without browser/session events.
+
+Email discipline:
+
+- Read only relevant emails for the task.
+- Extract amounts, dates, counterparties, invoice numbers, references, and obligations.
+- Replies are drafts only until approved.
+- Link emails to evidence, tasks, and approval cards.
+
+File discipline:
+
+- Open task-relevant files only.
+- Extract parties, dates, amounts, clauses, obligations, addresses, and references.
+- Edits are proposed diffs/drafts until approved.
+
+Shell discipline:
+
+- Allowed: process/service inspection, directory listing, file reading, text search, path checks, build commands.
+- Forbidden without explicit approval: process killing, networking, arbitrary scripts, system modification.
+- Scans must specify target folders, file patterns, and text patterns.
+
+Uncertainty:
+
+- Say "Evidence is incomplete", "Two interpretations exist", or "Risk: X".
+- Do not invent confidence when evidence is weak.
+
+## 3. Shipped Core Capabilities
 
 - Mail memory indexes Classic Outlook/Graph mail when connected.
 - Important sender rules are stored in live config and used by mail intelligence.
@@ -23,7 +79,7 @@ Last updated: 2026-05-12
 - Browser Operator, PC UI tools, mail sync, Wide Research, WhatsApp draft workspace, and EventBus traces are wired as real surfaces.
 - Packaging/build works after closing the running app and clearing `ELECTRON_RUN_AS_NODE`.
 
-## 3. External AI App Study
+## 4. External AI App Study
 
 Status: shipped as safe visible-read mode.
 
@@ -52,7 +108,97 @@ Memory rule:
 - It must save source/date/evidence locally.
 - It must stop before typing or submitting into those apps unless Silva approves the exact text.
 
-## 4. Sidebar And Settings Surface
+## 5. System Inheritance Map
+
+Top-level layers:
+
+- Mythos Layer: Manager, Orchestrator, Lawbook, Trace Engine.
+- Domain Layer: Accounting, Legal, Property, Funding, Visa, Business Operations, Personal Admin.
+- Agent Layer: General ME, Hermes, Paperclips, Solicitor, Accountant, Space, OpenClaw, Justice Case Builder, Purchase Guardian, Automation Agent.
+- Skills Layer: Browser, Email, File, Extraction, Reasoning, Planning, Shell, Window Manager, future Vision/Audio/Video/Data skills.
+- Tools Layer: safe shell, filesystem, browser, email reader, file reader, window manager, local model runners, telemetry.
+- Surfaces Layer: Dashboard, Chat Lab, Model Hub, Data Controls, Cloud Browser, My Computer, Knowledge, Memory Base, Wide Research, Graphify, Cockpit.
+- Memory Layer: Baba memory, evidence store, OS evolution ledger, task memory.
+- Evolution Layer: bounded self-improvement, ledger-driven feature admission, tests/spec updates.
+
+Rule:
+
+- New domains, agents, skills, tools, or surfaces must specify which layer they belong to, what evidence they produce, and what approval gates they require.
+
+## 6. Sidebar Capability Map
+
+User:
+
+- Profile & Account: identity, account security, connected identities, notifications, voice preferences, device trust, access logs, privacy controls.
+- General Settings: language, timezone, startup behavior, window behavior, performance mode, local model routing, safety toggles, logging.
+- Usage & Billing: local model usage, browser actions, email/file reads, task counts, agent activity, exportable usage logs.
+- Scheduled Tasks: task list, next run, last run, status, logs, approval requirements, domain schedules.
+- Mail ME: mailboxes, sync status, extraction rules, domain routing, evidence linking, email-to-task triggers.
+- WhatsApp ME: drafts, manual compose, route testing, message-to-task handoff, no ungated auto-send.
+
+System:
+
+- Dashboard: live events, approvals, tasks, errors, domain summaries, telemetry, evidence feed, risk flags.
+- Chat Lab: local/external model routes, prompt templates, behavior profiles, token usage, chat logs.
+- Model Hub: installed models, downloads, quantization notes, GPU/CPU routing, benchmarks, diagnostics.
+- Data Controls: retention, clear/export memory, privacy rules, external-AI study rules, domain access rules.
+- Cloud Browser: sessions, pages, evidence, scroll traces, search queries, action logs, source quality.
+- My Computer: file explorer, file previews, safe shell, window list, visible UI scan, local automation gates.
+- Personalization: themes, accent colors, dark/light mode, layout density, sidebar behavior, sound/voice preferences.
+- Knowledge: domain knowledge, business rules, legal/accounting/property/visa rules, custom packs.
+- Memory Base: Baba memory, behavior rules, domain rules, external-AI rules, case/project memory.
+- Wide Research: browser/document/email/file research, evidence aggregation, source ranking.
+- Graphify: knowledge graph, evidence graph, task graph, agent graph, timeline graph, risk graph.
+- Mythos Skills: browser, email, file, extraction, reasoning, planning, shell, window manager, future multimodal skills.
+
+Workspace:
+
+- Projects, Shared Tasks, Shared Files, Websites, Apps, Domains should be task/evidence-aware workspaces, not static placeholders.
+
+Integrations:
+
+- Connectors, Plugin Channels, API Keys, and Integrations must label every item as `live`, `route-only`, `needs login`, `needs API key`, or `not wired`.
+
+Agent Workstation:
+
+- Every agent inherits `ProOperatorProfile`.
+- Every agent must show status, task history, evidence, route, and approval gates.
+
+## 7. Routing Matrix
+
+General routing:
+
+- General ME/Mythos Manager: unclear tasks, mixed-domain tasks, safety decisions, memory rules, approval routing.
+- Automation Agent: PC/window/browser control, visible app reading, Qwen/Copilot/ChatGPT/etc. study, UI scan, click/type only under gates.
+- Space Agent: web research, system research, property/business broad research.
+- Paperclips: mail, documents, evidence organization, summaries, filing proposals.
+- Solicitor Agent / Justice Case Builder: legal/property/council/land registry/solicitor/court/fraud casework.
+- Accountant Agent: HMRC, VAT, payroll, invoices, statements, banks, bills, cashflow, funding evidence.
+- Purchase Guardian: MOT, insurance, suppliers, seller checks, purchases, chargeback/refund paths, POS/provider checks.
+- Hermes Agent: coding, architecture, build, runtime, diagnostics, app repair.
+- OpenClaw: security, forensics, malware, audit, suspicious system activity.
+
+Sidebar routing:
+
+- Mail ME routes to Paperclips first, then domain agents by sender/category/evidence.
+- WhatsApp ME routes to drafts/manual compose and never sends without approval.
+- Cloud Browser routes to Browser/Automation/Space depending on task type.
+- My Computer routes to Automation/Hermes/OpenClaw depending on OS action risk.
+- Model Hub routes to Hermes for setup/diagnostics and Space for hardware fit.
+- Data Controls routes to Mythos Manager and SafetyGovernor.
+- Knowledge/Memory routes to Mythos Manager and MemoryVault.
+- Accounting dashboard routes to Accountant Agent.
+- Legal dashboard routes to Solicitor/Justice agents.
+- Property/Funding dashboard routes to Space, Solicitor, Accountant, or Purchase Guardian depending on next action.
+
+Evidence requirements:
+
+- Browser tasks require URL/title/snippet.
+- Email tasks require email id/sender/date/subject/snippet.
+- File tasks require path/name/snippet/extracted fields.
+- PC UI tasks require window id/title/app and visible UI text or action result.
+
+## 8. Sidebar And Settings Surface
 
 Status: partially shipped.
 
@@ -69,11 +215,11 @@ Still to tighten:
 - Some connector cards represent route visibility, not authenticated/live access.
 - Each panel should display whether it is `live`, `route-only`, `needs login`, `needs API key`, or `not wired`.
 
-## 5. Premium Live Surfaces Spec
+## 9. Premium Live Surfaces Spec
 
 These are specs, not fully shipped yet. They must visualize real data only.
 
-### 5.1 Live Browser Surface
+### 9.1 Live Browser Surface
 
 Purpose:
 
@@ -95,7 +241,7 @@ Not allowed:
 - Fake navigation state.
 - Direct ungated submit/pay/order/book actions.
 
-### 5.2 Email Viewer Surface
+### 9.2 Email Viewer Surface
 
 Purpose:
 
@@ -117,7 +263,7 @@ Not allowed:
 - Auto-send.
 - Bulk destructive mailbox actions without approval.
 
-### 5.3 File Viewer Surface
+### 9.3 File Viewer Surface
 
 Purpose:
 
@@ -138,7 +284,7 @@ Not allowed:
 
 - Direct file write/delete without approval.
 
-### 5.4 Domain Dashboards
+### 9.4 Domain Dashboards
 
 Domains:
 
@@ -160,7 +306,7 @@ Each dashboard should show:
 
 No synthetic KPI should be shown unless backed by task/evidence/memory.
 
-### 5.5 Real-Time Cockpit
+### 9.5 Real-Time Cockpit
 
 Purpose:
 
@@ -181,11 +327,11 @@ Actions:
 
 No arbitrary command runner belongs here.
 
-## 6. Data Contracts
+## 10. Data Contracts
 
 These are language-neutral field specs.
 
-### 6.1 BrowserSession
+### 10.1 BrowserSession
 
 - `id`: unique session id
 - `taskId`: task that started this session
@@ -196,7 +342,7 @@ These are language-neutral field specs.
 - `pagesVisited`: integer
 - `events`: list of BrowserEvent
 
-### 6.2 BrowserEvent
+### 10.2 BrowserEvent
 
 - `id`: unique event id
 - `type`: `session_started`, `session_ended`, `page_opened`, `scrolled`, `content_extracted`, `error`
@@ -206,7 +352,7 @@ These are language-neutral field specs.
 - `scrollPositionPx`: scroll position when relevant
 - `evidenceId`: linked evidence item if produced
 
-### 6.3 Evidence
+### 10.3 Evidence
 
 - `id`: unique evidence id
 - `sourceType`: `browser`, `email`, `file`, `pc_ui`, `memory`
@@ -216,12 +362,12 @@ These are language-neutral field specs.
 - `createdAt`: timestamp
 - `usedIn`: list of UsedInRef
 
-### 6.4 UsedInRef
+### 10.4 UsedInRef
 
 - `type`: `approval_card`, `answer`, `task_decision`, `memory_note`
 - `id`: referenced item id
 
-### 6.5 EmailArtifact
+### 10.5 EmailArtifact
 
 - `id`: email id
 - `accountId`: mailbox/account id
@@ -235,7 +381,7 @@ These are language-neutral field specs.
 - `extractedFields`: key/value map
 - `evidenceIds`: list of evidence ids
 
-### 6.6 FileArtifact
+### 10.6 FileArtifact
 
 - `id`: internal file id
 - `path`: full path or logical id
@@ -247,7 +393,7 @@ These are language-neutral field specs.
 - `extractedFields`: key/value map
 - `evidenceIds`: list of evidence ids
 
-### 6.7 CockpitEvent
+### 10.7 CockpitEvent
 
 - `id`: unique event id
 - `type`: `task_created`, `task_status_changed`, `approval_requested`, `approval_resolved`, `browser_session_started`, `browser_session_ended`, `email_read`, `file_read`, `pc_ui_read`, `memory_write`, `error`
@@ -258,7 +404,7 @@ These are language-neutral field specs.
 - `severity`: `info`, `warning`, `error`
 - `payload`: event-specific key/value map
 
-### 6.8 DomainDashboardState
+### 10.8 DomainDashboardState
 
 - `domain`: `accounting`, `funding`, `legal`, `property`, `visa`, `business`, `personal_admin`
 - `openTasks`: task ids
@@ -268,7 +414,7 @@ These are language-neutral field specs.
 - `metrics`: real evidence-backed key/value map
 - `lastUpdated`: timestamp
 
-## 7. Approval Card Contract
+## 11. Approval Card Contract
 
 All serious actions must produce the same shape:
 
@@ -286,7 +432,7 @@ All serious actions must produce the same shape:
 - `nextStep`: what happens after approval
 - `status`: `draft`, `awaiting_approval`, `approved`, `rejected`, `done`, `failed`
 
-## 8. Remaining Risks
+## 12. Remaining Risks
 
 - Some connector cards still need live/authenticated status labels.
 - Browser and PC operator loops must keep hard caps: max pages, max actions, timeout, scroll limits.
@@ -294,7 +440,7 @@ All serious actions must produce the same shape:
 - WhatsApp free local bridge must remain cautious because background monitoring can freeze or misread; drafts and manual compose are safer.
 - Jaffna Tamil remains deferred until a real Tamil/Jaffna TTS model exists.
 
-## 9. Build Notes
+## 13. Build Notes
 
 - `npx tsc --noEmit` is the fast type gate.
 - `npm run build` is the package gate.
