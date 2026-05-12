@@ -58,9 +58,9 @@ const isMotReviewResearchPrompt = (text: string) =>
   && /(research|reviews?|near me|nearby|local|book|booking|best|compare|check)/i.test(text);
 
 const buildLiveResearchAnswer = (prompt: string, trace: any) => {
-  const results = (trace?.trace?.results || trace?.results || []).filter((item: any) => item?.title || item?.url || item?.snippet);
+  const results = (trace?.visibleEvidence || trace?.trace?.results || trace?.results || []).filter((item: any) => item?.title || item?.url || item?.snippet || item?.text);
   const sourceLines = results.slice(0, 6).map((item: any, index: number) =>
-    `${index + 1}. ${item.title || item.url}\n${item.url || ''}\n${String(item.snippet || '').slice(0, 240)}`
+    `${index + 1}. ${item.title || item.url}\n${item.url || ''}\n${String(item.snippet || item.text || '').slice(0, 240)}`
   );
   if (isMotReviewResearchPrompt(prompt)) {
     const text = results.map((item: any) => `${item.title || ''} ${item.snippet || ''}`).join('\n').toLowerCase();
@@ -103,6 +103,21 @@ const buildLiveResearchAnswer = (prompt: string, trace: any) => {
     '',
     'Next step: tell me which option you want me to inspect deeper, and I can open that page/reviews in the browser operator.'
   ].join('\n');
+};
+
+const pickReviewLinks = (links: any[] = []) => {
+  const good = /(bookmygarage|yell\.com|trustpilot|lancaster\.gov|motcentre|mot-service-centre|peels|howard|bay mot|whocanfixmycar|goodgaragescheme|garage)/i;
+  const bad = /(google\.com\/search|accounts\.google|policies\.google|support\.google|maps\.google|youtube|facebook|instagram|tiktok|twitter|x\.com|duckduckgo\.com\/y\.js|bing\.com\/aclick|checkmot\.com|clickmechanic)/i;
+  const seen = new Set<string>();
+  return links
+    .filter((link: any) => link?.href && !bad.test(link.href) && good.test(`${link.href} ${link.text || ''}`))
+    .filter((link: any) => {
+      const key = String(link.href).replace(/[#?].*$/, '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 4);
 };
 
 const extractAgentFinal = (task: any) => {
@@ -1136,8 +1151,9 @@ Use the controlled browser session if available. Keep every step visible in Even
       const query = isMotReviewResearchPrompt(outgoing)
         ? `${outgoing} Lancaster Morecambe garage MOT reviews`
         : outgoing;
-      const [browser, traceRaw, task] = await Promise.all([
-        window.ipcRenderer?.openBrowserOperator?.(query).catch((error: any) => ({ ok: false, error: error?.message })),
+      const sessionId = `review-${Date.now()}`;
+      const [visibleSearch, traceRaw, task] = await Promise.all([
+        window.ipcRenderer?.searchVisibleBrowserOperator?.(query, sessionId, 'Visible Review Research').catch((error: any) => ({ ok: false, error: error?.message })),
         window.ipcRenderer?.researchWebAutomation?.(query).catch((error: any) => ({ ok: false, error: error?.message })),
         window.ipcRenderer?.createAgentTask?.(
           `Live web research task from chat.
@@ -1149,14 +1165,51 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           'space-agent-full'
         ).catch((error: any) => ({ ok: false, error: error?.message }))
       ]);
+      let browser: any = visibleSearch;
+      const visibleEvidence: any[] = [];
+      const searchLinks = Array.isArray(visibleSearch?.links) ? visibleSearch.links : [];
+      const reviewLinks = pickReviewLinks(searchLinks);
+      const operatorSteps: string[] = [
+        visibleSearch?.ok
+          ? `Visible browser typed the search and read ${searchLinks.length} result links.`
+          : `Visible browser search issue: ${visibleSearch?.error || 'not completed'}`
+      ];
+
+      if (!visibleSearch?.ok && window.ipcRenderer?.openBrowserOperator) {
+        browser = await window.ipcRenderer.openBrowserOperator(`https://www.google.com/search?q=${encodeURIComponent(query)}`, sessionId, 'Visible Review Research').catch((error: any) => ({ ok: false, error: error?.message }));
+        operatorSteps.push(browser?.ok ? 'Fallback opened the search results page.' : `Fallback search page issue: ${browser?.error || 'not opened'}`);
+      }
+
+      for (const link of reviewLinks) {
+        const opened = await window.ipcRenderer?.clickHrefBrowserOperator?.(link.href, sessionId).catch((error: any) => ({ ok: false, error: error?.message }));
+        const page = opened?.ok
+          ? await window.ipcRenderer?.readBrowserOperator?.(sessionId).catch((error: any) => ({ ok: false, error: error?.message }))
+          : opened;
+        if (page?.ok) {
+          visibleEvidence.push({
+            title: page.title || link.text || link.href,
+            url: page.url || link.href,
+            snippet: String(page.text || '').slice(0, 600)
+          });
+          operatorSteps.push(`Clicked/read: ${page.title || link.text || link.href}`);
+        } else {
+          operatorSteps.push(`Could not read ${link.text || link.href}: ${page?.error || opened?.error || 'unknown error'}`);
+        }
+        await window.ipcRenderer?.navigateBrowserOperator?.(visibleSearch?.url || `https://www.google.com/search?q=${encodeURIComponent(query)}`, sessionId).catch(() => null);
+      }
+
+      await window.ipcRenderer?.screenshotBrowserOperator?.(sessionId).catch(() => null);
       const trace: any = traceRaw;
+      const combinedTrace = { ...trace, visibleEvidence: visibleEvidence.length ? visibleEvidence : undefined };
       const finalTask = task?.id ? await waitForAgentTaskFinal(task.id, 18000) : null;
       const agentFinal = extractAgentFinal(finalTask);
 
       setMessages(prev => [...prev, assistantMessage([
-          buildLiveResearchAnswer(outgoing, trace),
+          buildLiveResearchAnswer(outgoing, combinedTrace),
           '',
-          browser?.ok ? 'Browser Operator opened for the live search.' : `Browser Operator issue: ${browser?.error || 'not opened'}`,
+          'Visible browser operator steps:',
+          ...operatorSteps.map(step => `- ${step}`),
+          browser?.warning ? `Browser warning: ${browser.warning}` : '',
           agentFinal
             ? `Agent result:\n${agentFinal}`
             : task?.id

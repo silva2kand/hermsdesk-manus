@@ -342,8 +342,9 @@ export class BrowserOperatorService {
     this.stopRequested = false;
     this.assertSessionBudget(sessionId, 'navigation');
     const url = this.normalizeTarget(target);
+    let win: BrowserWindowType | null = null;
     try {
-      const win = this.ensureWindow(sessionId, label);
+      win = this.ensureWindow(sessionId, label);
       await this.withTimeout(win.loadURL(url), PAGE_LOAD_TIMEOUT_MS, `Opening ${url}`);
       win.show();
       await wait(700);
@@ -357,10 +358,25 @@ export class BrowserOperatorService {
         event: this.push({ type: 'open', status: 'done', detail: `Opened ${url}`, url, sessionId })
       };
     } catch (error: any) {
+      const message = error?.message || 'Could not open browser operator';
+      const loadedUrl = win?.webContents?.getURL?.() || url;
+      if (/timed out/i.test(message) && win) {
+        win.show();
+        await wait(700).catch(() => null);
+        this.saveSession(sessionId, label, loadedUrl, true);
+        return {
+          ok: true,
+          warning: message,
+          url: loadedUrl,
+          sessionId,
+          sessions: this.getSessions(),
+          event: this.push({ type: 'open', status: 'done', detail: `Opened with timeout warning: ${loadedUrl}`, url: loadedUrl, sessionId })
+        };
+      }
       return {
         ok: false,
-        error: error?.message || 'Could not open browser operator',
-        event: this.push({ type: 'error', status: 'error', detail: error?.message || `Open failed: ${url}`, url, sessionId })
+        error: message,
+        event: this.push({ type: 'error', status: 'error', detail: message || `Open failed: ${url}`, url, sessionId })
       };
     }
   }
