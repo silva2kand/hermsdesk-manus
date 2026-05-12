@@ -131,6 +131,10 @@ interface Window {
     analyzeDataArtifact: (filePath: string) => Promise<any>;
     createJusticeCasePack: (title: string, brief: string) => Promise<any>;
     createPurchaseProtectionPack: (title: string, brief: string) => Promise<any>;
+    createVideoPlan: (title: string, brief: string) => Promise<any>;
+    createAudioPlan: (title: string, brief: string) => Promise<any>;
+    createBusinessPlan: (title: string, brief: string) => Promise<any>;
+    listArtifacts: (kind?: string) => Promise<any>;
     revealArtifactsRoot: () => Promise<any>;
 
     // Tool Registry

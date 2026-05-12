@@ -1284,6 +1284,10 @@ function createWindow() {
   ipcMain.handle('artifacts:analyze-data', (_, p) => artifactService.analyzeData(p))
   ipcMain.handle('artifacts:create-justice-case', (_, { title, brief }) => artifactService.createJusticeCasePack(title, brief))
   ipcMain.handle('artifacts:create-purchase-protection', (_, { title, brief }) => artifactService.createPurchaseProtectionPack(title, brief))
+  ipcMain.handle('artifacts:create-video-plan', (_, { title, brief }) => artifactService.createVideoPlan(title, brief))
+  ipcMain.handle('artifacts:create-audio-plan', (_, { title, brief }) => artifactService.createAudioPlan(title, brief))
+  ipcMain.handle('artifacts:create-business-plan', (_, { title, brief }) => artifactService.createBusinessPlan(title, brief))
+  ipcMain.handle('artifacts:list', (_, kind) => artifactService.listArtifacts(kind))
   ipcMain.handle('artifacts:reveal-root', () => artifactService.revealRoot())
 
   setTimeout(syncAllMailAutomatically, 60000)

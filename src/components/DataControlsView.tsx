@@ -212,7 +212,7 @@ export const DataControlsView = ({ mode = 'data' }: { mode?: 'data' | 'cloud' })
         </div>
         <div className="flex items-center space-x-2 px-2">
           <Info className="w-3 h-3 text-blue-500" />
-          <button onClick={() => window.open('https://developer.mozilla.org/en-US/docs/Web/Privacy', '_blank')} className="text-[10px] font-bold text-blue-600 hover:underline">Learn more about cloud browser security</button>
+          <button onClick={() => window.ipcRenderer?.openApp?.('https://developer.mozilla.org/en-US/docs/Web/Privacy')} className="text-[10px] font-bold text-blue-600 hover:underline">Learn more about cloud browser security</button>
         </div>
       </div>
 

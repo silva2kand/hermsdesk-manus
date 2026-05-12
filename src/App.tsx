@@ -25,6 +25,7 @@ import { APIKeyManager } from './components/APIKeyManager';
 import { ProjectsView } from './components/ProjectsView';
 import { WideResearchView } from './components/WideResearchView';
 import { GraphifyView } from './components/GraphifyView';
+import { ArtifactsView } from './components/ArtifactsView';
 import { 
   Rocket, 
   Paperclip, 
@@ -581,8 +582,8 @@ function App() {
           {visitedViews.has('graphify') && <div className={view === 'graphify' ? 'block h-full' : 'hidden'}><GraphifyView /></div>}
           {view === 'shared-tasks' && <SettingsShell title="Shared Tasks" desc="Create local task handoff files and manage collaboration notes." />}
           {view === 'shared-files' && <SettingsShell title="Shared Files" desc="Choose and review local folders used by shared workflows." />}
-          {view === 'websites' && <SettingsShell title="Websites" desc="Open generated sites, saved website projects, and export folders." />}
-          {view === 'apps' && <SettingsShell title="Apps" desc="Track local app builds, installers, and launch shortcuts." />}
+          {view === 'websites' && <ArtifactsView kind="website" title="Websites" desc="Generated local website projects with openable HTML/CSS files." />}
+          {view === 'apps' && <ArtifactsView kind="all" title="Apps & Creations" desc="Generated app/design/deck/data/legal/business artifacts and local output folders." />}
           {view === 'domains' && <SettingsShell title="Purchased Domains" desc="Store domain records and connect them to deployments." />}
           {view === 'connectors' && <SettingsSurface><ConnectorsManager onAddCustomAPI={() => changeView('api-keys')} /></SettingsSurface>}
           {view === 'api-keys' && <SettingsSurface><APIKeyManager /></SettingsSurface>}

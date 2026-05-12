@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const { app, shell } = electron;
 
-type ArtifactKind = 'slides' | 'website' | 'design' | 'data-analysis' | 'justice-case' | 'purchase-protection';
+type ArtifactKind = 'slides' | 'website' | 'design' | 'data-analysis' | 'justice-case' | 'purchase-protection' | 'video-plan' | 'audio-plan' | 'business-plan';
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -39,6 +39,32 @@ export class ArtifactService {
   async revealRoot() {
     await shell.openPath(this.root);
     return { ok: true, path: this.root };
+  }
+
+  listArtifacts(kind?: ArtifactKind | 'all') {
+    if (!fs.existsSync(this.root)) fs.mkdirSync(this.root, { recursive: true });
+    const entries = fs.readdirSync(this.root, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => {
+        const folder = path.join(this.root, entry.name);
+        const stat = fs.statSync(folder);
+        const files = fs.readdirSync(folder).map(name => path.join(folder, name));
+        const match = entry.name.match(/^\d{4}-\d{2}-\d{2}-([a-z-]+)-(.+)$/);
+        const artifactKind = (match?.[1] || 'artifact') as ArtifactKind;
+        return {
+          id: entry.name,
+          name: entry.name,
+          kind: artifactKind,
+          title: (match?.[2] || entry.name).replace(/-/g, ' '),
+          folder,
+          files,
+          createdAt: stat.birthtime.toISOString(),
+          updatedAt: stat.mtime.toISOString()
+        };
+      })
+      .filter(item => !kind || kind === 'all' || item.kind === kind)
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    return { ok: true, root: this.root, artifacts: entries };
   }
 
   async createSlides(title: string, brief: string) {
@@ -157,5 +183,53 @@ export class ArtifactService {
     Object.entries(files).forEach(([name, content]) => fs.writeFileSync(path.join(folder, name), content));
     await shell.openPath(path.join(folder, '00-readme.md'));
     return { ok: true, kind: 'purchase-protection', folder, files: Object.keys(files) };
+  }
+
+  async createVideoPlan(title: string, brief: string) {
+    const cleanTitle = title?.trim() || 'Video Production Pack';
+    const cleanBrief = brief?.trim() || 'Describe the audience, offer, duration, scenes, voiceover, and platform.';
+    const folder = this.createFolder('video-plan', cleanTitle);
+    const files: Record<string, string> = {
+      '00-brief.md': `# ${cleanTitle}\n\n${cleanBrief}\n\n## Output target\n- Platform:\n- Duration:\n- Format: 9:16 / 16:9 / 1:1\n- Audience:\n- Goal:\n`,
+      '01-storyboard.md': `# Storyboard\n\n| Scene | Visual | Voice / Text | Asset needed | Notes |\n|---|---|---|---|---|\n| 1 |  |  |  |  |\n`,
+      '02-script.md': `# Script\n\n## Hook\n\n## Body\n\n## Offer / CTA\n\n`,
+      '03-shot-list.md': `# Shot List\n\n- Establishing shot\n- Product/service proof\n- Human/action shot\n- Result/outcome shot\n- CTA end card\n`,
+      '04-export-checklist.md': `# Export Checklist\n\n- Captions checked\n- Audio levels checked\n- Brand/logo correct\n- Links/CTA correct\n- Approval before publishing\n`
+    };
+    Object.entries(files).forEach(([name, content]) => fs.writeFileSync(path.join(folder, name), content));
+    await shell.openPath(path.join(folder, '00-brief.md'));
+    return { ok: true, kind: 'video-plan', folder, files: Object.keys(files) };
+  }
+
+  async createAudioPlan(title: string, brief: string) {
+    const cleanTitle = title?.trim() || 'Audio Production Pack';
+    const cleanBrief = brief?.trim() || 'Describe the voice, language, script, music mood, and output use.';
+    const folder = this.createFolder('audio-plan', cleanTitle);
+    const files: Record<string, string> = {
+      '00-brief.md': `# ${cleanTitle}\n\n${cleanBrief}\n\n## Output target\n- Voice/language:\n- Duration:\n- Mood:\n- Platform/use:\n`,
+      '01-script.md': `# Script\n\n## Opening\n\n## Main message\n\n## Close\n\n`,
+      '02-voice-direction.md': `# Voice Direction\n\n- Pace:\n- Tone:\n- Accent/language:\n- Pronunciation notes:\n- Words to avoid:\n`,
+      '03-music-sfx.md': `# Music / SFX Notes\n\n- Music style:\n- Sound effects:\n- Silence/breathing points:\n- Export format:\n`,
+      '04-approval-checklist.md': `# Approval Checklist\n\n- Script approved\n- Pronunciation approved\n- No private data included\n- Final send/publish requires approval\n`
+    };
+    Object.entries(files).forEach(([name, content]) => fs.writeFileSync(path.join(folder, name), content));
+    await shell.openPath(path.join(folder, '00-brief.md'));
+    return { ok: true, kind: 'audio-plan', folder, files: Object.keys(files) };
+  }
+
+  async createBusinessPlan(title: string, brief: string) {
+    const cleanTitle = title?.trim() || 'Business Opportunity Pack';
+    const cleanBrief = brief?.trim() || 'Describe the product, service, location, target customer, budget, and goal.';
+    const folder = this.createFolder('business-plan', cleanTitle);
+    const files: Record<string, string> = {
+      '00-opportunity.md': `# ${cleanTitle}\n\n${cleanBrief}\n\n## Goal\n\n## Customer\n\n## Offer\n\n## Proof needed\n\n`,
+      '01-money-model.md': `# Money Model\n\n| Item | Estimate | Evidence | Risk |\n|---|---:|---|---|\n| Revenue |  |  |  |\n| Cost |  |  |  |\n| Profit |  |  |  |\n| Funding needed |  |  |  |\n`,
+      '02-action-plan.md': `# Action Plan\n\n1. Validate demand\n2. Compare suppliers/platforms\n3. Estimate cash requirement\n4. Prepare funding/accountant evidence\n5. Draft messages or forms\n6. Stop for approval before sending/applying/paying\n`,
+      '03-risk-check.md': `# Risk Check\n\n- Legal/regulatory\n- Cashflow\n- Supplier reliability\n- Customer acquisition\n- Refund/dispute exposure\n- Data/privacy\n`,
+      '04-approval-card-draft.md': `# Approval Card Draft\n\nAction:\nWhy:\nEvidence:\nWill do:\nWill not do:\nRisks:\nMissing facts:\nNext step:\n`
+    };
+    Object.entries(files).forEach(([name, content]) => fs.writeFileSync(path.join(folder, name), content));
+    await shell.openPath(path.join(folder, '00-opportunity.md'));
+    return { ok: true, kind: 'business-plan', folder, files: Object.keys(files) };
   }
 }

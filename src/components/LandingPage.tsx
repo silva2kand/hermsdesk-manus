@@ -120,9 +120,12 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
     }
     onOpenConnectors?.();
   };
-  const createSlides = async () => window.ipcRenderer?.createSlidesArtifact?.('HermesDesk ME Deck', prompt || 'Create a researched presentation.').then(() => onNavigate?.('projects'));
+  const createSlides = async () => window.ipcRenderer?.createSlidesArtifact?.('HermesDesk ME Deck', prompt || 'Create a researched presentation.').then(() => onNavigate?.('apps'));
   const createWebsite = async () => window.ipcRenderer?.createWebsiteArtifact?.('HermesDesk ME Website', prompt || 'Build a production website starter.').then(() => onNavigate?.('websites'));
   const createDesign = async () => window.ipcRenderer?.createDesignArtifact?.('HermesDesk ME Design', prompt || 'Create an editable design preview.').then(() => onNavigate?.('apps'));
+  const createVideoPlan = async () => window.ipcRenderer?.createVideoPlan?.('HermesDesk ME Video Plan', prompt || 'Create a short video production pack.').then(() => onNavigate?.('apps'));
+  const createAudioPlan = async () => window.ipcRenderer?.createAudioPlan?.('HermesDesk ME Audio Plan', prompt || 'Create an audio/music production pack.').then(() => onNavigate?.('apps'));
+  const createBusinessPlan = async () => window.ipcRenderer?.createBusinessPlan?.('HermesDesk ME Business Plan', prompt || 'Create a practical business and money-making opportunity pack.').then(() => onNavigate?.('apps'));
   const analyzeData = async () => {
     const files = await window.ipcRenderer?.selectFiles?.();
     const file = files?.[0];
@@ -315,8 +318,9 @@ export const LandingPage = ({ onOpenConnectors, onStartTask, onOpenComputer, onN
                   <ToolItem icon={CreditCard} label="Purchase Protection" onClick={createPurchasePack} />
                   <ToolItem icon={Table} label="Spreadsheet" onClick={analyzeData} />
                   <ToolItem icon={BarChart3} label="Visualization" onClick={analyzeData} />
-                  <ToolItem icon={Video} label="Video" onClick={() => startTask('Generate a video production plan', true)} />
-                  <ToolItem icon={Music} label="Audio" onClick={() => startTask('Create an audio/music workflow', true)} />
+                  <ToolItem icon={Briefcase} label="Business Money Plan" onClick={createBusinessPlan} />
+                  <ToolItem icon={Video} label="Video" onClick={createVideoPlan} />
+                  <ToolItem icon={Music} label="Audio" onClick={createAudioPlan} />
                   <div className="h-px bg-gray-50 my-1" />
                   <ToolItem icon={MessageCircle} label="Chat mode" onClick={() => startTask('Enter interactive chat mode', false)} />
                   <ToolItem icon={Layout} label="Playbook" onClick={() => startTask('Create a step-by-step playbook', true)} />

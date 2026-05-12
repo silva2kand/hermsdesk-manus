@@ -95,8 +95,8 @@ export const AgentsMonitor = ({
     }
 
     if (agent.id === 'space-research' || agent.id === 'hermes-scam-shield') {
-      window.open('https://www.google.com/search?q=' + encodeURIComponent(agent.role), '_blank');
-      showNotice('Opened live research in your browser for review.');
+      await window.ipcRenderer?.openBrowserOperator?.(agent.role, `agent-research-${Date.now()}`, `${agent.name} Research`);
+      showNotice('Opened tracked Browser Operator research for review in Live Operations.');
       return;
     }
 
