@@ -273,7 +273,46 @@ function createWindow() {
       documentSigning: /(docusign\.net)/i
     }
     const senderText = (message: any) => `${message.sender || ''} ${message.senderEmail || ''}`.toLowerCase()
+    const normalizeSenderEmail = (value: any) => String(value || '').toLowerCase().trim()
+    const prioritySenderRules = (((store.get('priorityEmailSenders', []) as any[]) || [])
+      .map((rule: any) => ({
+        email: normalizeSenderEmail(rule.email),
+        category: String(rule.category || 'priority'),
+        meaning: String(rule.meaning || 'Important sender')
+      }))
+      .filter((rule: any) => Boolean(rule.email)))
+    const approvedSenderSet = new Set(
+      ((((store.get('mail', {}) as any)?.approvedSenders || []) as string[])
+        .map(normalizeSenderEmail)
+        .filter(Boolean))
+    )
+    const prioritySenderRuleFor = (message: any) => {
+      const email = normalizeSenderEmail(message.senderEmail)
+      const sender = senderText(message)
+      return prioritySenderRules.find((rule: any) => email === rule.email || sender.includes(rule.email)) || null
+    }
+    const isApprovedSender = (message: any) => {
+      const email = normalizeSenderEmail(message.senderEmail)
+      const sender = senderText(message)
+      if (email && approvedSenderSet.has(email)) return true
+      return Array.from(approvedSenderSet).some((approved) => Boolean(approved) && sender.includes(approved))
+    }
+    const prioritySenderCategory = (rule: any) => {
+      const category = String(rule?.category || '').toLowerCase()
+      if (/(solicitor|legal|police|fraud|docusign|document)/i.test(category)) return 'legal'
+      if (/(hmrc|tax|company|companies|dvla|pension|ulez|council|licensing|landlord|rent|waste)/i.test(category)) return 'official'
+      if (/(accountant|payroll|quickbooks)/i.test(category)) return 'accountant'
+      if (/(bank|funding|lender|credit|finance|loan)/i.test(category)) return 'businessBankingFunding'
+      if (/(insurance|insurence)/i.test(category)) return 'insurance'
+      if (/(card|terminal|payment|paypoint|paypal|elavon|clover|fiserv|viva)/i.test(category)) return 'paymentProvider'
+      if (/(pos|till|parcel|tobacco|shop|business|supplier|mobile|broadband|phone)/i.test(category)) return 'storeOps'
+      if (/(property|auction|survey|premises|lease)/i.test(category)) return 'councilProperty'
+      return 'approvedSender'
+    }
     const knownSenderCategory = (message: any) => {
+      const priorityRule = prioritySenderRuleFor(message)
+      if (priorityRule) return prioritySenderCategory(priorityRule)
+      if (isApprovedSender(message)) return 'approvedSender'
       const sender = senderText(message)
       for (const [key, pattern] of Object.entries(knownSenderPatterns)) {
         if (pattern.test(sender)) return key
@@ -291,6 +330,10 @@ function createWindow() {
       if (message.unread) score += 4
       if (message.hasAttachments) score += 12
       const senderCategory = knownSenderCategory(message)
+      const priorityRule = prioritySenderRuleFor(message)
+      const approvedSender = isApprovedSender(message)
+      if (priorityRule) score += 110
+      else if (approvedSender) score += 70
       if (senderCategory) score += 45
       if (/(official|legal|accountant|paymentProvider|businessBankingFunding|insurance)/i.test(senderCategory)) score += 20
       if (legalPropertyPattern.test(text)) score += 85
@@ -306,7 +349,7 @@ function createWindow() {
       if (personalAdminPattern.test(text)) score += 16
       if (zReportPattern.test(text)) score += /void|refund|short|over|missing|failed|error|cash difference|variance/i.test(text) ? 50 : 8
       if (distantPropertyNoisePattern.test(text) && !legalPropertyPattern.test(text)) score -= 35
-      if (marketingNoisePattern.test(text) && !legalPropertyPattern.test(text) && !(message.hasAttachments && billPattern.test(text))) score -= 55
+      if (marketingNoisePattern.test(text) && !priorityRule && !approvedSender && !legalPropertyPattern.test(text) && !(message.hasAttachments && billPattern.test(text))) score -= 55
       if (autoReplyNoisePattern.test(text)) score -= 45
       return score
     }
@@ -322,6 +365,11 @@ function createWindow() {
     }
     const routeAgent = (message: any, text: string) => {
       const senderCategory = knownSenderCategory(message)
+      const priorityRule = prioritySenderRuleFor(message)
+      const priorityText = `${priorityRule?.category || ''} ${priorityRule?.meaning || ''}`.toLowerCase()
+      if (/(solicitor|legal|police|fraud|property|auction|council|landlord|licens|docusign|document)/i.test(priorityText)) return 'solicitor-agent'
+      if (/(accountant|hmrc|tax|vat|payroll|bank|card|payment|funding|lender|finance|invoice|rent|waste|broadband|mobile)/i.test(priorityText)) return 'accountant-agent'
+      if (/(insurance|insurence|pos|till|supplier|tobacco|parcel|deliveroo|shop|business|terminal)/i.test(priorityText)) return 'purchase-guardian'
       if (senderCategory === 'legal' || senderCategory === 'official' || senderCategory === 'councilProperty') return 'solicitor-agent'
       if (senderCategory === 'accountant' || senderCategory === 'paymentProvider' || senderCategory === 'businessBankingFunding' || senderCategory === 'utilitiesTelecom') return 'accountant-agent'
       if (senderCategory === 'insurance' || senderCategory === 'storeOps') return 'purchase-guardian'
@@ -333,6 +381,7 @@ function createWindow() {
     const memoryItem = (message: any, type: string, extra: any = {}) => {
       const saved = itemState[message.id] || {}
       const text = messageText(message)
+      const priorityRule = prioritySenderRuleFor(message)
       return {
         id: message.id,
         type,
@@ -349,6 +398,10 @@ function createWindow() {
         followUpStatus: saved.followUpStatus || 'open',
         userNote: saved.userNote || '',
         lastReviewedAt: saved.lastReviewedAt || null,
+        prioritySender: Boolean(priorityRule),
+        prioritySenderCategory: priorityRule?.category || '',
+        prioritySenderMeaning: priorityRule?.meaning || '',
+        approvedSender: isApprovedSender(message),
         ...extra
       }
     }
@@ -406,13 +459,19 @@ function createWindow() {
         hasAttachments: Boolean(message.hasAttachments),
         evidenceUse: 'legal/property case review and solicitor pack'
       }))
-    const knownProviderEvidence = sorted.filter((message: any) => Boolean(knownSenderCategory(message)))
-      .sort(byPriorityThenDate).slice(0, 240).map((message: any) => memoryItem(message, `known-provider-${knownSenderCategory(message)}`, {
-        priorityScore: mailPriorityScore(message),
-        hasAttachments: Boolean(message.hasAttachments),
-        knownSenderCategory: knownSenderCategory(message),
-        evidenceUse: 'trusted sender/provider memory'
-      }))
+    const knownProviderEvidence = sorted.filter((message: any) => Boolean(knownSenderCategory(message)) || Boolean(prioritySenderRuleFor(message)) || isApprovedSender(message))
+      .sort(byPriorityThenDate).slice(0, 240).map((message: any) => {
+        const priorityRule = prioritySenderRuleFor(message)
+        return memoryItem(message, `known-provider-${knownSenderCategory(message)}`, {
+          priorityScore: mailPriorityScore(message),
+          hasAttachments: Boolean(message.hasAttachments),
+          knownSenderCategory: knownSenderCategory(message),
+          prioritySenderCategory: priorityRule?.category || '',
+          prioritySenderMeaning: priorityRule?.meaning || '',
+          approvedSender: isApprovedSender(message),
+          evidenceUse: priorityRule ? `priority sender memory: ${priorityRule.meaning}` : 'trusted sender/provider memory'
+        })
+      })
     const businessResearchEvidence = sorted.filter((message: any) => businessResearchPattern.test(messageText(message)) || ['storeOps', 'paymentProvider', 'utilitiesTelecom'].includes(knownSenderCategory(message)))
       .sort(byPriorityThenDate).slice(0, 160).map((message: any) => memoryItem(message, 'business-research-evidence', {
         priorityScore: mailPriorityScore(message),
@@ -460,7 +519,7 @@ function createWindow() {
       .sort(byPriorityThenDate).slice(0, 80).map((message: any) => memoryItem(message, 'urgent', {
         reason: message.importance === 'high' ? 'high importance' : message.flagStatus === 'flagged' ? 'flagged' : 'unread'
       }))
-    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, zReports, accountingEvidence, legalEvidence, knownProviderEvidence, businessResearchEvidence, propertyAnalysisEvidence, acquisitionEvidence, fundingEvidence, personalAdminEvidence, upcomingImportant, urgent }
+    return { generatedAt: new Date().toISOString(), totalIndexed: sorted.length, latestReceivedAt: sorted[0]?.receivedAt || null, unreadCount: sorted.filter((message: any) => message.unread).length, flaggedCount: sorted.filter((message: any) => message.flagStatus === 'flagged').length, categories, topSenders: Array.from(senderMap.values()).sort((a, b) => b.count - a.count).slice(0, 40), prioritySenderRules, prioritySenderCount: prioritySenderRules.length, billsToPay, deadlines, insuranceRenewals, supplierUpdates, staffInvoices, zReports, accountingEvidence, legalEvidence, knownProviderEvidence, businessResearchEvidence, propertyAnalysisEvidence, acquisitionEvidence, fundingEvidence, personalAdminEvidence, upcomingImportant, urgent }
   }
 
   const processEmailIntelligence = async (data: any, source = 'mailbox', options: { taskLimit?: number } = {}) => {
@@ -525,11 +584,37 @@ function createWindow() {
     const merged = { ...data, folders: Array.from(foldersByKey.values()).slice(0, 250), messages, summary: compactMemory.categories, memory: compactMemory, mailboxMemory: compactMemory }
     workspaceService.saveEmailIntelligence(merged)
 
+    const normalizeSenderEmail = (value: any) => String(value || '').toLowerCase().trim()
+    const prioritySenderRules = (((store.get('priorityEmailSenders', []) as any[]) || [])
+      .map((rule: any) => ({
+        email: normalizeSenderEmail(rule.email),
+        category: String(rule.category || 'priority'),
+        meaning: String(rule.meaning || 'Important sender')
+      }))
+      .filter((rule: any) => Boolean(rule.email)))
+    const approvedSenderSet = new Set(
+      ((((store.get('mail', {}) as any)?.approvedSenders || []) as string[])
+        .map(normalizeSenderEmail)
+        .filter(Boolean))
+    )
+    const prioritySenderRuleFor = (message: any) => {
+      const email = normalizeSenderEmail(message.senderEmail)
+      const sender = `${message.sender || ''} ${message.senderEmail || ''}`.toLowerCase()
+      return prioritySenderRules.find((rule: any) => email === rule.email || sender.includes(rule.email)) || null
+    }
+    const isApprovedSender = (message: any) => {
+      const email = normalizeSenderEmail(message.senderEmail)
+      const sender = `${message.sender || ''} ${message.senderEmail || ''}`.toLowerCase()
+      if (email && approvedSenderSet.has(email)) return true
+      return Array.from(approvedSenderSet).some((approved) => Boolean(approved) && sender.includes(approved))
+    }
     const highValue = (message: any) => {
       const text = `${message.subject || ''} ${message.sender || ''} ${message.senderEmail || ''} ${message.bodyPreview || ''} ${message.categoryLabel || ''}`.toLowerCase()
+      const priorityRule = prioritySenderRuleFor(message)
+      const approvedSender = isApprovedSender(message)
       const marketingNoise = /(newsletter|digest|substack|voucher|fashion|festival|shopping|sale|discount|clearance|promotion|promo|marketing|property alerts|rightmove news|national lottery|cash converters|campaign|petition|organise\.network)/i.test(text)
       const strongEvidence = /(land registry|steamer street|howlish view|langdale place|ground rent|service charge|solicitor|rc\.legal|grangeford|hmrc|vat|tax return|accountant|invoice|statement|arrears|overdue|final notice|direct debit|council tax|credit card|bank statement|parfetts|silva retail|newton newsagent|newton store|fraud report|nfrc)/i.test(text)
-      return strongEvidence || message.importance === 'high' || message.flagStatus === 'flagged' ||
+      return Boolean(priorityRule) || approvedSender || strongEvidence || message.importance === 'high' || message.flagStatus === 'flagged' ||
         (!marketingNoise && message.unread && /(bill|invoice|payment|deadline|due|renewal|insurance|mot|supplier|wholesale|receipt|statement)/i.test(text)) ||
         ['solicitors', 'visa-sponsors', 'tax-vat-mot', 'council-bills', 'land-registry', 'accountant'].includes(message.categoryId)
     }
@@ -539,8 +624,9 @@ function createWindow() {
 
     for (const message of taskCandidates) {
       processed.add(message.id)
+      const priorityRule = prioritySenderRuleFor(message)
       await orchestrator.createTask(
-        `Auto Mail ME analysis item.\nSource: ${source}\nFolder: ${message.folderName || 'Inbox'}\nCategory: ${message.categoryLabel || 'General'}\nFrom: ${message.sender || ''} <${message.senderEmail || ''}>\nSubject: ${message.subject || '(No subject)'}\nReceived: ${message.receivedAt || ''}\nUnread: ${message.unread ? 'yes' : 'no'}\nAttachments: ${message.hasAttachments ? 'yes' : 'no'}\nPreview:\n${message.bodyPreview || ''}\n\nDo end-to-end analysis: classify, summarize, extract dates/deadlines/money/risk, identify required documents, suggest next actions, and draft reply text if useful.\nStrict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or change mailbox state. Create recommendations and wait for user approval.`,
+        `Auto Mail ME analysis item.\nSource: ${source}\nFolder: ${message.folderName || 'Inbox'}\nCategory: ${message.categoryLabel || 'General'}\nPriority sender: ${priorityRule ? `yes - ${priorityRule.category}: ${priorityRule.meaning}` : isApprovedSender(message) ? 'yes - approved sender' : 'no'}\nFrom: ${message.sender || ''} <${message.senderEmail || ''}>\nSubject: ${message.subject || '(No subject)'}\nReceived: ${message.receivedAt || ''}\nUnread: ${message.unread ? 'yes' : 'no'}\nAttachments: ${message.hasAttachments ? 'yes' : 'no'}\nPreview:\n${message.bodyPreview || ''}\n\nDo end-to-end analysis: classify, summarize, extract dates/deadlines/money/risk, identify required documents, suggest next actions, and draft reply text if useful.\nStrict rule: do not send, delete, move, pay, submit, contact, unsubscribe, or change mailbox state. Create recommendations and wait for user approval.`,
         message.agentId || 'paperclip-full', win
       )
     }
@@ -1201,7 +1287,7 @@ function createWindow() {
   ipcMain.handle('artifacts:reveal-root', () => artifactService.revealRoot())
 
   setTimeout(syncAllMailAutomatically, 60000)
-  setInterval(syncAllMailAutomatically, 10 * 60 * 1000)
+  setInterval(syncAllMailAutomatically, 5 * 60 * 1000)
 
   win.webContents.on('did-finish-load', () => { win?.webContents.send('main-process-message', (new Date).toLocaleString()) })
   win.webContents.on('context-menu', (_: any, params: any) => {
