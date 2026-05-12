@@ -271,18 +271,25 @@ Available tools:
 - [TOOL: open_app(app="URL or app name")]`
 ,
 
-  'browser-automation-agent': `You are Browser Automation Agent for HermesDesk ME.
+  'browser-automation-agent': `You are the Automation Agent (PC & Browser) for HermesDesk ME.
 
-Your purpose is to operate the real controlled browser computer: open pages, read DOM text, list links, click selectors or visible text, type into forms, capture screenshots, and verify each step.
+Your purpose is to operate both the Windows host computer and the real controlled browser: open apps, manage windows, use UI automation (UIA), navigate web pages, read DOM text, list links, click selectors or visible text, type into forms, capture screenshots, and verify each step.
 
 Rules:
-- Use real browser tools, not instructions, when the user asks you to browse, click, type, compare, extract, navigate, or open product/result pages.
-- After every action, verify with browser_read or browser_inspect.
+- Use real PC and browser tools, not instructions, when the user asks you to open apps, run commands, browse, click, type, compare, extract, navigate, or operate windows.
+- After every action, verify with pc_ui_scan or browser_read/browser_inspect.
 - Never click pay, buy, submit, checkout, order, confirm, sign, book, or purchase controls without explicit Silva approval.
 - Never enter passwords, payment details, bank details, or legal/accounting submissions without approval.
 - For shopping/research, open result pages, extract prices/specs/risks/reviews, compare evidence, and stop before purchase/checkout.
 
 Available tools:
+- [TOOL: open_app(app="app name or URL")]
+- [TOOL: pc_window_list()]
+- [TOOL: pc_window_focus(id="window id")]
+- [TOOL: pc_ui_scan()]
+- [TOOL: pc_ui_resolve(query="OK", role="Button")]
+- [TOOL: pc_ui_click(query="OK", role="Button")]
+- [TOOL: pc_ui_type(query="File name", text="text")]
 - [TOOL: browser_search_visible(query="search query")]
 - [TOOL: browser_open(target="URL")]
 - [TOOL: browser_read()]
@@ -298,7 +305,10 @@ Available tools:
 - [TOOL: browser_scroll(amount="700")]
 - [TOOL: browser_screenshot()]
 - [TOOL: browser_inspect()]
-- [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")]`
+- [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")]
+- [TOOL: read_file(path="file/path")]
+- [TOOL: write_file(path="file/path", content="content")]
+- [TOOL: list_dir(path="folder/path")]`
 };
 
 export class MultiAgentOrchestrator {
@@ -425,11 +435,11 @@ export class MultiAgentOrchestrator {
     },
     {
       id: 'browser-automation-agent',
-      name: 'Browser Automation Agent',
-      role: 'Real Browser Click, Type, Extract & Verify',
-      description: 'Operates the controlled browser computer with real open/read/click/type/screenshot/inspect steps and approval gates for risky actions.',
+      name: 'Automation Agent (PC & Web)',
+      role: 'PC Operator & Browser Automation',
+      description: 'Operates both the Windows host and the controlled browser. Can open apps, manage windows, click, type, and verify steps across the entire system.',
       personality: PERSONALITIES['browser-automation-agent'],
-      tools: ['browser-operator', 'tinyfish', 'google-search'],
+      tools: ['browser-operator', 'tinyfish', 'os-control', 'file-system', 'google-search'],
       status: 'idle',
       version: '1.8.0',
       type: 'automation',
@@ -734,13 +744,13 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
       return text;
     };
 
-    this.emitThought(task, agent, 'TOOL_CALL', 'Browser Automation Agent bootstrapping visible browser search and browser_read before model planning.', {
+    this.emitThought(task, agent, 'TOOL_CALL', 'Automation Agent bootstrapping visible browser search and browser_read before model planning.', {
       sessionId
     });
     const opened = await runTool('browser_search_visible', {
       query: task.input,
       sessionId,
-      label: 'Browser Automation Agent'
+      label: 'Automation Agent'
     });
     await runTool('browser_scroll', { amount: 650, sessionId });
     const page = await runTool('browser_read', { sessionId });
@@ -1148,7 +1158,7 @@ ${JSON.stringify({
 - **COLLABORATION**: Treat this as a shared HermesDesk task. Lead agent: ${agent.name}. Peer agents available for clarification/verification: ${collaborationPlan.length ? collaborationPlan.map(peer => `${peer.name} (${peer.role})`).join('; ') : 'none selected'}.
 - **TINYFISH WEB AGENT**: ${tinyFishStatus?.configured ? 'Available for real web automation on specific URLs. Use [TOOL: tinyfish_web_agent(url="https://...", task="what to inspect/extract/verify")] when a task needs live page inspection.' : 'Not available until a TinyFish API key is saved.'}
 - **BROWSER OPERATOR**: Available as a real controlled browser. Use [TOOL: browser_search_visible(query="search query")] for visible Google typing/searching, [TOOL: browser_open(target="URL")], [TOOL: browser_read()], [TOOL: browser_ui_scan()] to list visible controls, [TOOL: browser_ui_resolve(query="Continue", role="button")] to choose robust targets, [TOOL: browser_ui_click(query="Continue", role="button")] and [TOOL: browser_ui_type(query="Search", text="text")] for natural UI actions, [TOOL: browser_scroll(amount="700")], [TOOL: browser_click(selector="CSS selector")], [TOOL: browser_click_text(text="visible text")], [TOOL: browser_click_href(href="https://...")], [TOOL: browser_type(selector="CSS selector", text="text")], [TOOL: browser_press(key="Enter")], [TOOL: browser_screenshot()], and [TOOL: browser_inspect()] for browser automation. Verify after each action. Do not click purchase/pay/submit/order/checkout without approval.
-- **PC UIA OPERATOR**: Available for real Windows app control. Use [TOOL: pc_window_list()] then [TOOL: pc_window_focus(id="...")] before acting. Use [TOOL: pc_ui_scan()] to list visible controls in the focused app, [TOOL: pc_ui_resolve(query="OK", role="Button")] to choose targets, [TOOL: pc_ui_click(query="OK", role="Button")] to click, and [TOOL: pc_ui_type(query="File name", text="...")] to type. Prefer semantic targets over coordinates. Verify after every action. Do not click or type into purchase/payment/password/system-destructive controls without approval.
+- **PC UIA OPERATOR**: Available for real Windows app control. Use [TOOL: open_app(app="app name")] to launch apps, then [TOOL: pc_window_list()] and [TOOL: pc_window_focus(id="...")] before acting. Use [TOOL: pc_ui_scan()] to list visible controls in the focused app, [TOOL: pc_ui_resolve(query="OK", role="Button")] to choose targets, [TOOL: pc_ui_click(query="OK", role="Button")] to click, and [TOOL: pc_ui_type(query="File name", text="...")] to type. Prefer semantic targets over coordinates. Verify after every action. Do not click or type into purchase/payment/password/system-destructive controls without approval.
 - **APPROVAL REQUEST TOOL**: [TOOL: approval_request(title="clear title", domain="accounting|legal|funding|property|visa|business|whatsapp|pc|web", target="person/company/site/form/app", action="exact action awaiting approval", why="why", summary="short summary", details="real details", amount="£...", term="...", apr="...", repayment="...", evidence="checked evidence", evidenceItems="source 1|source 2", draftPreview="exact draft/form/message preview", willDo="item 1|item 2", willNotDo="item 1|item 2", risk="risk", missing="missing facts", nextStep="after approval")].
 
 ### TASTE ENGINE - REQUIRED BEHAVIOUR
@@ -1168,7 +1178,7 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
       { role: 'user', content: task.input }
     ];
 
-    if (agent.id === 'browser-automation-agent') {
+    if (agent.id === 'browser-automation-agent' && !/(open|run|launch|app|windows|pc|notepad|calc|paint|word|excel)/i.test(task.input)) {
       const bootstrap = await this.runBrowserBootstrap(task, agent, sendUpdate).catch((error: any) => {
         const message = error?.message || 'Browser bootstrap failed.';
         this.emitThought(task, agent, 'ERROR', message);
@@ -1332,7 +1342,7 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
         } else {
           // No tool calls — this is the agent's final response
           if (agent.id === 'browser-automation-agent' && /cannot browse|can't browse|do not have the ability to browse|not able to browse|as an ai language model/i.test(content) && iterations < maxIterations) {
-            const correction = 'Browser Automation Agent correction: you do have real browser tools. Continue by calling [TOOL: browser_read()] or [TOOL: browser_inspect()], then choose result/product links with browser_click_text or browser_click. Do not provide a generic inability answer.';
+            const correction = 'Automation Agent correction: you do have real browser tools. Continue by calling [TOOL: browser_read()] or [TOOL: browser_inspect()], then choose result/product links with browser_click_text or browser_click. Do not provide a generic inability answer.';
             sendUpdate(correction, 'error');
             this.emitThought(task, agent, 'REVISE', correction, { outputPreview: content.slice(0, 600) });
             messages.push({ role: 'assistant', content });

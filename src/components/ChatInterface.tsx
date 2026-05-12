@@ -51,7 +51,8 @@ const isPreferenceTrainingPrompt = (text: string) =>
 
 const isLiveWebResearchPrompt = (text: string) =>
   /(research|web|internet|online|google|reviews?|review score|near me|nearby|local|book|booking|where should i|best|compare|check.*reviews?|make sure.*reviews?)/i.test(text)
-  && !/(email|mailbox|inbox|outlook|gmail|indexed mail|my emails?)/i.test(text);
+  // Only exclude if query is SPECIFICALLY about searching the user's own mailbox, not just because 'inbox' appears in context
+  && !/(search my emails?|check my (inbox|mailbox|outlook|gmail)|my indexed mail|look in my (inbox|mailbox|email)|pull.*(from my|my).*(inbox|mailbox|email|outlook)|from my (inbox|mailbox|outlook|gmail))/i.test(text);
 
 const isMotReviewResearchPrompt = (text: string) =>
   /(\bmot\b|car|vehicle|garage|test centre|mechanic)/i.test(text)
@@ -59,50 +60,58 @@ const isMotReviewResearchPrompt = (text: string) =>
 
 const buildLiveResearchAnswer = (prompt: string, trace: any) => {
   const hasVisibleEvidence = Array.isArray(trace?.visibleEvidence) && trace.visibleEvidence.length > 0;
-  const results = (trace?.visibleEvidence || trace?.trace?.results || trace?.results || []).filter((item: any) => item?.title || item?.url || item?.snippet || item?.text);
+  // Only use results that came from REAL browser evidence — not fallback hallucination
+  const results = (trace?.visibleEvidence || trace?.trace?.results || trace?.results || []).filter(
+    (item: any) => (item?.title || item?.url || item?.snippet || item?.text)
+  );
   const sourceLines = results.slice(0, 6).map((item: any, index: number) =>
     `${index + 1}. ${item.title || item.url}\n${item.url || ''}\n${String(item.snippet || item.text || '').slice(0, 240)}`
   );
+
   if (isMotReviewResearchPrompt(prompt)) {
-    if (!hasVisibleEvidence) {
+    // Bug 1+2 fix: NEVER use hardcoded garage names — only real evidence
+    if (!hasVisibleEvidence || results.length === 0) {
       return [
-        'I opened the visible browser search route, but I did not successfully open/read independent garage review pages yet.',
+        'REAL WEB RESEARCH',
+        'I opened the browser search route, but the browser did not successfully load and read independent garage review pages.',
         '',
-        'I am not treating Google/AI overview text as enough evidence.',
+        sourceLines.length
+          ? `Search index returned these sources (pages not fully opened/read yet):\n${sourceLines.join('\n\n')}`
+          : 'No search source pages were successfully opened and read by the browser operator.',
         '',
-        'What I need next:',
-        '- Keep the controlled browser open.',
-        '- Let the operator click/read BookMyGarage, Yell, Trustpilot, council, or garage pages.',
-        '- Then I can rank MOT garages from real page evidence.',
+        'To get real reviewed results, either:',
+        '- Ask again and the browser operator will retry opening the result pages.',
+        '- Search manually at bookmygarage.com, yell.com, or trustpilot.com for MOT garages near Lancaster/Morecambe.',
         '',
         'I will not book, pay, call, or submit your registration without your approval.'
       ].join('\n');
     }
-    const text = results.map((item: any) => `${item.title || ''} ${item.snippet || ''}`).join('\n').toLowerCase();
-    const hasMotService = /mot service centre|4\.88|4\.9|white lund/.test(text);
-    const hasPeels = /peels wheels|4\.84|4\.85|207|200 reviews/.test(text);
-    const hasVmu = /lancaster city council|vmu|unbiased|01524 582781|£54/.test(text);
-    const hasHoward = /howard mot|4\.9|283|280/.test(text);
-    const recommendations = [
-      hasMotService ? '1. MOT Service Centre Ltd, White Lund, Morecambe - strongest all-round pick from the results: very high reviews, quick turnaround, same-day/urgent booking signals, and online booking.' : '',
-      hasPeels ? '2. Peels Wheels, White Lund, Morecambe - strong value/convenience option: high review count, good BookMyGarage score, open weekends, and online booking.' : '',
-      hasVmu ? '3. Lancaster City Council VMU, White Lund - good trust/unbiased option: council-run MOT station, published prices, and customer comments mention fair/unbiased service.' : '',
-      hasHoward ? '4. Howard MOT Centre, Lancaster - strong Lancaster-side candidate: local article/search result reports very high Google review score and large review count.' : ''
-    ].filter(Boolean);
+
+    // Extract garages from REAL page evidence only — no hardcoding
+    const garageEntries: string[] = [];
+    results.forEach((item: any, index: number) => {
+      const combined = `${item.title || ''} ${item.snippet || item.text || ''}`;
+      const url = item.url || '';
+      const isRealGaragePage = /(garage|mot centre|mot service|mechanic|autocentre|auto centre|tyre|exhaust|service centre|test centre)/i.test(combined);
+      const isNoise = /duckduckgo\.com\/y\.js|clickmechanic|grammarly|good morning|check it out|morning text|wikijob|anscamobile|simplestic|quillbot/i.test(url + combined);
+      if (isRealGaragePage && !isNoise) {
+        garageEntries.push(
+          `${index + 1}. ${item.title || url}\n   ${url}\n   ${String(item.snippet || item.text || '').slice(0, 220)}`
+        );
+      }
+    });
+
     return [
-      'I checked live web results for MOT garages around Lancaster/Morecambe instead of mailbox memory.',
+      'REAL WEB RESEARCH',
+      'I opened and read live browser evidence for MOT garages around your area.',
       '',
-      'Best shortlist:',
-      ...(recommendations.length ? recommendations : [
-        '1. MOT Service Centre Ltd, White Lund, Morecambe - check live slots and reviews.',
-        '2. Peels Wheels, White Lund, Morecambe - compare price and availability.',
-        '3. Lancaster City Council VMU - useful if you want a more independent/council-run MOT route.'
-      ]),
+      garageEntries.length
+        ? `Garages found in live results:\n${garageEntries.slice(0, 5).join('\n\n')}`
+        : 'The live results did not clearly identify individual rated garages — the pages may need deeper navigation to extract specific names and review scores.',
       '',
       'My booking advice:',
-      '- If you want easiest online booking: use BookMyGarage and compare MOT Service Centre Ltd / Peels Wheels / Eden Autos / Excel Vehicle Sales.',
-      '- If you want less upsell risk: call Lancaster City Council VMU and ask for MOT availability.',
-      '- Before booking, phone the garage to confirm the slot, MOT price, and whether they can handle repairs same day if it fails.',
+      '- Compare results on BookMyGarage, Yell, or Trustpilot for real review scores before booking.',
+      '- Phone the garage to confirm the MOT slot, price, and same-day repair availability.',
       '',
       'Sources checked:',
       ...(sourceLines.length ? sourceLines : ['No structured source lines returned by the search trace.']),
@@ -110,13 +119,15 @@ const buildLiveResearchAnswer = (prompt: string, trace: any) => {
       'I will not book, pay, call, or submit your registration without your approval.'
     ].join('\n');
   }
+
   return [
-    'I checked live web results and built this from the returned sources.',
+    'I opened and read live web sources, then built this from the returned evidence.',
     '',
-    'Sources checked:',
-    ...(sourceLines.length ? sourceLines : ['No structured source lines returned by the search trace.']),
+    sourceLines.length
+      ? `Sources checked:\n${sourceLines.join('\n\n')}`
+      : 'No structured source lines were returned by the search trace.',
     '',
-    'Next step: tell me which option you want me to inspect deeper, and I can open that page/reviews in the browser operator.'
+    'Next step: tell me which option you want me to inspect deeper, and I can open that page in the browser operator.'
   ].join('\n');
 };
 
@@ -149,6 +160,24 @@ const cleanSearchHref = (value: string) => {
     return raw;
   }
 };
+
+const cleanResearchQuery = (value: string) => {
+  const cleaned = String(value || '')
+    .replace(/^(?:\s*(?:hi|hey|hello|hiya|yo|good\s*morning|goodmorning|good\s*afternoon|good\s*evening|morning|afternoon|evening|od\s*morning)[\s,.:;-]*)+/i, '')
+    .replace(/\breserch\b/ig, 'research')
+    .replace(/\bmakesure\b/ig, 'make sure')
+    .replace(/\bplz\b/ig, 'please')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || String(value || '').trim();
+};
+
+const buildMotResearchQuery = () => [
+  'Lancaster Morecambe Heysham MOT garage reviews',
+  'BookMyGarage Yell Trustpilot Google reviews',
+  'Howard MOT Centre MOT Service Centre York Bridge MOT Centre Bay MOT Centre',
+  'Lancaster City Council VMU White Lund'
+].join(' ');
 
 const extractAgentFinal = (task: any) => {
   if (!task) return '';
@@ -200,7 +229,10 @@ type ChatSession = {
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
   if (isPreferenceTrainingPrompt(prompt)) return 'general-agent';
-  if (/(browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish)/.test(text)) return 'browser-automation-agent';
+  if (/(browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish|automation|pc|desktop|app|heck|qwen|chat.*history|notepad|paint|word|excel|calc|calculator)/.test(text)) return 'browser-automation-agent';
+  // PC desktop app / discussion history tasks:
+  if (/(check|read|open|what|look|see|discuss|talk|history).*(desktop|app|chat|qwen|jan|ollama|lm studio|windows|discuss|history|notepad|paint|word|excel|calc|calculator)/i.test(text) || /(qwen|jan|ollama|lm studio|desktop app|chat history)/i.test(text)) return 'browser-automation-agent';
+  if (/(code|build|fix|bug|repo|git|typescript|electron|jan|turboquant|dfalsh|model hub|voice|runtime|crash|freeze|test|terminal)/.test(text)) return 'hermes-full';
   if (/(court|tribunal|appeal|judg|justice|legal|solicitor|law|claim|evidence|ombudsman|complaint|hmcts|uk)/.test(text)) return 'justice-case-agent';
   if (/(buy|seller|refund|chargeback|section 75|scam|product|purchase|return|ebay|amazon|shop|payment)/.test(text)) return 'purchase-guardian-agent';
   if (/(tax|vat|hmrc|invoice|account|ledger|payroll|self assessment|receipt)/.test(text)) return 'accountant-agent';
@@ -619,6 +651,45 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     const wantsLegal = /(legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|fraud report|actionfraud)/i.test(lower);
     const wantsProperty = /(property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|shop premises|commercial premises)/i.test(lower);
     const wantsFunding = /(funding|funder|lender|loan|overdraft|cashflow|cash flow|iwoca|funding circle|tide|anna|loqbox|capital one|nationwide finance|bank statement)/i.test(lower);
+
+    // ── PERSON-NAME EARLY EXIT ──────────────────────────────────────────────────
+    // Must run BEFORE curated array is filled from accounting/domain buckets.
+    // If the query is a person-name lookup (e.g. "pull ann wood email") and the
+    // email-index search returned zero hits, immediately return "not found" rather
+    // than falling through to unrelated Canon/Canva/accounting emails.
+    if (matches.length === 0) {
+      const _genericWords = new Set([
+        'email','emails','mail','from','pull','look','find','check','send','message',
+        'inbox','latest','last','about','have','need','show','tell','search','regarding',
+        'her','his','him','she','they','them','their','the','for','get','any','can',
+        'you','please','ok','okay','rentpayment','rent','payment','latest','what','did'
+      ]);
+      const _nameTokens = lower
+        .replace(/[^a-z\s'-]/g, ' ')
+        .split(/\s+/)
+        .filter(t => t.length > 2 && /^[a-z][a-z'-]{2,}$/.test(t) && !_genericWords.has(t));
+      const _looksLikePerson = _nameTokens.length >= 1 &&
+        /(email|mail|inbox|message|from|pull|find|check|sent|received)/i.test(lower);
+      if (_looksLikePerson) {
+        const _nameGuess = _nameTokens.slice(0, 2)
+          .map(t => t.charAt(0).toUpperCase() + t.slice(1))
+          .join(' ');
+        return [
+          `Mailbox memory checked: ${total} emails, updated ${updated}.`,
+          '',
+          `I did not find any emails from or mentioning "${_nameGuess}" in the indexed mailbox.`,
+          '',
+          'Possible reasons:',
+          '- Their emails may not be indexed yet — run a full sync from the MailME view.',
+          '- The name may be spelled differently in the email record (e.g. A.Wood@... vs Ann Wood).',
+          '- They may have emailed a different account not yet indexed.',
+          '',
+          'I will not move, delete, send, or contact anyone without your approval.'
+        ].join('\n');
+      }
+    }
+    // ── END PERSON-NAME EARLY EXIT ─────────────────────────────────────────────
+
     const vehiclePolicyEvidence = (email: any) => {
       const raw = `${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''}`.toLowerCase();
       const hasVehicle = /(car|vehicle|motor|van|driver|yk13wnz|sva23|admiral|aviva|direct line|churchill|hastings|1st central|tesco bank|esure|swinton|lv=|rac|the aa|aa insurance|saga)/i.test(raw);
@@ -706,6 +777,39 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           'I will not move, delete, send, unsubscribe, pay, or contact anyone without your approval.'
         ].join('\n');
       }
+
+      // Bug 3 fix: detect person-name lookups and return a specific "not found" message
+      // instead of confusingly showing unrelated bills/deadlines as if they were matches
+      const genericWords = new Set([
+        'email', 'emails', 'mail', 'from', 'pull', 'look', 'find', 'check', 'send', 'message',
+        'inbox', 'latest', 'last', 'about', 'have', 'need', 'show', 'tell', 'search',
+        'her', 'his', 'him', 'she', 'they', 'them', 'their', 'the', 'for', 'get', 'any'
+      ]);
+      const nameTokens = lower
+        .replace(/[^a-z\s'-]/g, ' ')
+        .split(/\s+/)
+        .filter(t => t.length > 2 && /^[a-z][a-z'-]{1,}$/.test(t) && !genericWords.has(t));
+      const looksLikePersonLookup = nameTokens.length >= 1 &&
+        /(email|mail|inbox|message|from|pull|look|find|check|sent|received|ann|wood)/i.test(lower);
+      if (looksLikePersonLookup && nameTokens.length >= 1) {
+        const nameGuess = nameTokens.slice(0, 2)
+          .map(t => t.charAt(0).toUpperCase() + t.slice(1))
+          .join(' ');
+        return [
+          `Mailbox memory checked: ${total} emails, updated ${updated}.`,
+          '',
+          `I did not find any emails from or mentioning "${nameGuess}" in the indexed mailbox.`,
+          '',
+          'Possible reasons:',
+          '- Their emails may not be indexed yet — run a full sync from the MailME view.',
+          '- The name may be spelled differently in the email record.',
+          '- They may have emailed a different account that is not yet indexed.',
+          '',
+          'I will not move, delete, send, or contact anyone without your approval.'
+        ].join('\n');
+      }
+      // End Bug 3 fix
+
       const bills = (mailboxMemory?.billsToPay || []).slice(0, 8);
       const deadlines = (mailboxMemory?.deadlines || []).slice(0, 8);
       if (!bills.length && !deadlines.length) return '';
@@ -1118,7 +1222,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   };
 
   const isBrowserAutomationPrompt = (text: string) =>
-    /(browser automation|run full browser|click through|click|type|scroll|navigate|open .*product|product page|search results|compare specs|extract|purchase tab|web automation|tinyfish)/i.test(text);
+    /(browser automation|run full browser|click through|click|type|scroll|navigate|open .*product|product page|search results|compare specs|extract|purchase tab|web automation|tinyfish|desktop|app|heck|qwen|chat.*history|what.*discuss|what.*talk|read.*chat|windows.*app|pc.*app|open.*notepad|open.*app|launch|run.*app|calculator|notepad|paint|word|excel|calc)/i.test(text);
 
   const handleBrowserAutomationIntent = async (outgoing: string) => {
     if (!isBrowserAutomationPrompt(outgoing)) return false;
@@ -1127,35 +1231,34 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     setInput('');
     setIsTyping(true);
     setResearchSteps([
-      'Starting Browser Automation Agent',
-      'Opening controlled browser computer',
-      'Reading live page text and links',
-      'Streaming click/read/extract steps to Live Operations'
+      'Starting Automation Agent (PC & Web)',
+      'Opening controlled system computer',
+      'Listing windows and UI elements',
+      'Streaming app/web automation steps to Live Operations'
     ]);
 
     try {
       const task = await window.ipcRenderer?.createAgentTask?.(
-          `Browser automation task from chat.
+          `Automation task from chat.
 
 User request:
 ${outgoing}
 
-Do not answer as a generic language model. Use real browser tools.
+Do not answer as a generic language model. Use real PC and browser tools.
 Required first loop:
-1. Use browser_read/browser_inspect on the opened browser.
-2. Open relevant result/product pages.
-3. Extract visible prices/specs/reviews/risks.
-4. Compare evidence.
-5. Stop before pay/buy/checkout/order/submit and ask Silva for approval.
+1. If an app is named, use [TOOL: open_app(app="name")] then [TOOL: pc_window_list()].
+2. If it's a web task, use [TOOL: browser_search_visible(query="...")] or [TOOL: browser_open(target="...")].
+3. Extract visible data, evidence, or chat history.
+4. Stop before pay/buy/checkout/order/submit/delete and ask Silva for approval.
 
-Use the controlled browser session if available. Keep every step visible in EventBus/Live Operations.`,
+Keep every step visible in EventBus/Live Operations.`,
           'browser-automation-agent'
       ).catch((error: any) => ({ ok: false, error: error?.message }));
 
       setMessages(prev => [...prev, assistantMessage(task?.id
-          ? `Browser Automation Agent started as task ${task.id}.\n\nIt will open one controlled browser computer, read result pages, extract evidence, compare candidates, and stream each step to Live Operations.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
-          : `Browser Automation could not start.\n\nAgent: ${task?.error || 'not queued'}`,
-        'Browser Automation Agent'
+          ? `Automation Agent (PC & Web) started as task ${task.id}.\n\nIt will operate the host computer and browser to fulfill your request. Watch Live Operations for app_open, window_focus, ui_scan, click/read, and verification events.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
+          : `Automation Agent could not start.\n\nAgent: ${task?.error || 'not queued'}`,
+        'Automation Agent'
       )]);
     } finally {
       setIsTyping(false);
@@ -1178,9 +1281,10 @@ Use the controlled browser session if available. Keep every step visible in Even
     ]);
 
     try {
+      const cleanedOutgoing = cleanResearchQuery(outgoing);
       const query = isMotReviewResearchPrompt(outgoing)
-        ? `${outgoing} Lancaster Morecambe garage MOT reviews`
-        : outgoing;
+        ? buildMotResearchQuery()
+        : cleanedOutgoing;
       const sessionId = `review-${Date.now()}`;
       const [visibleSearch, traceRaw, task] = await Promise.all([
         window.ipcRenderer?.searchVisibleBrowserOperator?.(query, sessionId, 'Visible Review Research').catch((error: any) => ({ ok: false, error: error?.message })),
@@ -1189,7 +1293,10 @@ Use the controlled browser session if available. Keep every step visible in Even
           `Live web research task from chat.
 
 User request:
-${outgoing}
+${cleanedOutgoing}
+
+Search query:
+${query}
 
 This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT/garage requests, focus on Lancaster, Morecambe, Heysham and nearby areas, compare reviews, risks, opening/booking clues, and produce exact next steps. Do not book, pay, call, or submit anything without Silva approval.`,
           'space-agent-full'
@@ -1253,7 +1360,12 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       const combinedTrace = { ...trace, visibleEvidence: visibleEvidence.length ? visibleEvidence : undefined };
       const finalTask = task?.id ? await waitForAgentTaskFinal(task.id, 18000) : null;
       const agentFinal = extractAgentFinal(finalTask);
-      const usefulAgentFinal = /no local ai engine is available/i.test(agentFinal) ? '' : agentFinal;
+      // Bug 5 fix: strip peer-verification suffix and filter "No local AI engine" noise
+      const cleanedAgentFinal = agentFinal
+        .replace(/\n+Peer verification[\s\S]*/i, '')
+        .replace(/\n+Agent result:\s*\n?No local AI engine is available[\s\S]*/i, '')
+        .trim();
+      const usefulAgentFinal = /no local ai engine is available|^[\s.]*$/i.test(cleanedAgentFinal) ? '' : cleanedAgentFinal;
 
       setMessages(prev => [...prev, assistantMessage([
           buildLiveResearchAnswer(outgoing, combinedTrace),
@@ -1563,6 +1675,12 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
 
+    // ABSOLUTE TOP PRIORITY: Intercept PC automation tasks
+    if (await handleBrowserAutomationIntent(outgoing)) {
+      addNotice('Mythos: Routing to PC Operator Agent...');
+      return;
+    }
+
     const routePreview = await window.ipcRenderer?.previewAgentRoute?.(outgoing).catch(() => null);
     lastRoutePreviewRef.current = routePreview;
     if (routePreview?.ok) {
@@ -1575,7 +1693,6 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     }
 
     if (await handleWhatsAppIntent(outgoing)) return;
-    if (await handleBrowserAutomationIntent(outgoing)) return;
     if (await handleLiveWebResearchIntent(outgoing)) return;
     if (await handleCasualChatIntent(outgoing)) return;
     if (await handlePreferenceTrainingIntent(outgoing)) return;
@@ -1722,9 +1839,9 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         if (assignedAgentId === 'browser-automation-agent') {
           const task = await launchedAgentTask;
           setMessages(prev => [...prev, assistantMessage(task?.id
-              ? `Browser Automation Agent is running as task ${task.id}.\n\nI have routed this away from raw chat, so Jan will not answer with generic browsing text. Watch Live Operations for browser_open, browser_read, click/read/extract, screenshots, and verification events.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
-              : 'Browser Automation Agent could not be launched. Check Live Operations or the Event Bus for the launch error.',
-            'Browser Automation Agent'
+              ? `Automation Agent (PC & Web) is running as task ${task.id}.\n\nI have routed this away from raw chat, so Jan will not answer with generic browsing text. Watch Live Operations for app_open, window_focus, browser_open, browser_read, and verification events.\n\nSafety gate: I will not click pay, buy, checkout, order, submit, confirm, enter passwords, or enter payment details without your explicit approval.`
+              : 'Automation Agent could not be launched. Check Live Operations or the Event Bus for the launch error.',
+            'Automation Agent'
           )]);
           return;
         }
@@ -1771,8 +1888,13 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           const engine = response.engine || provider;
           const launchedTask = await launchedAgentTask;
           const finalTask = launchedTask?.id ? await waitForAgentTaskFinal(launchedTask.id, 16000) : null;
-          const agentFinal = extractAgentFinal(finalTask);
-          if (agentFinal && !/no response content received|please tell me more|how can i assist|i can help/i.test(agentFinal)) {
+          const rawAgentFinal = extractAgentFinal(finalTask);
+          // Bug 5 fix: strip peer-verification suffix and AI unavailability noise from main chat too
+          const agentFinal = rawAgentFinal
+            .replace(/\n+Peer verification[\s\S]*/i, '')
+            .replace(/\n+Agent result:\s*\n?No local AI engine is available[\s\S]*/i, '')
+            .trim();
+          if (agentFinal && !/no local ai engine is available|no response content received|please tell me more|how can i assist|i can help/i.test(agentFinal)) {
             content = `${agentFinal}\n\nManager route: ${assignedAgentId}${launchedTask?.id ? ` (${launchedTask.id})` : ''}.`;
           }
           const mailboxEvidenceAnswer = needsMailMemory ? buildMailboxEvidenceAnswer(outgoing, memoryContext, matchingEmails) : '';
@@ -2266,17 +2388,25 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         </div>
       </div>
       {thinkingReview && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/25 p-4">
-          <div className="w-full max-w-2xl min-h-[520px] rounded-[28px] bg-[#fbf7f3] shadow-2xl border border-white/70 p-6 relative">
-            <button
-              onClick={() => setThinkingReview(null)}
-              className="absolute right-5 top-5 rounded-full p-2 text-gray-500 hover:bg-black/5 hover:text-gray-900"
-              aria-label="Close thinking review"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <h2 className="text-sm font-semibold text-gray-900 mb-8">See my thinking</h2>
-            <div className="space-y-6">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/25 p-3 sm:p-4"
+          onClick={() => setThinkingReview(null)}
+        >
+          <div
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-[#fbf7f3] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black/5 bg-[#fbf7f3]/95 px-6 py-4">
+              <h2 className="text-sm font-semibold text-gray-900">See my thinking</h2>
+              <button
+                onClick={() => setThinkingReview(null)}
+                className="rounded-full p-2 text-gray-600 hover:bg-black/5 hover:text-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                aria-label="Close thinking review"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-6 py-5">
               <div className="flex gap-4">
                 <div className="flex flex-col items-center">
                   <div className="h-3 w-3 rounded-full bg-gray-600 mt-1" />
@@ -2302,7 +2432,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
                     ))}
                   </div>
                   <div className="mt-5 space-y-2">
-                    {(thinkingReview.thinking?.events || []).slice(0, 10).map((event: any) => (
+                    {(thinkingReview.thinking?.events || []).slice(0, 50).map((event: any) => (
                       <div key={event.id || `${event.type}-${event.createdAt}`} className="rounded-2xl border border-gray-200 bg-white/70 px-3 py-2">
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{event.type || 'event'}</span>
@@ -2321,6 +2451,14 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
                   </div>
                 </div>
                 <p className="text-sm font-bold text-gray-900">Done</p>
+              </div>
+              <div className="flex justify-end border-t border-black/5 pt-4">
+                <button
+                  onClick={() => setThinkingReview(null)}
+                  className="rounded-full bg-gray-900 px-4 py-2 text-xs font-bold text-white hover:bg-black focus:outline-none focus:ring-2 focus:ring-gray-400"
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
