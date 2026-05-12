@@ -58,11 +58,26 @@ const isMotReviewResearchPrompt = (text: string) =>
   && /(research|reviews?|near me|nearby|local|book|booking|best|compare|check)/i.test(text);
 
 const buildLiveResearchAnswer = (prompt: string, trace: any) => {
+  const hasVisibleEvidence = Array.isArray(trace?.visibleEvidence) && trace.visibleEvidence.length > 0;
   const results = (trace?.visibleEvidence || trace?.trace?.results || trace?.results || []).filter((item: any) => item?.title || item?.url || item?.snippet || item?.text);
   const sourceLines = results.slice(0, 6).map((item: any, index: number) =>
     `${index + 1}. ${item.title || item.url}\n${item.url || ''}\n${String(item.snippet || item.text || '').slice(0, 240)}`
   );
   if (isMotReviewResearchPrompt(prompt)) {
+    if (!hasVisibleEvidence) {
+      return [
+        'I opened the visible browser search route, but I did not successfully open/read independent garage review pages yet.',
+        '',
+        'I am not treating Google/AI overview text as enough evidence.',
+        '',
+        'What I need next:',
+        '- Keep the controlled browser open.',
+        '- Let the operator click/read BookMyGarage, Yell, Trustpilot, council, or garage pages.',
+        '- Then I can rank MOT garages from real page evidence.',
+        '',
+        'I will not book, pay, call, or submit your registration without your approval.'
+      ].join('\n');
+    }
     const text = results.map((item: any) => `${item.title || ''} ${item.snippet || ''}`).join('\n').toLowerCase();
     const hasMotService = /mot service centre|4\.88|4\.9|white lund/.test(text);
     const hasPeels = /peels wheels|4\.84|4\.85|207|200 reviews/.test(text);
@@ -118,6 +133,21 @@ const pickReviewLinks = (links: any[] = []) => {
       return true;
     })
     .slice(0, 4);
+};
+
+const cleanSearchHref = (value: string) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw.startsWith('//') ? `https:${raw}` : raw);
+    const uddg = url.searchParams.get('uddg');
+    if (uddg) return decodeURIComponent(uddg);
+    const q = url.searchParams.get('q');
+    if (/google\./i.test(url.hostname) && q && /^https?:\/\//i.test(q)) return q;
+    return url.toString();
+  } catch {
+    return raw;
+  }
 };
 
 const extractAgentFinal = (task: any) => {
@@ -1180,18 +1210,38 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
         operatorSteps.push(browser?.ok ? 'Fallback opened the search results page.' : `Fallback search page issue: ${browser?.error || 'not opened'}`);
       }
 
-      for (const link of reviewLinks) {
-        const opened = await window.ipcRenderer?.clickHrefBrowserOperator?.(link.href, sessionId).catch((error: any) => ({ ok: false, error: error?.message }));
+      const traceAny: any = traceRaw;
+      const traceResultLinks = pickReviewLinks((traceAny?.trace?.results || traceAny?.results || []).map((item: any) => ({
+        text: item.title || item.snippet || item.url,
+        href: cleanSearchHref(item.url || item.href || '')
+      })));
+      const candidateLinks = [...reviewLinks, ...traceResultLinks].filter((link, index, arr) => {
+        const href = cleanSearchHref(link.href || '');
+        return href && arr.findIndex(other => cleanSearchHref(other.href || '') === href) === index;
+      }).slice(0, 5);
+
+      if (!candidateLinks.length) {
+        operatorSteps.push('No trustworthy review/booking links were extracted from the visible results.');
+      }
+
+      for (const rawLink of candidateLinks) {
+        const link = { ...rawLink, href: cleanSearchHref(rawLink.href || '') };
+        let opened = await window.ipcRenderer?.clickHrefBrowserOperator?.(link.href, sessionId).catch((error: any) => ({ ok: false, error: error?.message }));
+        if (!opened?.ok) {
+          operatorSteps.push(`Click failed for ${link.text || link.href}: ${opened?.error || 'link not on current page'}; opening directly in controlled browser.`);
+          opened = await window.ipcRenderer?.navigateBrowserOperator?.(link.href, sessionId).catch((error: any) => ({ ok: false, error: error?.message }));
+        }
         const page = opened?.ok
           ? await window.ipcRenderer?.readBrowserOperator?.(sessionId).catch((error: any) => ({ ok: false, error: error?.message }))
           : opened;
         if (page?.ok) {
+          const text = String(page.text || '');
           visibleEvidence.push({
             title: page.title || link.text || link.href,
             url: page.url || link.href,
-            snippet: String(page.text || '').slice(0, 600)
+            snippet: text.slice(0, 900)
           });
-          operatorSteps.push(`Clicked/read: ${page.title || link.text || link.href}`);
+          operatorSteps.push(`Opened/read evidence page: ${page.title || link.text || link.href} (${text.length} chars)`);
         } else {
           operatorSteps.push(`Could not read ${link.text || link.href}: ${page?.error || opened?.error || 'unknown error'}`);
         }
@@ -1203,6 +1253,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       const combinedTrace = { ...trace, visibleEvidence: visibleEvidence.length ? visibleEvidence : undefined };
       const finalTask = task?.id ? await waitForAgentTaskFinal(task.id, 18000) : null;
       const agentFinal = extractAgentFinal(finalTask);
+      const usefulAgentFinal = /no local ai engine is available/i.test(agentFinal) ? '' : agentFinal;
 
       setMessages(prev => [...prev, assistantMessage([
           buildLiveResearchAnswer(outgoing, combinedTrace),
@@ -1210,10 +1261,10 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           'Visible browser operator steps:',
           ...operatorSteps.map(step => `- ${step}`),
           browser?.warning ? `Browser warning: ${browser.warning}` : '',
-          agentFinal
-            ? `Agent result:\n${agentFinal}`
+          usefulAgentFinal
+            ? `Agent result:\n${usefulAgentFinal}`
             : task?.id
-              ? `Research agent is still running in Live Operations: ${task.id}.`
+              ? `Research agent task: ${task.id}. Deterministic browser evidence above is used even if local model is unavailable.`
               : `Research agent issue: ${task?.error || 'not queued'}`
         ].join('\n'), 'Real Web Research')]);
     } finally {
