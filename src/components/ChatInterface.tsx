@@ -44,15 +44,20 @@ const isCasualChatPrompt = (text: string) => {
 };
 
 const isStatusOrUpdatesPrompt = (text: string) =>
-  /system status|\bstatus\b|any updates|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always|check memory|check emails|mailbox|inbox/i.test(text);
+  /system status|\bstatus\b|any updates|new updates|what.*updates|\bupdates?\b|important updates|importon|iporton|urgent|need looking|what needs|anything important|anything urgent|today|this morning|ready always|check memory|check emails|mailbox|inbox/i.test(text);
 
 const isPreferenceTrainingPrompt = (text: string) =>
   /(remember|from now on|you must|must|don't show|do not show|not interested|only show|treat this|mark this|ignore this|my preference|i prefer|i want you to|when you analyse|when you analyze|always|never|training|learn this|thanks? yes|thank yes|i have booked|i booked|gather all|filter|prioriti[sz]e)/i.test(text);
 
+const isPrivateLocalMemoryPrompt = (text: string) =>
+  /(email|emails|mail|inbox|outlook|gmail|from the emails?|indexed mail|ann wood|awood|rent|direct debit|landlord|langdale|landale|steamer|streamer|howlish|lease|tenancy|premises|lancaster city council|debtors@|fsuser@|slowton@)/i.test(text)
+  && !/(garage|mot garage|reviews?|review score|book\s+(?:my\s+)?car|booking.*mot|near me.*garage|google maps)/i.test(text);
+
 const isLiveWebResearchPrompt = (text: string) =>
   /(research|web|internet|online|google|reviews?|review score|near me|nearby|local|book|booking|where should i|best|compare|check.*reviews?|make sure.*reviews?)/i.test(text)
   // Only exclude if query is SPECIFICALLY about searching the user's own mailbox, not just because 'inbox' appears in context
-  && !/(search my emails?|check my (inbox|mailbox|outlook|gmail)|my indexed mail|look in my (inbox|mailbox|email)|pull.*(from my|my).*(inbox|mailbox|email|outlook)|from my (inbox|mailbox|outlook|gmail))/i.test(text);
+  && !/(search my emails?|check my (inbox|mailbox|outlook|gmail)|my indexed mail|look in my (inbox|mailbox|email)|pull.*(from my|my).*(inbox|mailbox|email|outlook)|from my (inbox|mailbox|outlook|gmail))/i.test(text)
+  && !isPrivateLocalMemoryPrompt(text);
 
 const isMotReviewResearchPrompt = (text: string) =>
   /(\bmot\b|car|vehicle|garage|test centre|mechanic)/i.test(text)
@@ -267,7 +272,8 @@ type ChatSession = {
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
   if (isPreferenceTrainingPrompt(prompt)) return 'general-agent';
-  if (/(browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish|automation|pc|desktop|app|heck|qwen|chat.*history|notepad|paint|word|excel|calc|calculator)/.test(text)) return 'browser-automation-agent';
+  if (isPrivateLocalMemoryPrompt(prompt)) return 'paperclip-full';
+  if (/(browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish|automation|pc|desktop|app|\bheck\b|qwen|chat.*history|notepad|paint|word|excel|calc|calculator)/.test(text)) return 'browser-automation-agent';
   // PC desktop app / discussion history tasks:
   if (/(check|read|open|what|look|see|discuss|talk|history).*(desktop|app|chat|qwen|jan|ollama|lm studio|windows|discuss|history|notepad|paint|word|excel|calc|calculator)/i.test(text) || /(qwen|jan|ollama|lm studio|desktop app|chat history)/i.test(text)) return 'browser-automation-agent';
   if (/(code|build|fix|bug|repo|git|typescript|electron|jan|turboquant|dfalsh|model hub|voice|runtime|crash|freeze|test|terminal)/.test(text)) return 'hermes-full';
@@ -663,6 +669,13 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     return input || 'Aion OS local AI workflow';
   };
 
+  const getLastAssistantContent = () => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'assistant') return messages[i].content || '';
+    }
+    return '';
+  };
+
   const getFollowUps = (content: string) => {
     const base = content.toLowerCase();
     if (base.includes('error') || base.includes('not running')) {
@@ -677,17 +690,19 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const buildMailboxEvidenceAnswer = (prompt: string, mailboxMemory: any, matches: any[]) => {
     const lower = prompt.toLowerCase();
     if (isPreferenceTrainingPrompt(prompt)) return '';
-    const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking|accounting|accountant|legal|solicitor|land registry|property|premises|funding|funder|loan|supplier|provider)/i.test(prompt);
+    const isMailQuestion = /(email|mail|inbox|outlook|gmail|bill|invoice|payment|pay|deadline|due|renewal|council|tax|hmrc|insurance|statement|mot|car|vehicle|policy|premium|urgent|important|need looking|accounting|accountant|legal|solicitor|land registry|property|premises|funding|funder|loan|supplier|provider|rent|lease|tenancy|landlord|langdale|landale|ann wood|awood)/i.test(prompt);
     if (!isMailQuestion) return '';
 
     const total = mailboxMemory?.totalIndexed?.toLocaleString?.() || mailboxMemory?.totalIndexed || 'indexed';
     const updated = mailboxMemory?.generatedAt ? new Date(mailboxMemory.generatedAt).toLocaleString() : 'recently';
     const wantsUrgents = /urgent|important|need looking|look at|priority|top\s*3|3 urgents/i.test(lower);
-    const wantsVehicleInsurance = /car|vehicle|motor|mot|insurance|renewal|policy|premium/i.test(lower);
+    const wantsPropertyTerm = /(langdale|landale|steamer|streamer|howlish|lease|tenancy|landlord|rent|direct debit|premises|ann wood|awood|lancaster city council)/i.test(lower);
+    const wantsLeaseRenewal = wantsPropertyTerm && /(lease|tenancy|renew|renewal|expires?|expiry|due|end date|rent|direct debit)/i.test(lower);
+    const wantsVehicleInsurance = !wantsPropertyTerm && /(\bcar\b|vehicle|motor|mot|garage|van|insurance|policy|premium)/i.test(lower);
     const wantsCarInsuranceDue = /(car|vehicle|motor|van).{0,30}(insurance|policy|renewal|renew|due|expire|expiry|expires)|insurance.{0,30}(car|vehicle|motor|van|due|renewal|renew|expire|expiry|expires)/i.test(lower);
     const wantsAccounting = /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider)/i.test(lower);
     const wantsLegal = /(legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|fraud report|actionfraud)/i.test(lower);
-    const wantsProperty = /(property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|shop premises|commercial premises)/i.test(lower);
+    const wantsProperty = wantsPropertyTerm || /(property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|shop premises|commercial premises)/i.test(lower);
     const wantsFunding = /(funding|funder|lender|loan|overdraft|cashflow|cash flow|iwoca|funding circle|tide|anna|loqbox|capital one|nationwide finance|bank statement)/i.test(lower);
 
     // ── PERSON-NAME EARLY EXIT ──────────────────────────────────────────────────
@@ -735,6 +750,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       const noise = /(life insurance|pet insurance|funding|loan|finance review|unclaimed benefit|alibaba|linkedin|security alert|takepayments|payment processor|newsletter|promotion|gift card|cashback|claim compensation)/i.test(raw);
       return hasVehicle && hasPolicy && !noise;
     };
+    const propertyLeaseEvidence = (email: any) => {
+      const raw = `${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''} ${email.categoryLabel || ''}`.toLowerCase();
+      const hasProperty = /(langdale|landale|steamer|streamer|howlish|lease|tenancy|landlord|rent|direct debit|premises|property|lancaster\.gov\.uk|ann wood|awood|debtors@lancaster|fsuser@lancaster|slowton@lancaster)/i.test(raw);
+      const noise = /(mcafee|google cloud|freepricecompare|car finance|vehicle insurance|life insurance|pet insurance|newsletter|quora|token dispatch|jumpcloud|grill box|ai blackmails)/i.test(raw);
+      return hasProperty && !noise;
+    };
     const curated = wantsUrgents
       ? [
           ...(mailboxMemory?.upcomingImportant || []),
@@ -743,6 +764,13 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           ...(mailboxMemory?.deadlines || []),
           ...(mailboxMemory?.urgent || [])
         ]
+      : wantsLeaseRenewal
+        ? [
+            ...matches.filter(propertyLeaseEvidence),
+            ...(mailboxMemory?.legalEvidence || []).filter(propertyLeaseEvidence),
+            ...(mailboxMemory?.deadlines || []).filter(propertyLeaseEvidence),
+            ...(mailboxMemory?.knownProviderEvidence || []).filter(propertyLeaseEvidence)
+          ]
       : wantsVehicleInsurance
         ? [
             ...(mailboxMemory?.insuranceRenewals || []).filter(vehiclePolicyEvidence),
@@ -763,10 +791,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
           ]
       : wantsProperty
         ? [
-            ...matches,
-            ...(mailboxMemory?.propertyAnalysisEvidence || []),
-            ...(mailboxMemory?.acquisitionEvidence || []),
-            ...(mailboxMemory?.legalEvidence || [])
+            ...matches.filter((email: any) => propertyLeaseEvidence(email) || !wantsPropertyTerm),
+            ...(mailboxMemory?.propertyAnalysisEvidence || []).filter((email: any) => propertyLeaseEvidence(email) || !wantsPropertyTerm),
+            ...(mailboxMemory?.acquisitionEvidence || []).filter((email: any) => propertyLeaseEvidence(email) || !wantsPropertyTerm),
+            ...(mailboxMemory?.legalEvidence || []).filter((email: any) => propertyLeaseEvidence(email) || !wantsPropertyTerm)
           ]
       : wantsAccounting
         ? [
@@ -784,10 +812,15 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       if (wantsVehicleInsurance) {
         return vehiclePolicyEvidence(email);
       }
+      if (wantsLeaseRenewal || wantsPropertyTerm) {
+        return propertyLeaseEvidence(email);
+      }
       return true;
     }).slice(0, wantsUrgents ? 3 : 8);
     const title = wantsUrgents
       ? 'Here are the top 3 urgent or important items I found in your indexed mailbox memory'
+      : wantsLeaseRenewal
+      ? 'Here is the strongest property lease/rent evidence I found in your indexed mailbox memory'
       : wantsVehicleInsurance
       ? 'Here is the strongest vehicle/insurance evidence I found in your indexed mailbox memory'
       : wantsFunding
@@ -803,6 +836,24 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         : 'Here are the strongest email matches I found in your indexed mailbox memory';
 
     if (!evidence.length) {
+      if (wantsLeaseRenewal) {
+        const address = /5\s+langdale|five\s+langdale/i.test(lower) ? '5 Langdale Place' : /langdale|landale/i.test(lower) ? '3 Langdale Place / Langdale Place' : 'that property';
+        return [
+          `I checked your local indexed mailbox memory (${total} emails, updated ${updated}).`,
+          '',
+          `I did not find a confirmed lease renewal/end date for ${address} in the indexed email preview text.`,
+          '',
+          'What I expected to see but did not find in the indexed preview:',
+          '- a lease end date',
+          '- tenancy renewal date',
+          '- expiry date',
+          '- attached lease/tenancy agreement text',
+          '',
+          'Best next step: open the original lease email or attachment in Mail ME/Paperclips so HermesDesk can extract and save the renewal date as a property memory field.',
+          'I will not send, pay, file, or contact the council/landlord without your approval.'
+        ].join('\n');
+      }
+
       if (wantsCarInsuranceDue) {
         return [
           `I checked your local indexed mailbox memory (${total} emails, updated ${updated}).`,
@@ -872,6 +923,8 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       '',
       wantsUrgents
         ? 'Current read: these are priority candidates from local memory. I can mark any as important/not important, draft a reply, or prepare a WhatsApp notification, but external actions need your approval.'
+        : wantsLeaseRenewal
+        ? 'Current read: these are the relevant property/rent/lease emails I found. I do not see a confirmed lease renewal or lease end date in the indexed preview, so the original lease email or attachment must be opened before relying on a date.'
         : wantsVehicleInsurance
         ? 'Current read: I found renewal/insurance evidence, but I do not see a confirmed future due date in the indexed preview text. The safest next step is to open the matching insurer/comparison email or policy attachment before relying on the date.'
         : wantsAccounting
@@ -1259,8 +1312,92 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     return true;
   };
 
+  const isReminderPrompt = (text: string) =>
+    /\b(remind me|set (?:a )?reminder|reminder|remember to remind)\b/i.test(text);
+
+  const parseReminderDue = (text: string) => {
+    const now = new Date();
+    const lower = text.toLowerCase();
+    const due = new Date(now);
+    if (/\btomorrow\b/.test(lower)) due.setDate(due.getDate() + 1);
+    else if (/\bnext week\b/.test(lower)) due.setDate(due.getDate() + 7);
+    else if (/\btoday\b/.test(lower)) due.setDate(due.getDate());
+    else due.setDate(due.getDate() + 1);
+
+    const timeMatch = lower.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/);
+    if (timeMatch) {
+      let hour = Number(timeMatch[1]);
+      const minute = Number(timeMatch[2] || 0);
+      const suffix = timeMatch[3];
+      if (suffix === 'pm' && hour < 12) hour += 12;
+      if (suffix === 'am' && hour === 12) hour = 0;
+      due.setHours(Math.min(23, Math.max(0, hour)), Math.min(59, Math.max(0, minute)), 0, 0);
+    } else {
+      due.setHours(9, 0, 0, 0);
+    }
+    if (due.getTime() <= now.getTime()) due.setDate(due.getDate() + 1);
+    return due;
+  };
+
+  const buildReminderTaskText = (outgoing: string) => {
+    const cleaned = outgoing
+      .replace(/\b(remind me|set (?:a )?reminder|reminder|remember to remind)\b/ig, '')
+      .replace(/\b(tomorrow|today|next week|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/ig, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned && !/^i need to pay this\.?$/i.test(cleaned)) return cleaned;
+    const lastAssistant = getLastAssistantContent();
+    if (/ann wood|wood,\s*ann|3 langdale|rent for 3 langdale|direct debit/i.test(lastAssistant)) {
+      return 'Pay/review the Ann Wood rent issue for 3 Langdale Place. Do not pay automatically; remind Silva to make the payment manually.';
+    }
+    if (/rent|direct debit|payment/i.test(lastAssistant)) {
+      return 'Review and pay the payment item discussed in the previous email result. Do not pay automatically.';
+    }
+    return cleaned || 'Follow up on the payment item discussed in chat. Do not pay automatically.';
+  };
+
+  const handleReminderIntent = async (outgoing: string) => {
+    if (!isReminderPrompt(outgoing)) return false;
+    const userMessage = { role: 'user', content: outgoing };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+    setResearchSteps(['Creating local scheduled reminder', 'Linking it to the current chat context', 'Saving without paying or sending anything']);
+
+    try {
+      const due = parseReminderDue(outgoing);
+      const taskText = buildReminderTaskText(outgoing);
+      const existing = await window.ipcRenderer?.getScheduledTasks?.().catch(() => []) || [];
+      const scheduledTask = {
+        id: `reminder-${Date.now()}`,
+        name: taskText.slice(0, 80) || 'Chat reminder',
+        trigger: `once:${due.toISOString()}`,
+        task: taskText,
+        status: 'Active',
+        color: '#2563eb',
+        agentId: 'general-agent'
+      };
+      const saved = await window.ipcRenderer?.saveScheduledTasks?.([scheduledTask, ...(Array.isArray(existing) ? existing : [])]).catch(() => false);
+      setMessages(prev => [...prev, assistantMessage(saved
+          ? [
+              `Reminder created for ${due.toLocaleString()}.`,
+              '',
+              `Reminder: ${taskText}`,
+              '',
+              'Safety: I did not pay, send, submit, call, or contact anyone. This is only a local reminder.'
+            ].join('\n')
+          : 'I tried to create the reminder, but the scheduled-task store did not save it.',
+        'Scheduled Tasks'
+      )]);
+    } finally {
+      setIsTyping(false);
+      setResearchSteps([]);
+    }
+    return true;
+  };
+
   const isBrowserAutomationPrompt = (text: string) =>
-    /(browser automation|run full browser|click through|click|type|scroll|navigate|open .*product|product page|search results|compare specs|extract|purchase tab|web automation|tinyfish|desktop|app|heck|qwen|chat.*history|what.*discuss|what.*talk|read.*chat|windows.*app|pc.*app|open.*notepad|open.*app|launch|run.*app|calculator|notepad|paint|word|excel|calc)/i.test(text);
+    /(browser automation|run full browser|click through|click|type|scroll|navigate|open .*product|product page|search results|compare specs|extract|purchase tab|web automation|tinyfish|desktop|app|\bheck\b|qwen|chat.*history|what.*discuss|what.*talk|read.*chat|windows.*app|pc.*app|open.*notepad|open.*app|launch|run.*app|calculator|notepad|paint|word|excel|calc)/i.test(text);
 
   const handleBrowserAutomationIntent = async (outgoing: string) => {
     if (!isBrowserAutomationPrompt(outgoing)) return false;
@@ -1599,8 +1736,8 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
   };
 
   const handleDomainMemoryIntent = async (outgoing: string) => {
-    if (isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing)) return false;
-    const domainQuestion = /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider|legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|funding|funder|lender|loan|overdraft|cashflow|iwoca|funding circle|tide|anna|loqbox|capital one|car insurance|vehicle insurance|motor insurance|mot|road tax|policy renewal)/i.test(outgoing);
+    if (!isPrivateLocalMemoryPrompt(outgoing) && (isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing))) return false;
+    const domainQuestion = isPrivateLocalMemoryPrompt(outgoing) || /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider|legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|streamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|funding|funder|lender|loan|overdraft|cashflow|iwoca|funding circle|tide|anna|loqbox|capital one|car insurance|vehicle insurance|motor insurance|mot|road tax|policy renewal|lease|tenancy|landlord|rent|langdale|landale|ann wood|awood)/i.test(outgoing);
     if (!domainQuestion || isStatusOrUpdatesPrompt(outgoing) && !/(accounting|legal|property|funding|insurance|mot|tax|vat|hmrc|bill|statement|solicitor|premises|funder)/i.test(outgoing)) return false;
 
     const userMessage = { role: 'user', content: outgoing };
@@ -1812,6 +1949,12 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     if (!outgoing || isTyping) return;
 
     if (await handleExternalAiStudyIntent(outgoing)) return;
+    if (await handleReminderIntent(outgoing)) return;
+    if (await handleWhatsAppIntent(outgoing)) return;
+    if (await handleCasualChatIntent(outgoing)) return;
+    if (await handlePreferenceTrainingIntent(outgoing)) return;
+    if (await handleFrontDoorStatusIntent(outgoing)) return;
+    if (await handleDomainMemoryIntent(outgoing)) return;
 
     if (isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing)) {
       if (await handleLiveWebResearchIntent(outgoing)) return;
@@ -1835,12 +1978,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       ]);
     }
 
-    if (await handleWhatsAppIntent(outgoing)) return;
     if (await handleLiveWebResearchIntent(outgoing)) return;
-    if (await handleCasualChatIntent(outgoing)) return;
-    if (await handlePreferenceTrainingIntent(outgoing)) return;
-    if (await handleDomainMemoryIntent(outgoing)) return;
-    if (await handleFrontDoorStatusIntent(outgoing)) return;
 
     if (/(build|repair|fix|install|setup|self[-\s]?build).*(voice|tts|speech|silva voice)|voice.*(build|repair|fix|install|setup|self[-\s]?build)/i.test(outgoing)) {
       const userMessage = { role: 'user', content: outgoing };

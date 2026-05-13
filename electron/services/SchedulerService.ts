@@ -98,10 +98,12 @@ export class SchedulerService {
         message
       };
       this.saveRun(run);
+      const isOneOff = this.isOneOffTrigger(schedule.trigger);
       this.updateSchedule(schedule.id, {
+        ...(isOneOff ? { status: 'Paused' as const } : {}),
         lastRunAt: startedAt,
         lastRunStatus: 'queued',
-        lastRunSummary: `Queued on ${new Date(startedAt).toLocaleString()} for ${agentId}`
+        lastRunSummary: `${isOneOff ? 'One-off reminder queued and paused' : 'Queued'} on ${new Date(startedAt).toLocaleString()} for ${agentId}`
       });
       this.log('info', `Scheduled task queued: ${schedule.name}`);
       return { ok: true, run, task };
@@ -145,6 +147,12 @@ export class SchedulerService {
     const lastRunAt = schedule.lastRunAt || 0;
     if (!trigger) return false;
 
+    if (this.isOneOffTrigger(trigger)) {
+      if (lastRunAt) return false;
+      const dueAt = Date.parse(trigger.replace(/^once\s*:/i, '').trim());
+      return Number.isFinite(dueAt) && now.getTime() >= dueAt;
+    }
+
     if (trigger.includes('every hour')) {
       return Date.now() - lastRunAt >= 60 * 60 * 1000;
     }
@@ -173,6 +181,10 @@ export class SchedulerService {
     }
 
     return trigger.includes('every day') || trigger.includes('daily');
+  }
+
+  private isOneOffTrigger(trigger: string) {
+    return /^once\s*:/i.test(String(trigger || '').trim());
   }
 
   private hasRunToday(lastRunAt: number, now: Date) {

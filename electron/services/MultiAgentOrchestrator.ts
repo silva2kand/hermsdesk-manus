@@ -66,7 +66,7 @@ Your capabilities:
 
 Rules:
 - Prefer action over talk.
-- Memory first: check indexed mail/workspace memory before asking Silva to repeat context.
+- Memory first: check indexed mail/workspace memory (SILVA_MASTER_MEMORY) before asking Silva to repeat context or searching the web for personal/property facts.
 - Route first: if the work belongs to a specialist, name the lead specialist and verifier.
 - TASTE always: PLAN -> DRAFT -> REVISE -> PRESENT for non-trivial work.
 - Dreams are proposal-only: self-improvement can diagnose and propose, but must not silently edit code, install packages, submit forms, pay, send, delete, or contact anyone.
@@ -276,6 +276,7 @@ Available tools:
 Your purpose is to operate both the Windows host computer and the real controlled browser: open apps, manage windows, use UI automation (UIA), navigate web pages, read DOM text, list links, click selectors or visible text, type into forms, capture screenshots, and verify each step.
 
 Rules:
+- Prioritize indexed local memory (SILVA_MASTER_MEMORY, property-index, email-index) for all property-specific (3 & 5 Langdale Place, etc.) and personal queries. Only use web search for generic information or real-time prices/status.
 - Use real PC and browser tools, not instructions, when the user asks you to open apps, run commands, browse, click, type, compare, extract, navigate, or operate windows.
 - After every action, verify with pc_ui_scan or browser_read/browser_inspect.
 - If a task contains USER_REQUEST_ONLY, treat that as the only user request. Do not paste system instructions, numbered rules, or safety text into search boxes.
@@ -325,6 +326,7 @@ export class MultiAgentOrchestrator {
   private pendingRunners: Array<() => void> = [];
   private readonly maxConcurrentTasks = 3;
   private readonly maxTaskRuntimeMs = 3 * 60 * 1000;
+  private activeTaskHashes: Set<string> = new Set();
 
   private agents: Agent[] = [
     {
@@ -973,6 +975,21 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
   async createTask(input: string, agentId?: string, win?: any) {
     const managerDecision = this.decideWithManager(input, agentId);
     const assignedId = managerDecision.assignedAgentId;
+
+    // Deduplication check
+    const taskHash = this.getTaskHash(assignedId, input);
+    if (this.activeTaskHashes.has(taskHash)) {
+      const existing = (this.taskQueues.get(assignedId) || []).find(item =>
+        this.getTaskHash(assignedId, item.input) === taskHash &&
+        ['running', 'queued'].includes(item.status) &&
+        Date.now() - item.createdAt < 2 * 60 * 1000
+      );
+      console.log(`Deduplicating redundant task for agent ${assignedId}: ${input.slice(0, 50)}...`);
+      if (existing) return existing;
+      this.activeTaskHashes.delete(taskHash);
+    }
+    this.activeTaskHashes.add(taskHash);
+
     const task: Task = {
       id: Math.random().toString(36).substring(7),
       input,
@@ -1066,6 +1083,7 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
           activeTaskCount: this.activeTaskCount,
           queuedTaskCount: this.pendingRunners.length
         }, task.id);
+        this.activeTaskHashes.delete(this.getTaskHash(agent.id, task.input));
         const next = this.pendingRunners.shift();
         if (next) setTimeout(next, 0);
       }
@@ -1098,6 +1116,21 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     this.updateAgentStatus(agent.id, 'running', agent.background);
     agent.currentTask = task.input.slice(0, 100);
     sendUpdate(`${agent.name} v${agent.version} starting...`, 'info');
+
+    // Engine readiness check
+    const canRunDeterministicWithoutEngine = agent.id === 'browser-automation-agent' && this.isShoppingComparisonTask(task.input);
+    if (!canRunDeterministicWithoutEngine && this.aiService?.isReady) {
+      sendUpdate('Verifying AI engine readiness...', 'thinking');
+      const ready = await this.aiService.isReady();
+      if (!ready) {
+        const error = 'AI engine failed to initialize. Task aborted.';
+        sendUpdate(error, 'error');
+        task.status = 'failed';
+        this.activeTaskHashes.delete(this.getTaskHash(agent.id, task.input));
+        return;
+      }
+    }
+
     if (task.manager) {
       sendUpdate(`Managed by ${task.manager.managerName}. Priority: ${task.manager.priority}. Approval gates: ${task.manager.approvalGates.join(', ')}.`, 'info');
     }
@@ -1414,6 +1447,10 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
     if (agent.status === 'running') {
       this.updateAgentStatus(agent.id, 'idle', agent.background);
     }
+
+    // Clear deduplication hash
+    this.activeTaskHashes.delete(this.getTaskHash(agent.id, task.input));
+
     this.emitThought(task, agent, task.status === 'failed' ? 'ERROR' : 'DONE', `Agent loop finished with status ${task.status}.`, {
       status: task.status,
       historyCount: task.history.length
@@ -1462,5 +1499,9 @@ ${skillGuidance?.prompt ? `\n\n### INSTALLED SKILLS\n${skillGuidance.prompt}` : 
 
   getAgentTasks(agentId: string) {
     return this.taskQueues.get(agentId) || [];
+  }
+
+  private getTaskHash(agentId: string, input: string) {
+    return `${agentId}:${String(input || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 700)}`;
   }
 }

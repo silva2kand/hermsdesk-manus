@@ -104,6 +104,7 @@ export class EmailIndexService {
     const cleanQuery = String(query || '').toLowerCase().trim();
     const genericTokens = new Set([
       'tell', 'about', 'what', 'when', 'that', 'this', 'from', 'have', 'need', 'know', 'please',
+      'can', 'you', 'check', 'regarding', 'regaring', 'due', 'renewal', 'renew', 'remind',
       'email', 'emails', 'mail', 'last', 'latest', 'said', 'says', 'say', 'she', 'her', 'him', 'his',
       'they', 'them', 'their', 'message', 'messages', 'sent', 'received', 'reply', 'replied'
     ]);
@@ -136,10 +137,31 @@ export class EmailIndexService {
               const mostNameTokensMatch = nameTokens.length > 1 && nameTokens.filter(token => identityHaystack.includes(token)).length >= Math.min(2, nameTokens.length);
               if (!allNameTokensMatch && !mostNameTokensMatch) continue;
             }
+            let score = cleanQuery && haystack.includes(cleanQuery) ? 100 : 0;
+            const propertyAddresses = [
+              'langdale place',
+              'langdale plc',
+              'langdale plase',
+              'landale place',
+              '3 langdale',
+              '5 langdale',
+              'steamer street',
+              'streamer street',
+              'howlish view'
+            ];
+            const isPropertyQuery = propertyAddresses.some(addr => cleanQuery.includes(addr)) || /(lease|tenancy|landlord|rent|direct debit|ground rent|service charge|land registry|property|premises)/i.test(cleanQuery);
+
+            if (isPropertyQuery) {
+              const addressMatch = propertyAddresses.find(addr => haystack.includes(addr));
+              if (addressMatch) score += 150;
+              if (/(wood,?\s*ann|ann wood|awood@lancaster\.gov\.uk|lancaster\.gov\.uk|debtors@lancaster\.gov\.uk|fsuser@lancaster\.gov\.uk|slowton@lancaster\.gov\.uk)/i.test(haystack)) score += 120;
+              if (/(lease|tenancy|landlord|rent|direct debit|ground rent|service charge|land registry|premises|langdale)/i.test(haystack)) score += 80;
+              if (/(car|vehicle|motor|pet|van|bike|motorcycle|mcafee|google cloud|freepricecompare|newsletter|token dispatch|quora|jumpcloud)/i.test(haystack) && !/(langdale|lease|tenancy|landlord|rent|property|premises)/i.test(haystack)) score -= 120;
+            }
+
             if (/\bcar\b|\bvehicle\b|\bmotor\b/i.test(query) && /insurance|renew|renewal|policy|premium/i.test(query)) {
               if (!/(car|vehicle|motor)/i.test(haystack) || !/(insurance|renew|renewal|policy|premium)/i.test(haystack)) continue;
             }
-            let score = cleanQuery && haystack.includes(cleanQuery) ? 100 : 0;
             for (const token of tokens) {
               if (sender.includes(token)) score += looksLikePersonLookup ? 40 : 10;
               if (subject.includes(token)) score += looksLikePersonLookup ? 18 : 8;

@@ -320,6 +320,15 @@ export class LocalAIService {
     return this.janStartPromise;
   }
 
+  async isReady(): Promise<boolean> {
+    const status = await this.getJanEngineStatus();
+    if (status.apiOnline) return true;
+
+    // If not online, try to start it once
+    const startResult = await this.startJanEngine();
+    return startResult.ok;
+  }
+
   private async startJanEngineInternal() {
     const status = await this.getJanEngineStatus();
     if (status.apiOnline) return { ok: true, engine: 'Jan + TurboQuant', message: 'Built-in engine is already running.', status };
