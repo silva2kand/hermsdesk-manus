@@ -752,7 +752,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     };
     const propertyLeaseEvidence = (email: any) => {
       const raw = `${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''} ${email.categoryLabel || ''}`.toLowerCase();
-      const hasProperty = /(langdale|landale|steamer|streamer|howlish|lease|tenancy|landlord|rent|direct debit|premises|property|lancaster\.gov\.uk|ann wood|awood|debtors@lancaster|fsuser@lancaster|slowton@lancaster)/i.test(raw);
+      const hasProperty = /(langdale|lansdale|landale|steamer|streamer|howlish|lease|tenancy|landlord|\brent\b|direct debit|premises|property|lancaster\.gov\.uk|ann wood|awood|debtors@lancaster|fsuser@lancaster|slowton@lancaster|sally lowton|lowton,?\s*sally)/i.test(raw);
       const noise = /(mcafee|google cloud|freepricecompare|car finance|vehicle insurance|life insurance|pet insurance|newsletter|quora|token dispatch|jumpcloud|grill box|ai blackmails)/i.test(raw);
       return hasProperty && !noise;
     };

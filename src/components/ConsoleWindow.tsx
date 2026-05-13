@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, X, Trash2, ChevronDown, ChevronUp, AlertCircle, Info, Bug, Zap, Filter } from 'lucide-react';
+import { Terminal, X, Trash2, ChevronDown, ChevronUp, AlertCircle, Info, Bug, Zap, Filter, Play } from 'lucide-react';
 
 export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -11,6 +11,7 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
     live: false,
     found: false
   });
+  const [isStartingEngine, setIsStartingEngine] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const addLog = (log: { type: string; content: string; agent?: string }) => {
@@ -27,7 +28,17 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
     try {
       const status: any = await window.ipcRenderer?.janStatus?.();
       const live = Boolean(status?.apiOnline);
-      const found = Boolean(status?.runtimeFound || status?.nitroFound || status?.backendFound || live);
+      const found = Boolean(
+        status?.installed ||
+        status?.runtimeFound ||
+        status?.nitroFound ||
+        status?.backendFound ||
+        status?.janCliPath ||
+        status?.janAppPath ||
+        status?.nitroPath ||
+        status?.turboQuantBackendPath ||
+        live
+      );
       const activeModel = status?.activeModel || status?.model || 'no model loaded';
       const label = live ? 'Jan+TurboQuant Online' : found ? 'Runtime found, API offline' : 'Runtime missing';
       const detail = live
@@ -44,6 +55,26 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
       const detail = err?.message || 'Unable to read Jan+TurboQuant status from Electron main process.';
       setEngineState({ label: 'Status unavailable', detail, live: false, found: false });
       addLog({ type: 'error', content: `Jan+TurboQuant status check failed: ${detail}`, agent: 'system' });
+    }
+  };
+
+  const startEngine = async () => {
+    setIsStartingEngine(true);
+    addLog({ type: 'thinking', content: 'Starting Jan+TurboQuant runtime...', agent: 'system' });
+    try {
+      const result: any = await window.ipcRenderer?.startJan?.();
+      addLog({
+        type: result?.ok ? 'result' : 'error',
+        content: result?.ok
+          ? `Jan+TurboQuant start requested: ${result.message || 'runtime started'}`
+          : `Jan+TurboQuant start failed: ${result?.error || result?.status?.missingReason || 'unknown error'}`,
+        agent: 'system'
+      });
+      await refreshEngineState();
+    } catch (err: any) {
+      addLog({ type: 'error', content: `Jan+TurboQuant start failed: ${err?.message || 'unknown error'}`, agent: 'system' });
+    } finally {
+      setIsStartingEngine(false);
     }
   };
 
@@ -230,6 +261,16 @@ export const ConsoleWindow = ({ isOpen, onClose }: { isOpen: boolean, onClose: (
             >
               Check Engine
             </button>
+            {!engineState.live && engineState.found && (
+              <button
+                onClick={startEngine}
+                disabled={isStartingEngine}
+                className="inline-flex items-center gap-1 px-2 py-1 hover:bg-white/10 rounded-lg transition-colors text-[8px] font-black uppercase tracking-wider text-yellow-300 hover:text-white disabled:opacity-50"
+              >
+                <Play className="w-3 h-3" />
+                {isStartingEngine ? 'Starting' : 'Start Engine'}
+              </button>
+            )}
             <button 
               onClick={() => setLogs([])}
               className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-gray-400 hover:text-white"

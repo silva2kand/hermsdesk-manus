@@ -371,7 +371,15 @@ export class LocalAIService {
       }
     }
 
-    return { ok: false, engine: 'Jan + TurboQuant', error: 'Built-in Jan/TurboQuant runtime files are missing.', status: await this.getJanEngineStatus() };
+    const finalStatus = await this.getJanEngineStatus();
+    return {
+      ok: false,
+      engine: 'Jan + TurboQuant',
+      error: runtime.installed
+        ? 'Bundled Jan/TurboQuant runtime was found, but the API did not become ready on port 6767.'
+        : 'Built-in Jan/TurboQuant runtime files are missing.',
+      status: finalStatus
+    };
   }
 
   private async startJanCliServe(modelPath: string, modelName: string) {
