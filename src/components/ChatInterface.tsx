@@ -54,8 +54,13 @@ const isPrivateLocalMemoryPrompt = (text: string) =>
   /(email|emails|mail|inbox|outlook|gmail|from the emails?|indexed mail|ann wood|awood|rent|direct debit|landlord|langdale|landale|steamer|streamer|howlish|lease|tenancy|premises|lancaster city council|debtors@|fsuser@|slowton@)/i.test(text)
   && !/(garage|mot garage|reviews?|review score|book\s+(?:my\s+)?car|booking.*mot|near me.*garage|google maps)/i.test(text);
 
+const isPropertyMarketResearchPrompt = (text: string) =>
+  /(property|properties|house|houses|flat|flats|auction|auctions|rightmove|zoopla|onthemarket|cheap|cheapest|undervalue|undervalued|below market|bmv|investment|deal|deals|for sale|morecambe|morecombe|heysham|lancaster)/i.test(text)
+  && /(find|search|research|analyse|analyze|compare|cheap|cheapest|undervalue|undervalued|below market|bmv|for sale|auction|rightmove|zoopla|morecambe|morecombe)/i.test(text)
+  && !/(email|emails|mail|inbox|outlook|gmail|from the emails?|indexed mail|ann wood|awood|langdale|landale|steamer|streamer|howlish|lease renewal|shop lease|my lease|my tenancy|rent for 3)/i.test(text);
+
 const isLiveWebResearchPrompt = (text: string) =>
-  /(research|web|internet|online|google|reviews?|review score|near me|nearby|local|book|booking|where should i|best|compare|check.*reviews?|make sure.*reviews?)/i.test(text)
+  (isPropertyMarketResearchPrompt(text) || /(research|web|internet|online|google|reviews?|review score|near me|nearby|local|book|booking|where should i|best|compare|check.*reviews?|make sure.*reviews?)/i.test(text))
   // Only exclude if query is SPECIFICALLY about searching the user's own mailbox, not just because 'inbox' appears in context
   && !/(search my emails?|check my (inbox|mailbox|outlook|gmail)|my indexed mail|look in my (inbox|mailbox|email)|pull.*(from my|my).*(inbox|mailbox|email|outlook)|from my (inbox|mailbox|outlook|gmail))/i.test(text)
   && !isPrivateLocalMemoryPrompt(text);
@@ -273,6 +278,7 @@ type ChatSession = {
 const chooseAgentForPrompt = (prompt: string) => {
   const text = prompt.toLowerCase();
   if (isPreferenceTrainingPrompt(prompt)) return 'general-agent';
+  if (isPropertyMarketResearchPrompt(prompt)) return 'space-agent-full';
   if (isPrivateLocalMemoryPrompt(prompt)) return 'paperclip-full';
   if (/(browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish|automation|pc|desktop|app|\bheck\b|qwen|chat.*history|notepad|paint|word|excel|calc|calculator)/.test(text)) return 'browser-automation-agent';
   // PC desktop app / discussion history tasks:
@@ -706,13 +712,13 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
     const total = mailboxMemory?.totalIndexed?.toLocaleString?.() || mailboxMemory?.totalIndexed || 'indexed';
     const updated = mailboxMemory?.generatedAt ? new Date(mailboxMemory.generatedAt).toLocaleString() : 'recently';
     const wantsUrgents = /urgent|important|need looking|look at|priority|top\s*3|3 urgents/i.test(lower);
-    const wantsPropertyTerm = /(langdale|landale|steamer|streamer|howlish|lease|tenancy|landlord|rent|direct debit|premises|ann wood|awood|lancaster city council)/i.test(lower);
+    const wantsPropertyTerm = /(langdale|lansdale|landale|steamer|streamer|howlish|lease|tenancy|landlord|\brent\b|direct debit|premises|ann wood|awood|lancaster city council|shop lease)/i.test(lower);
     const wantsLeaseRenewal = wantsPropertyTerm && /(lease|tenancy|renew|renewal|expires?|expiry|due|end date|rent|direct debit)/i.test(lower);
     const wantsVehicleInsurance = !wantsPropertyTerm && /(\bcar\b|vehicle|motor|mot|garage|van|insurance|policy|premium)/i.test(lower);
     const wantsCarInsuranceDue = /(car|vehicle|motor|van).{0,30}(insurance|policy|renewal|renew|due|expire|expiry|expires)|insurance.{0,30}(car|vehicle|motor|van|due|renewal|renew|expire|expiry|expires)/i.test(lower);
     const wantsAccounting = /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider)/i.test(lower);
     const wantsLegal = /(legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|fraud report|actionfraud)/i.test(lower);
-    const wantsProperty = wantsPropertyTerm || /(property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|shop premises|commercial premises)/i.test(lower);
+    const wantsProperty = wantsPropertyTerm || /(property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|morecombe|heysham|shop premises|commercial premises)/i.test(lower);
     const wantsFunding = /(funding|funder|lender|loan|overdraft|cashflow|cash flow|iwoca|funding circle|tide|anna|loqbox|capital one|nationwide finance|bank statement)/i.test(lower);
 
     // ── PERSON-NAME EARLY EXIT ──────────────────────────────────────────────────
@@ -760,10 +766,12 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
       const noise = /(life insurance|pet insurance|funding|loan|finance review|unclaimed benefit|alibaba|linkedin|security alert|takepayments|payment processor|newsletter|promotion|gift card|cashback|claim compensation)/i.test(raw);
       return hasVehicle && hasPolicy && !noise;
     };
-    const propertyLeaseEvidence = (email: any) => {
+    const propertyLeaseEvidence = (email: any, strictLease = false) => {
       const raw = `${email.subject || ''} ${email.sender || ''} ${email.senderEmail || ''} ${email.preview || ''} ${email.bodyPreview || ''} ${email.categoryLabel || ''}`.toLowerCase();
-      const hasProperty = /(langdale|lansdale|landale|steamer|streamer|howlish|lease|tenancy|landlord|\brent\b|direct debit|premises|property|lancaster\.gov\.uk|ann wood|awood|debtors@lancaster|fsuser@lancaster|slowton@lancaster|sally lowton|lowton,?\s*sally)/i.test(raw);
-      const noise = /(mcafee|google cloud|freepricecompare|car finance|vehicle insurance|life insurance|pet insurance|newsletter|quora|token dispatch|jumpcloud|grill box|ai blackmails)/i.test(raw);
+      const strongPropertyAnchor = /(3\s+langdale|langdale place|lansdale place|landale place|steamer|streamer|howlish|lease|tenancy|landlord|premises|shop lease|lancaster\.gov\.uk|ann wood|awood@lancaster|debtors@lancaster|fsuser@lancaster|slowton@lancaster|sally lowton|lowton,?\s*sally)/i.test(raw);
+      const weakRentAnchor = /(\brent\b|direct debit)/i.test(raw) && /(wood,?\s*ann|ann wood|awood@lancaster|lancaster city council|3\s+langdale|langdale place)/i.test(raw);
+      const hasProperty = strongPropertyAnchor || (!strictLease && weakRentAnchor);
+      const noise = /(mcafee|google cloud|freepricecompare|car finance|vehicle insurance|life insurance|pet insurance|newsletter|quora|token dispatch|jumpcloud|grill box|ai blackmails|foodhub|mama mia|food order|pay for the order|takeaway|restaurant)/i.test(raw);
       return hasProperty && !noise;
     };
     const curated = wantsUrgents
@@ -776,10 +784,10 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         ]
       : wantsLeaseRenewal
         ? [
-            ...matches.filter(propertyLeaseEvidence),
-            ...(mailboxMemory?.legalEvidence || []).filter(propertyLeaseEvidence),
-            ...(mailboxMemory?.deadlines || []).filter(propertyLeaseEvidence),
-            ...(mailboxMemory?.knownProviderEvidence || []).filter(propertyLeaseEvidence)
+            ...matches.filter((email: any) => propertyLeaseEvidence(email, true)),
+            ...(mailboxMemory?.legalEvidence || []).filter((email: any) => propertyLeaseEvidence(email, true)),
+            ...(mailboxMemory?.deadlines || []).filter((email: any) => propertyLeaseEvidence(email, true)),
+            ...(mailboxMemory?.knownProviderEvidence || []).filter((email: any) => propertyLeaseEvidence(email, true))
           ]
       : wantsVehicleInsurance
         ? [
@@ -823,7 +831,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         return vehiclePolicyEvidence(email);
       }
       if (wantsLeaseRenewal || wantsPropertyTerm) {
-        return propertyLeaseEvidence(email);
+        return propertyLeaseEvidence(email, wantsLeaseRenewal);
       }
       return true;
     }).slice(0, wantsUrgents ? 3 : 8);
@@ -1570,6 +1578,8 @@ Keep every step visible in EventBus/Live Operations.`,
       const cleanedOutgoing = cleanResearchQuery(outgoing);
       const query = isMotReviewResearchPrompt(outgoing)
         ? buildMotResearchQuery()
+        : isPropertyMarketResearchPrompt(outgoing)
+          ? `${cleanedOutgoing} Morecambe property for sale auction below market value cheapest Rightmove Zoopla OnTheMarket`
         : cleanedOutgoing;
       const sessionId = `review-${Date.now()}`;
       const [visibleSearch, traceRaw, task] = await Promise.all([
@@ -1752,6 +1762,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
   };
 
   const handleDomainMemoryIntent = async (outgoing: string) => {
+    if (isPropertyMarketResearchPrompt(outgoing)) return false;
     if (!isPrivateLocalMemoryPrompt(outgoing) && (isLiveWebResearchPrompt(outgoing) || isMotReviewResearchPrompt(outgoing))) return false;
     const domainQuestion = isPrivateLocalMemoryPrompt(outgoing) || /(accounting|accountant|myt|quickbooks|hmrc|vat|tax|self assessment|companies house|payroll|bookkeeping|invoice|bill|statement|receipt|bank statement|credit card|direct debit|payment|supplier|provider|legal|solicitor|rc\.legal|land registry|certificate of compliance|requisition|ground rent|service charge|steamer street|streamer street|howlish view|court|tribunal|council|licensing|planning|enforcement|property|premises|closed shop|corner.?shop|mixed.?use|auction|estate agent|survey|epc|lancaster|morecambe|heysham|funding|funder|lender|loan|overdraft|cashflow|iwoca|funding circle|tide|anna|loqbox|capital one|car insurance|vehicle insurance|motor insurance|mot|road tax|policy renewal|lease|tenancy|landlord|rent|langdale|landale|ann wood|awood)/i.test(outgoing);
     if (!domainQuestion || isStatusOrUpdatesPrompt(outgoing) && !/(accounting|legal|property|funding|insurance|mot|tax|vat|hmrc|bill|statement|solicitor|premises|funder)/i.test(outgoing)) return false;

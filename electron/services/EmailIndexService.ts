@@ -149,14 +149,25 @@ export class EmailIndexService {
               'streamer street',
               'howlish view'
             ];
-            const isPropertyQuery = propertyAddresses.some(addr => cleanQuery.includes(addr)) || /(lease|tenancy|landlord|\brent\b|direct debit|ground rent|service charge|land registry|property|premises)/i.test(cleanQuery);
+            const isPublicPropertyMarketQuery =
+              /(cheap|cheapest|undervalue|undervalued|below market|bmv|for sale|auction|rightmove|zoopla|onthemarket|investment|deal|deals|morecambe|morecombe|heysham)/i.test(cleanQuery)
+              && !/(email|mail|inbox|outlook|gmail|langdale|landale|steamer|streamer|howlish|ann wood|awood|my lease|shop lease|lease renewal)/i.test(cleanQuery);
+            const isPropertyQuery = !isPublicPropertyMarketQuery && (
+              propertyAddresses.some(addr => cleanQuery.includes(addr))
+              || /(lease|tenancy|landlord|\brent\b|direct debit|ground rent|service charge|land registry|property|premises)/i.test(cleanQuery)
+            );
 
             if (isPropertyQuery) {
               const addressMatch = propertyAddresses.find(addr => haystack.includes(addr));
+              const strongPropertyAnchor = Boolean(addressMatch)
+                || /(wood,?\s*ann|ann wood|awood@lancaster\.gov\.uk|lancaster\.gov\.uk|debtors@lancaster\.gov\.uk|fsuser@lancaster\.gov\.uk|slowton@lancaster\.gov\.uk|lease|tenancy|landlord|premises|shop lease)/i.test(haystack);
+              const weakRentAnchor = /(\brent\b|direct debit)/i.test(haystack)
+                && /(wood,?\s*ann|ann wood|awood@lancaster|lancaster city council|3\s+langdale|langdale place)/i.test(haystack);
+              if (!strongPropertyAnchor && !weakRentAnchor) continue;
               if (addressMatch) score += 150;
               if (/(wood,?\s*ann|ann wood|awood@lancaster\.gov\.uk|lancaster\.gov\.uk|debtors@lancaster\.gov\.uk|fsuser@lancaster\.gov\.uk|slowton@lancaster\.gov\.uk)/i.test(haystack)) score += 120;
               if (/(lease|tenancy|landlord|\brent\b|direct debit|ground rent|service charge|land registry|premises|langdale|lansdale|landale)/i.test(haystack)) score += 80;
-              if (/(car|vehicle|motor|pet|van|bike|motorcycle|mcafee|google cloud|freepricecompare|newsletter|token dispatch|quora|jumpcloud)/i.test(haystack) && !/(langdale|lansdale|landale|lease|tenancy|landlord|\brent\b|property|premises)/i.test(haystack)) score -= 120;
+              if (/(car|vehicle|motor|pet|van|bike|motorcycle|mcafee|google cloud|freepricecompare|newsletter|token dispatch|quora|jumpcloud|foodhub|mama mia|food order|pay for the order|takeaway|restaurant)/i.test(haystack) && !/(langdale|lansdale|landale|lease|tenancy|landlord|\brent\b|property|premises)/i.test(haystack)) score -= 120;
             }
 
             if (/\bcar\b|\bvehicle\b|\bmotor\b/i.test(query) && /insurance|renew|renewal|policy|premium/i.test(query)) {
