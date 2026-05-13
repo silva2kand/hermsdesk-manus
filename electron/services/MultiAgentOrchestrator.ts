@@ -19,6 +19,7 @@ export interface Agent {
   role: string;
   description: string;
   personality: string;
+  engine: string;
   tools: string[];
   status: 'running' | 'idle' | 'stopped';
   version: string;
@@ -314,6 +315,15 @@ Available tools:
 - [TOOL: list_dir(path="folder/path")]`
 };
 
+const PRO_OPERATOR_PROFILE = `### PRO OPERATOR MODE - MANDATORY
+- Work as a senior operator, not a generic chatbot.
+- Always follow: GOAL -> ROUTE -> PLAN -> EXECUTE READ-ONLY WORK -> EVIDENCE -> RESULT/NEXT ACTION.
+- Use the assigned domain engine before answering. Do not bypass it for fast keyword dumps.
+- Use real tools when a real tool exists. Browser tasks use browser tools. PC tasks use PC/UIA tools. Email tasks use indexed mail/email tools. Files use file tools.
+- Never invent private access. Never pretend evidence exists. If evidence is missing, say exactly what was checked and what is missing.
+- Stop before send, submit, pay, book, buy, sign, delete, move, upload, external contact, or government/legal/accounting filing. Create or request approval first.
+- Do not answer with "No local AI engine is available" as a final result. Retry/wait for Jan+TurboQuant first; if blocked, report the engine startup problem as an operational fault.`;
+
 export class MultiAgentOrchestrator {
   private store: any;
   private aiService: any;
@@ -335,6 +345,7 @@ export class MultiAgentOrchestrator {
       role: 'Manager, Router, Clarifier & Verifier',
       description: 'Front-door manager that receives tasks, chooses specialists, checks connector truth, coordinates peer checks, enforces approvals, and verifies completion.',
       personality: PERSONALITIES['general-agent'],
+      engine: 'Mythos Manager Engine',
       tools: ['jan-turboquant', 'outlook-mail', 'google-search', 'tinyfish', 'file-system'],
       status: 'idle',
       version: '1.8.0',
@@ -347,6 +358,7 @@ export class MultiAgentOrchestrator {
       role: 'System Architect & Coder',
       description: 'Advanced coding, terminal access, and system-level automation.',
       personality: PERSONALITIES['hermes-full'],
+      engine: 'System Build & Coding Engine',
       tools: ['ollama', 'github', 'os-control', 'file-system'],
       status: 'idle',
       version: '1.8.0',
@@ -359,6 +371,7 @@ export class MultiAgentOrchestrator {
       role: 'Full Intelligence Organizer',
       description: 'End-to-end document routing, email-to-task conversion, and UK compliance.',
       personality: PERSONALITIES['paperclip-full'],
+      engine: 'Email, Document & Evidence Engine',
       tools: ['gmail', 'file-system'],
       status: 'idle',
       version: '1.8.0',
@@ -371,6 +384,7 @@ export class MultiAgentOrchestrator {
       role: 'Legal Reasoning & Drafting',
       description: 'Reviews letters, tenancy/property issues, claims, and legal timelines for UK law.',
       personality: PERSONALITIES['solicitor-agent'],
+      engine: 'UK Legal & Property Law Engine',
       tools: ['google-search', 'file-system'],
       status: 'idle',
       version: '1.8.0',
@@ -383,6 +397,7 @@ export class MultiAgentOrchestrator {
       role: 'Ledger Parsing & VAT',
       description: 'Parses bank statements, reconciles invoices, and calculates VAT/tax obligations.',
       personality: PERSONALITIES['accountant-agent'],
+      engine: 'UK Accounting, VAT & Tax Engine',
       tools: ['stripe', 'xero', 'file-system'],
       status: 'idle',
       version: '1.8.0',
@@ -395,6 +410,7 @@ export class MultiAgentOrchestrator {
       role: 'Full Monitoring Agent',
       description: 'Deep system monitoring, terminal monitoring, and real-time research.',
       personality: PERSONALITIES['space-agent-full'],
+      engine: 'Research, Property Market & System Intelligence Engine',
       tools: ['google-search', 'os-control'],
       status: 'idle',
       version: '1.8.0',
@@ -407,6 +423,7 @@ export class MultiAgentOrchestrator {
       role: 'Security & Forensics Agent',
       description: 'System security audit, log analysis, and vulnerability detection.',
       personality: PERSONALITIES['openclaw-full'],
+      engine: 'Security, Fraud & Forensics Engine',
       tools: ['os-control', 'terminal'],
       status: 'idle',
       version: '1.8.0',
@@ -419,6 +436,7 @@ export class MultiAgentOrchestrator {
       role: 'Legal Fight, Evidence, Appeal & Complaint Pack',
       description: 'Builds evidence-first legal/complaint/appeal packs and official route maps with approval gates.',
       personality: PERSONALITIES['justice-case-agent'],
+      engine: 'Justice Case, Complaint & Appeal Engine',
       tools: ['file-system', 'google-search', 'os-control'],
       status: 'idle',
       version: '1.8.0',
@@ -431,6 +449,7 @@ export class MultiAgentOrchestrator {
       role: 'Online Buying, Scam Check & Refund Strategy',
       description: 'Researches seller/product risk and builds purchase protection, refund, and chargeback packs.',
       personality: PERSONALITIES['purchase-guardian-agent'],
+      engine: 'Purchase Risk, Scam Check & Recovery Engine',
       tools: ['google-search', 'file-system', 'os-control'],
       status: 'idle',
       version: '1.8.0',
@@ -443,6 +462,7 @@ export class MultiAgentOrchestrator {
       role: 'PC Operator & Browser Automation',
       description: 'Operates both the Windows host and the controlled browser. Can open apps, manage windows, click, type, and verify steps across the entire system.',
       personality: PERSONALITIES['browser-automation-agent'],
+      engine: 'PC UIA & Browser Automation Engine',
       tools: ['browser-operator', 'tinyfish', 'os-control', 'file-system', 'google-search'],
       status: 'idle',
       version: '1.8.0',
@@ -576,11 +596,13 @@ export class MultiAgentOrchestrator {
 
   private routeTaskToAgent(input: string) {
     const text = String(input || '').toLowerCase();
-    if (/browser|click|type|scroll|navigate|open .*page|product page|search results|compare|extract|dom|purchase tab|web automation|tinyfish/.test(text)) return 'browser-automation-agent';
+    if (/(open|launch|run|focus|click|type|scroll|navigate|pc|desktop|window|app|notepad|calculator|paint|qwen|copilot|chatgpt|manus|minimax|deepseek|grok|browser automation|web automation|tinyfish)/.test(text)) return 'browser-automation-agent';
     if (/code|build|fix|bug|repo|git|typescript|electron|jan|turboquant|dfalsh|model hub|voice|runtime|crash|freeze|test|terminal/.test(text)) return 'hermes-full';
-    if (/legal|solicitor|court|appeal|justice|land registry|conveyancer|freeholder|leasehold|council dispute|complaint|evidence|hmcts/.test(text)) return 'general-agent';
-    if (/invoice|receipt|vat|hmrc|tax|accountant|payroll|bookkeeping|bill|payment|direct debit|statement|staff invoice|supplier invoice/.test(text)) return 'general-agent';
-    if (/insurance|renewal|quote|policy|mot|road tax|supplier|wholesale|stock|purchase|refund|chargeback|seller|parcel|order/.test(text)) return 'general-agent';
+    if (/(legal|solicitor|court|appeal|justice|land registry|conveyancer|freeholder|leasehold|council dispute|complaint|hmcts|rc\.legal|holdenslaw)/.test(text)) return 'solicitor-agent';
+    if (/(invoice|receipt|vat|hmrc|tax|accountant|payroll|bookkeeping|bill|payment|direct debit|statement|staff invoice|supplier invoice|quickbooks|mytaccounts)/.test(text)) return 'accountant-agent';
+    if (/(email|mail|outlook|gmail|attachment|pdf|document|file|from the emails?|indexed mail|lease email|shop lease|langdale|steamer|streamer|howlish|ann wood|awood|slowton)/.test(text)) return 'paperclip-full';
+    if (/(cheap|cheapest|undervalue|undervalued|below market|bmv|property|properties|rightmove|zoopla|onthemarket|auction|morecambe|morecombe|heysham|market research|web research|latest news|news|research web|find me)/.test(text)) return 'space-agent-full';
+    if (/insurance|renewal|quote|policy|mot|road tax|supplier|wholesale|stock|purchase|refund|chargeback|seller|parcel|order/.test(text)) return 'purchase-guardian-agent';
     if (/security|hack|password|malware|fraud|suspicious|forensic/.test(text)) return 'openclaw-full';
     if (/pc|cpu|ram|gpu|vram|performance|slow|process|storage/.test(text)) return 'space-agent-full';
     return 'general-agent';
@@ -1132,7 +1154,7 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     }
 
     if (task.manager) {
-      sendUpdate(`Managed by ${task.manager.managerName}. Priority: ${task.manager.priority}. Approval gates: ${task.manager.approvalGates.join(', ')}.`, 'info');
+      sendUpdate(`Managed by ${task.manager.managerName}. Engine: ${agent.engine}. Priority: ${task.manager.priority}. Approval gates: ${task.manager.approvalGates.join(', ')}.`, 'info');
     }
     this.emitThought(task, agent, 'PLAN', `${agent.name} accepted task and started the local agent loop.`, {
       steps: task.steps,
@@ -1173,7 +1195,12 @@ You are verifying another HermesDesk agent output. Be concise. Check for missing
     const messages: any[] = [
       { 
         role: 'system', 
-        content: `${agent.personality}
+        content: `${PRO_OPERATOR_PROFILE}
+
+### ASSIGNED ENGINE
+${agent.engine}
+
+${agent.personality}
 
 ### BASE MEMORY OF SILVA KANDASAMY
 ${silvaMemory}

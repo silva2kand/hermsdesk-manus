@@ -443,31 +443,38 @@ export class LocalAIService {
   }
 
   async chatWithBestAvailable(model: string, messages: any[], options: { preferred?: 'jan' | 'ollama' | 'lmstudio' } = {}): Promise<any> {
-    try {
-      let janOnline = await this.checkJanEngine();
-      if (!janOnline) {
-        const startResult = await this.startJanEngine();
-        if (startResult.ok) janOnline = true;
+    let lastError = '';
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        let janOnline = await this.checkJanEngine();
+        if (!janOnline) {
+          const startResult = await this.startJanEngine();
+          if (startResult.ok) janOnline = true;
+          else lastError = startResult.error || 'Jan/TurboQuant did not become ready.';
+        }
+        if (janOnline) return await this.chatWithJan(model, messages);
+      } catch (e: any) {
+        lastError = e?.response?.data?.error?.message || e?.message || String(e);
       }
-      if (janOnline) return await this.chatWithJan(model, messages);
-    } catch (e) {}
+      await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 1500 : 3500));
+    }
 
     try {
       const ollamaCheck = await axios.get(`${this.ollamaUrl}/tags`, { timeout: 3000 });
       if (ollamaCheck.status === 200) return await this.chatWithOllama(model, messages);
-    } catch (e) {}
+    } catch (e: any) { lastError = lastError || e?.message || String(e); }
 
     try {
       const lmStudio = await this.checkLMStudio();
       if (lmStudio?.online) return await this.chatWithLMStudio(model, messages);
-    } catch (e) {}
+    } catch (e: any) { lastError = lastError || e?.message || String(e); }
 
     try {
       const openCode = await this.checkOpenCode();
       if (openCode?.online) return await this.chatWithOpenCode(model, messages);
-    } catch (e) {}
+    } catch (e: any) { lastError = lastError || e?.message || String(e); }
 
-    return { message: { content: 'No local AI engine is available.' }, engine: 'None' };
+    return { message: { content: '' }, engine: 'Jan + TurboQuant + DFLASH unavailable', error: lastError || 'No local route produced a response after startup retries.' };
   }
 
   async getFullEngineStatus() {
