@@ -287,9 +287,24 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
     const search = async () => {
       if (searchQuery.length > 2 && window.ipcRenderer) {
         setIsSearchingHF(true);
-        const results = await window.ipcRenderer.searchHF(searchQuery);
-        setHfResults(results);
-        setIsSearchingHF(false);
+        try {
+          const results = await window.ipcRenderer.searchHF(searchQuery);
+          const list = Array.isArray(results) ? results : [];
+          setHfResults(list);
+          const warning = list.find((model: any) => model.warning)?.warning;
+          if (warning) {
+            setEngineMessage(`Live Hugging Face search had a problem, so Model Hub is showing curated GGUF fallback results. ${warning}`);
+          } else if (list.length === 0) {
+            setEngineMessage(`No downloadable GGUF models found for "${searchQuery}". Try "qwen gguf", "llama gguf", "mistral gguf", or "phi gguf".`);
+          } else {
+            setEngineMessage('');
+          }
+        } catch (error: any) {
+          setHfResults([]);
+          setEngineMessage(`Model search failed: ${error?.message || error}`);
+        } finally {
+          setIsSearchingHF(false);
+        }
       } else {
         setHfResults([]);
       }
@@ -690,25 +705,29 @@ export const ModelHub = ({ onLoadModel }: { onLoadModel?: (model: string, provid
                         <div className="flex items-center space-x-3 mt-1">
                           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center">
                             <Download className="w-3 h-3 mr-1" />
-                            {model.downloads.toLocaleString()}
+                            {Number(model.downloads || 0).toLocaleString()}
                           </span>
                           <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{model.size}</span>
                           {model.tags?.slice(0, 2).map((tag: string) => (
                             <span key={tag} className="px-1.5 py-0.5 bg-gray-50 text-gray-400 text-[8px] font-black uppercase rounded border border-gray-100">{tag}</span>
                           ))}
+                          {model.source && (
+                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-500 text-[8px] font-black uppercase rounded border border-blue-100">{model.source}</span>
+                          )}
                         </div>
+                        {model.selectedFile && <p className="text-[10px] text-gray-400 mt-1 truncate max-w-xl">Best file: {model.selectedFile}</p>}
                       </div>
                     </div>
                     <button 
-                      onClick={() => handleDownload(model.name)}
-                      disabled={activeDownloads[model.name] !== undefined}
+                      onClick={() => handleDownload(model.id || model.name)}
+                      disabled={activeDownloads[model.id || model.name] !== undefined || model.downloadable === false}
                       className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                        activeDownloads[model.name] !== undefined 
+                        activeDownloads[model.id || model.name] !== undefined || model.downloadable === false
                           ? 'bg-blue-50 text-blue-400 cursor-not-allowed' 
                           : 'bg-gray-900 text-white hover:bg-gray-800 shadow-lg shadow-gray-200'
                       }`}
                     >
-                      {activeDownloads[model.name] !== undefined ? `Downloading ${activeDownloads[model.name]}%` : 'Download'}
+                      {activeDownloads[model.id || model.name] !== undefined ? `Downloading ${activeDownloads[model.id || model.name]}%` : model.downloadable === false ? 'No GGUF' : 'Download'}
                     </button>
                   </div>
                 ))}

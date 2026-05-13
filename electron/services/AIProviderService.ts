@@ -17,8 +17,8 @@ export class AIProviderService {
   private store: any;
   private connectorsState: {[key: string]: boolean} = {};
   private modelsPath: string;
-  private hfMetadataTimeoutMs = 10000;
-  private hfDownloadTimeoutMs = 30000;
+  private hfMetadataTimeoutMs = 20000;
+  private hfDownloadTimeoutMs = 120000;
 
   constructor(sharedStore?: any) {
     // Use the main store passed from main.ts
@@ -280,15 +280,34 @@ export class AIProviderService {
 
   // Hugging Face Integration
   async searchHuggingFace(query: string) {
+    const cleanQuery = String(query || '').trim();
+    if (!cleanQuery) return [];
+
     try {
-      const response = await axios.get(`https://huggingface.co/api/models?search=${encodeURIComponent(query)}&sort=downloads&direction=-1&limit=10&full=true`, {
-        timeout: this.hfMetadataTimeoutMs
-      });
-      return response.data.map((m: any) => {
-        // Try to find a GGUF file or just use the first sibling's size as an estimate
+      const variants = cleanQuery.toLowerCase().includes('gguf')
+        ? [cleanQuery]
+        : [cleanQuery, `${cleanQuery} gguf`];
+      const allModels: any[] = [];
+      const seen = new Set<string>();
+
+      for (const variant of variants) {
+        const response = await axios.get(`https://huggingface.co/api/models?search=${encodeURIComponent(variant)}&sort=downloads&direction=-1&limit=20&full=true`, {
+          timeout: this.hfMetadataTimeoutMs,
+          headers: this.getHuggingFaceHeaders()
+        });
+        for (const model of response.data || []) {
+          if (!model?.modelId || seen.has(model.modelId)) continue;
+          seen.add(model.modelId);
+          allModels.push(model);
+        }
+      }
+
+      const results = allModels.map((m: any) => {
+        const tags = Array.isArray(m.tags) ? m.tags : [];
         const ggufFiles = (m.siblings || []).filter((s: any) => s.rfilename?.toLowerCase().endsWith('.gguf'));
         const ggufFile = ggufFiles.sort((a: any, b: any) => this.scoreGgufName(b.rfilename) - this.scoreGgufName(a.rfilename))[0];
         const size = ggufFile?.size || m.siblings?.[0]?.size || 0;
+        const hasGguf = ggufFiles.length > 0 || tags.some((tag: string) => /gguf/i.test(tag));
 
         if (m.modelId && ggufFiles.length > 0) {
           this.store.set(`hf-cache.${m.modelId}`, {
@@ -300,13 +319,20 @@ export class AIProviderService {
         return {
           id: m.modelId,
           name: m.modelId,
-          downloads: m.downloads,
-          tags: m.tags,
-          size: size > 0 ? `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB` : 'Size unknown'
+          downloads: Number(m.downloads || 0),
+          likes: Number(m.likes || 0),
+          tags,
+          size: size > 0 ? `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB` : 'Size unknown',
+          downloadable: hasGguf,
+          selectedFile: ggufFile?.rfilename || '',
+          source: 'Hugging Face'
         };
-      });
-    } catch (e) {
-      return [];
+      }).filter((model: any) => model.downloadable);
+
+      return results.length ? results.slice(0, 12) : this.getFallbackHfModels(cleanQuery);
+    } catch (e: any) {
+      console.error('Hugging Face search failed:', e?.response?.data || e?.message || e);
+      return this.getFallbackHfModels(cleanQuery, e?.message || 'Hugging Face search failed');
     }
   }
 
@@ -331,7 +357,8 @@ export class AIProviderService {
       const response = await axios.get(url, {
         responseType: 'stream',
         timeout: this.hfDownloadTimeoutMs,
-        maxRedirects: 5
+        maxRedirects: 5,
+        headers: this.getHuggingFaceHeaders()
       });
 
       const total = Number(response.headers['content-length'] || gguf.size || 0);
@@ -373,7 +400,8 @@ export class AIProviderService {
   private async getHFModelInfo(safeModelId: string, modelId: string) {
     try {
       const response = await axios.get(`https://huggingface.co/api/models/${safeModelId}?full=true`, {
-        timeout: this.hfMetadataTimeoutMs
+        timeout: this.hfMetadataTimeoutMs,
+        headers: this.getHuggingFaceHeaders()
       });
 
       if (response.data?.siblings?.length) {
@@ -407,6 +435,31 @@ export class AIProviderService {
     }
 
     return new Error(`Download failed for ${modelId}.`);
+  }
+
+  private getHuggingFaceHeaders() {
+    const keys = (this.store.get('api-keys', {}) || {}) as any;
+    const token = process.env.HUGGINGFACE_TOKEN || process.env.HF_TOKEN || keys.huggingface || keys['hugging-face'] || '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  private getFallbackHfModels(query: string, warning = '') {
+    const curated = [
+      { id: 'unsloth/Qwen3.6-35B-A3B-GGUF', name: 'unsloth/Qwen3.6-35B-A3B-GGUF', downloads: 2909275, likes: 1019, tags: ['gguf', 'qwen', 'agentic'], size: 'Size varies', downloadable: true },
+      { id: 'bartowski/Qwen2.5-7B-Instruct-GGUF', name: 'bartowski/Qwen2.5-7B-Instruct-GGUF', downloads: 0, likes: 0, tags: ['gguf', 'qwen', 'instruct'], size: 'Size varies', downloadable: true },
+      { id: 'bartowski/Meta-Llama-3-8B-Instruct-GGUF', name: 'bartowski/Meta-Llama-3-8B-Instruct-GGUF', downloads: 0, likes: 0, tags: ['gguf', 'llama', 'instruct'], size: 'Size varies', downloadable: true },
+      { id: 'bartowski/Mistral-7B-Instruct-v0.3-GGUF', name: 'bartowski/Mistral-7B-Instruct-v0.3-GGUF', downloads: 0, likes: 0, tags: ['gguf', 'mistral', 'fast'], size: 'Size varies', downloadable: true },
+      { id: 'bartowski/Phi-3-mini-4k-instruct-GGUF', name: 'bartowski/Phi-3-mini-4k-instruct-GGUF', downloads: 0, likes: 0, tags: ['gguf', 'phi', 'small'], size: 'Size varies', downloadable: true }
+    ];
+    const terms = query.toLowerCase().split(/\W+/).filter(Boolean);
+    const matches = terms.length
+      ? curated.filter(model => terms.some(term => `${model.id} ${model.tags.join(' ')}`.toLowerCase().includes(term)))
+      : curated;
+    return (matches.length ? matches : curated).slice(0, 6).map(model => ({
+      ...model,
+      source: 'Curated fallback',
+      warning
+    }));
   }
 
   private scoreGgufName(fileName: string) {
