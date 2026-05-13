@@ -1973,6 +1973,48 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     return null;
   };
 
+  const buildOperatorIntentFrame = (prompt: string, assignedAgentId?: string) => {
+    const lower = prompt.toLowerCase();
+    const domain = isPrivateLocalMemoryPrompt(prompt)
+      ? 'private-email-document-memory'
+      : isPropertyMarketResearchPrompt(prompt)
+        ? 'public-property-market-research'
+        : isMotReviewResearchPrompt(prompt)
+          ? 'public-mot-garage-research'
+          : /(legal|solicitor|court|land registry|leasehold|freehold|complaint|appeal|hmcts|rc\.legal)/i.test(lower)
+            ? 'legal-solicitor'
+            : /(accountant|hmrc|vat|tax|invoice|receipt|statement|payroll|quickbooks|mytaccounts)/i.test(lower)
+              ? 'accounting-tax'
+              : /(open|launch|click|type|scroll|navigate|desktop|window|app|qwen|copilot|chatgpt|notepad|calculator)/i.test(lower)
+                ? 'pc-browser-automation'
+                : /(research|web|internet|latest|news|source|cite|verify online)/i.test(lower)
+                  ? 'public-web-research'
+                  : 'general-reasoning';
+    const source = domain.includes('private')
+      ? 'indexed mailbox, attachments/files if available, local memory first'
+      : domain.includes('public') || domain.includes('web')
+        ? 'live browser/web evidence first'
+        : domain.includes('automation')
+          ? 'real PC/window/browser tools first'
+          : 'local memory, then model reasoning, then tools if needed';
+    const safeActions = domain.includes('automation')
+      ? 'open/read/focus/scan/click/type only where non-destructive and verified'
+      : domain.includes('private')
+        ? 'search/read/extract/summarise/draft only'
+        : 'search/read/compare/extract/summarise only';
+    return [
+      '### OPERATOR INTENT FRAME',
+      `User request: ${prompt}`,
+      `Detected domain: ${domain}`,
+      `Assigned agent: ${assignedAgentId || 'pending-manager-route'}`,
+      `Primary evidence source: ${source}`,
+      `Allowed now: ${safeActions}`,
+      'Blocked without approval: send, submit, pay, buy, book, sign, delete, move, upload, external contact, passwords, payment details, government/legal/accounting filing.',
+      'Mandatory process: 1. STOP interpret request. 2. THINK build short plan. 3. EXPLORE relevant sources only. 4. ANALYSE extract meaning and sanity-check. 5. DO only safe output or ask approval.',
+      'Failure rule: if evidence is missing, say what was checked and what exact missing item is needed. Never dump unrelated results.'
+    ].join('\n');
+  };
+
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
@@ -2032,12 +2074,19 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       return;
     }
 
+    const assignedAgentId = chooseAgentForPrompt(outgoing);
+    const operatorIntentFrame = buildOperatorIntentFrame(outgoing, assignedAgentId);
+
     // Fetch knowledge rules to augment the system prompt
     let systemPrompt = [
       'You are ME, an advanced AI agentic desktop application. You are local-first and privacy-focused.',
-      'Before answering, make one routing pass: decide whether the user needs local memory/email, live web research, PC automation, a reminder, or normal chat.',
-      'For private/property/email questions, prefer indexed local memory before web search. For current public facts, use real web evidence. Never answer from an unrelated category just because it has the word due, renewal, rent, or current.'
-    ].join(' ');
+      'You must behave as a professional operator, not a chatbot.',
+      'Before answering, enforce Understand -> Think -> Explore -> Analyse -> Do.',
+      'No keyword dumps. No unrelated results. No tool action before intent/domain/source/safety are clear.',
+      'For private/property/email questions, prefer indexed local memory before web search. For public/current facts, use real web evidence.',
+      'Never answer from an unrelated category just because it has the word due, renewal, rent, current, property, or payment.',
+      operatorIntentFrame
+    ].join('\n');
     if (window.ipcRenderer) {
       const knowledge = await window.ipcRenderer.getKnowledge();
       const activeRules = knowledge.map((k: any) => `[${k.title}]:\n${k.rules}`).join('\n\n');
@@ -2072,6 +2121,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     }
     const chatHistory = [
       { role: 'system', content: systemPrompt },
+      { role: 'system', content: operatorIntentFrame },
       ...(memoryContext ? [{
         role: 'system',
         content: `Current local mailbox memory is already indexed. Use this first instead of asking to reread all mail. If the user asks about bills/deadlines/payments, answer from billsToPay/deadlines and say when the index was last updated. Never claim full mailbox access beyond the indexed state.\n\n${JSON.stringify({
@@ -2125,14 +2175,13 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
-    const assignedAgentId = chooseAgentForPrompt(outgoing);
     if (researchSteps.length === 0) {
       setResearchSteps([
-        'Asking Mythos Manager to route task',
-        `Routing to ${assignedAgentId}`,
-        'Applying approval gates and peer checks',
-        'Starting built-in Jan+TurboQuant first',
-        'Streaming work to Live Operations'
+        'STOP: interpreting request, domain, object, source, and risk',
+        `ROUTE: ${assignedAgentId}`,
+        'THINK: building short operator plan',
+        'EXPLORE: selecting relevant evidence sources only',
+        'ANALYSE: filtering noise before answer/action'
       ]);
     }
 
@@ -2144,7 +2193,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
 
       if (window.ipcRenderer) {
         const launchedAgentTask = window.ipcRenderer.createAgentTask?.(
-          `User task from chat:\n${outgoing}\n\nAct as a real HermesDesk ME local agent. Think, plan, use approved local/web/tool routes where available, recover from errors, and report progress through agent updates. Do not pretend unavailable private access is connected; use drafts and approval gates for external actions.`,
+          `${operatorIntentFrame}\n\nUser task from chat:\n${outgoing}\n\nAct as a real HermesDesk ME local agent. Follow the mandatory process before tool use or final answer. Use approved local/web/tool routes where available, recover from errors, and report progress through agent updates. Do not pretend unavailable private access is connected; use drafts and approval gates for external actions.`,
           assignedAgentId
         ).catch((error: any) => {
           console.error('Agent task launch failed:', error);
