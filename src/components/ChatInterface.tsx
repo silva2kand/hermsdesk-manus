@@ -35,6 +35,7 @@ const preferJanModel = (models: string[]) => models.find(m => /qwen/i.test(m)) |
 const providerLabel = (name: string) => name === 'Auto' ? 'Auto Mix (local first + free cloud)' : name === 'Jan' ? 'Jan + TurboQuant + DFLASH (built-in)' : name;
 const CHAT_HISTORY_KEY = 'hermsdesk.chat.sessions.v1';
 const WHATSAPP_NUMBER_KEY = 'hermsdesk.user.whatsappNumber';
+const MIN_USER_THINK_MS = 3000;
 
 const isCasualChatPrompt = (text: string) => {
   const clean = text.toLowerCase().replace(/[^\w\s']/g, ' ').replace(/\s+/g, ' ').trim();
@@ -336,6 +337,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   const researchStepsRef = useRef<string[]>([]);
   const liveTraceRef = useRef<any[]>([]);
   const lastRoutePreviewRef = useRef<any>(null);
+  const userThinkStartedAtRef = useRef(0);
   const [thinkingReview, setThinkingReview] = useState<any | null>(null);
   const [provider, setProvider] = useState(initialModel?.provider || 'Auto');
   const [model, setModel] = useState(initialModel?.model || 'Auto mix');
@@ -369,6 +371,14 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
   useEffect(() => {
     liveTraceRef.current = liveTrace;
   }, [liveTrace]);
+
+  const waitForMinimumUserThinking = async () => {
+    const startedAt = userThinkStartedAtRef.current || Date.now();
+    const remaining = MIN_USER_THINK_MS - (Date.now() - startedAt);
+    if (remaining > 0) {
+      await new Promise(resolve => window.setTimeout(resolve, remaining));
+    }
+  };
 
   useEffect(() => {
     try {
@@ -1390,6 +1400,7 @@ export const ChatInterface = ({ initialModel, initialPrompt, isAgentic, onNaviga
         'Scheduled Tasks'
       )]);
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       setResearchSteps([]);
     }
@@ -1459,6 +1470,7 @@ Keep every step visible in EventBus/Live Operations.`,
         'Automation Agent'
       )]);
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       window.setTimeout(() => setResearchSteps([]), 6000);
     }
@@ -1534,6 +1546,7 @@ Keep every step visible in EventBus/Live Operations.`,
         visibleText ? 'Saved local memory note' : 'No memory saved'
       ])]);
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       setResearchSteps([]);
     }
@@ -1653,6 +1666,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
               : `Research agent issue: ${task?.error || 'not queued'}`
         ].join('\n'), 'Real Web Research')]);
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       window.setTimeout(() => setResearchSteps([]), 6000);
     }
@@ -1707,6 +1721,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       setMessages(prev => [...prev, assistantMessage(content, 'Mythos Front Door')]);
       return true;
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       setResearchSteps([]);
     }
@@ -1730,6 +1745,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       setMessages(prev => [...prev, assistantMessage(content, 'Baba General Chat')]);
       return true;
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       setResearchSteps([]);
     }
@@ -1757,6 +1773,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           'The app should keep accounting, legal, property, funding, provider, insurance, and Z-report evidence saved for later review. I will not send, delete, pay, or file anything without approval.'
         ].join('\n'), 'Mythos Domain Memory')]);
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       setResearchSteps([]);
     }
@@ -1805,6 +1822,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           'Future morning updates and mailbox intelligence should use these filters before surfacing priorities. External actions still need approval.'
         ].join('\n'), 'Mythos Memory Trainer')]);
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       setResearchSteps([]);
     }
@@ -1947,6 +1965,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
   const handleSend = async (overrideInput?: string) => {
     const outgoing = (overrideInput ?? input).trim();
     if (!outgoing || isTyping) return;
+    userThinkStartedAtRef.current = Date.now();
 
     if (await handleExternalAiStudyIntent(outgoing)) return;
     if (await handleReminderIntent(outgoing)) return;
@@ -1995,6 +2014,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
           'Voice Stack'
         )]);
       } finally {
+        await waitForMinimumUserThinking();
         setIsTyping(false);
         setResearchSteps([]);
       }
@@ -2002,7 +2022,11 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
     }
 
     // Fetch knowledge rules to augment the system prompt
-    let systemPrompt = "You are ME, an advanced AI agentic desktop application. You are local-first and privacy-focused.";
+    let systemPrompt = [
+      'You are ME, an advanced AI agentic desktop application. You are local-first and privacy-focused.',
+      'Before answering, make one routing pass: decide whether the user needs local memory/email, live web research, PC automation, a reminder, or normal chat.',
+      'For private/property/email questions, prefer indexed local memory before web search. For current public facts, use real web evidence. Never answer from an unrelated category just because it has the word due, renewal, rent, or current.'
+    ].join(' ');
     if (window.ipcRenderer) {
       const knowledge = await window.ipcRenderer.getKnowledge();
       const activeRules = knowledge.map((k: any) => `[${k.title}]:\n${k.rules}`).join('\n\n');
@@ -2205,6 +2229,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       } else {
         // Fallback for non-electron environment
         addNotice('System Error: Electron IPC bridge not detected.');
+        await waitForMinimumUserThinking();
         setIsTyping(false);
         return;
       }
@@ -2212,6 +2237,7 @@ This is NOT an email-memory lookup. Use web/search evidence and reviews. For MOT
       console.error('Chat error:', e);
       setMessages(prev => [...prev, assistantMessage(`Error: ${e.message || "Request timed out or failed."}`, 'Error', ['Caught runtime error', 'Stopped and reported failure'])]);
     } finally {
+      await waitForMinimumUserThinking();
       setIsTyping(false);
       setResearchSteps([]);
     }

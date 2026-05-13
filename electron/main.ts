@@ -201,6 +201,44 @@ function createTray() {
   tray.on('double-click', showMainWindow)
 }
 
+const logEngineAutoStart = (type: 'info' | 'error', content: string) => {
+  win?.webContents.send('app:log', { type, content });
+  eventBus?.log?.('engine', content, type);
+};
+
+function autoStartPrimaryEngine(attempt = 1) {
+  const maxAttempts = 3;
+  setTimeout(async () => {
+    if (!aiService) return;
+    try {
+      logEngineAutoStart('info', `Auto-starting Jan+TurboQuant + DFLASH runtime (attempt ${attempt}/${maxAttempts})...`);
+      const status = await aiService.getJanEngineStatus().catch(() => null);
+      if (status?.apiOnline) {
+        logEngineAutoStart('info', `Jan+TurboQuant + DFLASH already online at ${status.apiUrl || 'http://127.0.0.1:6767/v1'}.`);
+        return;
+      }
+
+      const result = await aiService.startJanEngine();
+      if (result?.ok) {
+        const nextStatus = result.status || await aiService.getJanEngineStatus().catch(() => null);
+        logEngineAutoStart('info', `Jan+TurboQuant + DFLASH online: ${nextStatus?.model || result.model || 'local model'} at ${nextStatus?.apiUrl || 'http://127.0.0.1:6767/v1'}.`);
+        eventBus?.emit?.('engine.autostart', 'jan-turboquant', { ok: true, attempt, model: nextStatus?.model || result.model || null });
+        return;
+      }
+
+      logEngineAutoStart('error', `Jan+TurboQuant + DFLASH auto-start failed: ${result?.error || 'runtime did not become ready'}.`);
+      eventBus?.emit?.('engine.autostart', 'jan-turboquant', { ok: false, attempt, error: result?.error || 'runtime did not become ready' });
+    } catch (error: any) {
+      logEngineAutoStart('error', `Jan+TurboQuant + DFLASH auto-start error: ${error?.message || error}`);
+      eventBus?.emit?.('engine.autostart', 'jan-turboquant', { ok: false, attempt, error: error?.message || String(error) });
+    }
+
+    if (attempt < maxAttempts) {
+      setTimeout(() => autoStartPrimaryEngine(attempt + 1), 15000);
+    }
+  }, attempt === 1 ? 1500 : 0);
+}
+
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
@@ -212,6 +250,7 @@ if (!gotTheLock) {
     initializeStoreAndServices()
     createWindow()
     createTray()
+    autoStartPrimaryEngine()
   })
 }
 
